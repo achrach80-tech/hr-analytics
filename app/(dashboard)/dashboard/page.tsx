@@ -1,79 +1,111 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Building2,
-  RefreshCw, ChevronDown, Heart, AlertTriangle, Activity, Award,
-  Calendar, Sparkles, Brain, Upload, Minus, Banknote, CircleDollarSign,
-  Bell, Shield, Target, Database, BarChart3, PieChart, Clock,
-  CheckCircle2, XCircle, AlertCircle, Gauge, Euro, Percent
+  RefreshCw, ChevronDown, Heart, AlertTriangle, Euro, Percent,
+  Calendar, Sparkles, Brain, Clock, Shield, Target, BarChart3,
+  PieChart, Activity, Award, Briefcase, MapPin, Zap, Gauge,
+  DollarSign, Calculator, Stethoscope, UserCheck, FileText
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { 
+  LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, 
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart 
+} from 'recharts'
 
 // ==========================================
-// TYPES
+// TYPES & INTERFACES
 // ==========================================
 
-interface Snapshot {
+interface Employee {
   id: string
-  etablissement_id: string
+  matricule: string
   periode: string
-  
-  effectif_fin_mois: number
-  effectif_moyen: number
-  etp_fin_mois: number
-  
-  nb_entrees: number
-  nb_sorties: number
-  taux_turnover: number
-  
-  nb_cdi: number
-  nb_cdd: number
-  pct_cdi: number
-  pct_precarite: number
-  
-  age_moyen: number
-  anciennete_moyenne_mois: number
-  pct_hommes: number
-  pct_femmes: number
-  
-  masse_salariale_brute: number
+  date_entree: string
+  date_sortie?: string
+  temps_travail: number
+  type_contrat: string
+  age_at_periode?: number
+  anciennete_mois?: number
+  code_cost_center?: string
+  code_site?: string
+  statut_emploi: string
+}
+
+interface Remuneration {
+  id: string
+  matricule: string
+  mois_paie: string
+  salaire_de_base: number
+  primes_fixes: number
+  primes_variables: number
+  heures_supp_payees: number
+  avantages_nature: number
+  indemnites: number
+  cotisations_sociales: number
+  taxes_sur_salaire: number
+  autres_charges: number
+  total_brut: number
   cout_total_employeur: number
-  salaire_base_moyen: number
-  cout_moyen_par_fte: number
-  part_variable: number
-  taux_charges: number
-  
-  taux_absenteisme: number
-  nb_jours_absence: number
-  duree_moyenne_absence: number
-  
-  alerte_turnover_eleve: boolean
-  alerte_absenteisme_eleve: boolean
-  
-  data_quality_score: number
-  calculated_at: string
+}
+
+interface Absence {
+  id: string
+  matricule: string
+  type_absence: string
+  date_debut: string
+  date_fin: string
+  nb_jours_calendaires: number
+  nb_jours_ouvres: number
 }
 
 interface Company {
   id: string
   nom: string
   subscription_plan: string
-  ai_features_enabled: boolean
-  seuil_turnover_default: number
-  seuil_absenteisme_default: number
 }
 
 interface Establishment {
   id: string
   nom: string
-  seuil_turnover?: number
-  seuil_absenteisme?: number
+}
+
+interface KPIEvolution {
+  value: number
+  momPercent: number
+  yoyPercent: number
+  trend: 'up' | 'down' | 'neutral'
+}
+
+interface KPIData {
+  // Workforce
+  effectifTotal: KPIEvolution
+  entreesSorties: { entrees: number, sorties: number, evolution: KPIEvolution }
+  tauxRotation: KPIEvolution
+  
+  // Payroll
+  masseSalarialeBrute: KPIEvolution
+  coutTotalEmployeur: KPIEvolution
+  salaireMoyenETP: KPIEvolution
+  partVariable: KPIEvolution
+  
+  // Absences
+  tauxAbsenteisme: KPIEvolution
+  coutAbsences: KPIEvolution
+  topAbsences: Array<{ type: string, jours: number, percentage: number }>
+  
+  // Demographics
+  ageMoyen: KPIEvolution
+  ancienneteMoyenne: KPIEvolution
+  repartitionContrats: Array<{ type: string, count: number, percentage: number }>
+  repartitionSites: Array<{ site: string, count: number, percentage: number }>
 }
 
 // ==========================================
-// UTILITIES
+// UTILITY FUNCTIONS
 // ==========================================
 
 const formatCurrency = (amount: number): string => {
@@ -106,73 +138,299 @@ const formatPeriodDisplay = (periode: string): string => {
   }
 }
 
-const calculateEvolution = (current: number, previous: number): number => {
-  if (!previous || previous === 0) return 0
-  return ((current - previous) / previous) * 100
+const calculateEvolution = (current: number, previous: number, previousYear: number): KPIEvolution => {
+  const momPercent = previous ? ((current - previous) / previous) * 100 : 0
+  const yoyPercent = previousYear ? ((current - previousYear) / previousYear) * 100 : 0
+  
+  return {
+    value: current,
+    momPercent,
+    yoyPercent,
+    trend: momPercent > 0 ? 'up' : momPercent < 0 ? 'down' : 'neutral'
+  }
+}
+
+const getPreviousPeriod = (periode: string): string => {
+  const date = new Date(periode)
+  date.setMonth(date.getMonth() - 1)
+  return date.toISOString().split('T')[0].substring(0, 7) + '-01'
+}
+
+const getPreviousYearPeriod = (periode: string): string => {
+  const date = new Date(periode)
+  date.setFullYear(date.getFullYear() - 1)
+  return date.toISOString().split('T')[0].substring(0, 7) + '-01'
 }
 
 // ==========================================
 // KPI CARD COMPONENT
 // ==========================================
 
-const KPICard: React.FC<{
+interface KPICardProps {
   title: string
-  value: number
-  format: 'currency' | 'percent' | 'number'
+  value: string | number
+  format: 'currency' | 'percent' | 'number' | 'text'
   icon: React.ElementType
-  color: string
-  evolution?: number
+  gradient: string
+  evolution?: KPIEvolution
   subtitle?: string
   alert?: boolean
-}> = ({ title, value, format, icon: Icon, color, evolution, subtitle, alert }) => {
+  size?: 'normal' | 'large'
+}
+
+const KPICard: React.FC<KPICardProps> = ({ 
+  title, 
+  value, 
+  format, 
+  icon: Icon, 
+  gradient, 
+  evolution, 
+  subtitle, 
+  alert = false,
+  size = 'normal'
+}) => {
   const formattedValue = 
-    format === 'currency' ? formatCurrency(value) :
-    format === 'percent' ? formatPercentage(value) :
-    formatNumber(value)
+    format === 'currency' ? formatCurrency(Number(value)) :
+    format === 'percent' ? formatPercentage(Number(value)) :
+    format === 'number' ? formatNumber(Number(value)) :
+    String(value)
+
+  const isLarge = size === 'large'
 
   return (
-    <div className={`p-6 bg-gradient-to-br from-slate-900/50 to-slate-800/50 rounded-2xl border ${
-      alert ? 'border-red-500/30' : 'border-slate-700/30'
-    } backdrop-blur-xl hover:scale-[1.02] transition-all duration-300`}>
-      <div className="flex items-start justify-between mb-4">
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
-          <Icon size={24} className="text-white" />
+    <motion.div
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className={`relative overflow-hidden rounded-2xl backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] group border ${
+        alert 
+          ? 'border-red-500/40 bg-gradient-to-br from-red-900/20 via-slate-900/50 to-red-800/10' 
+          : 'border-slate-700/50 bg-gradient-to-br from-slate-900/60 via-slate-800/40 to-slate-900/20'
+      } ${isLarge ? 'p-8 col-span-2' : 'p-6'}`}
+    >
+      {/* Animated background glow */}
+      <div className={`absolute inset-0 opacity-20 group-hover:opacity-30 transition-opacity duration-500 ${gradient}`} />
+      
+      {/* Neon border effect */}
+      <div className="absolute inset-0 rounded-2xl border border-transparent bg-gradient-to-r from-purple-500/20 via-cyan-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      
+      {/* Alert pulse */}
+      {alert && (
+        <div className="absolute top-3 right-3">
+          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-lg shadow-red-500/50" />
+        </div>
+      )}
+      
+      <div className="relative z-10">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4">
+          <motion.div 
+            className={`rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-all duration-300 ${gradient} ${
+              isLarge ? 'w-16 h-16' : 'w-12 h-12'
+            }`}
+            whileHover={{ rotate: 360 }}
+            transition={{ duration: 0.6 }}
+          >
+            <Icon size={isLarge ? 28 : 24} className="text-white drop-shadow-lg" />
+          </motion.div>
+          
+          {evolution && (
+            <div className="flex flex-col gap-1">
+              {/* MoM Evolution */}
+              <motion.div 
+                className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
+                  evolution.momPercent > 0 ? 'text-green-400 bg-green-500/10' : 
+                  evolution.momPercent < 0 ? 'text-red-400 bg-red-500/10' : 'text-gray-400 bg-gray-500/10'
+                }`}
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                {evolution.momPercent > 0 ? <ArrowUp size={12} /> : 
+                 evolution.momPercent < 0 ? <ArrowDown size={12} /> : null}
+                <span>{Math.abs(evolution.momPercent).toFixed(1)}%</span>
+              </motion.div>
+              
+              {/* YoY Evolution */}
+              <motion.div 
+                className={`flex items-center gap-1 text-xs font-medium opacity-75 px-2 py-1 rounded-full ${
+                  evolution.yoyPercent > 0 ? 'text-green-400 bg-green-500/5' : 
+                  evolution.yoyPercent < 0 ? 'text-red-400 bg-red-500/5' : 'text-gray-400 bg-gray-500/5'
+                }`}
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                <span className="text-[10px]">YoY</span>
+                <span>{evolution.yoyPercent > 0 ? '+' : ''}{evolution.yoyPercent.toFixed(1)}%</span>
+              </motion.div>
+            </div>
+          )}
         </div>
         
-        {evolution !== undefined && evolution !== 0 && (
-          <div className={`flex items-center gap-1 text-sm font-medium ${
-            evolution > 0 ? 'text-green-400' : 'text-red-400'
-          }`}>
-            {evolution > 0 ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
-            {Math.abs(evolution).toFixed(1)}%
-          </div>
-        )}
+        {/* Content */}
+        <div className="space-y-2">
+          <motion.p 
+            className="text-slate-400 text-sm font-medium"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1 }}
+          >
+            {title}
+          </motion.p>
+          <motion.p 
+            className={`font-bold text-white drop-shadow-md ${isLarge ? 'text-4xl' : 'text-2xl'}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            {formattedValue}
+          </motion.p>
+          {subtitle && (
+            <motion.p 
+              className="text-xs text-slate-500"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              {subtitle}
+            </motion.p>
+          )}
+        </div>
       </div>
       
-      <p className="text-slate-400 text-sm mb-2">{title}</p>
-      <p className="text-3xl font-bold text-white mb-1">{formattedValue}</p>
-      {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
-    </div>
+      {/* Hover glow effect */}
+      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-500/5 via-cyan-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+    </motion.div>
   )
 }
+
+// ==========================================
+// SECTION HEADER COMPONENT
+// ==========================================
+
+const SectionHeader: React.FC<{ title: string; icon: React.ElementType; gradient: string }> = ({ 
+  title, 
+  icon: Icon, 
+  gradient 
+}) => (
+  <motion.div 
+    className="flex items-center gap-4 mb-6"
+    initial={{ opacity: 0, x: -20 }}
+    animate={{ opacity: 1, x: 0 }}
+    transition={{ duration: 0.5 }}
+  >
+    <div className={`w-12 h-12 rounded-2xl ${gradient} flex items-center justify-center shadow-lg`}>
+      <Icon size={24} className="text-white" />
+    </div>
+    <h2 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+      {title}
+    </h2>
+    <div className="flex-1 h-px bg-gradient-to-r from-slate-600 to-transparent" />
+  </motion.div>
+)
+
+// ==========================================
+// CHART COMPONENTS
+// ==========================================
+
+const EvolutionChart: React.FC<{ data: any[], title: string, dataKey: string, color: string }> = ({
+  data, title, dataKey, color
+}) => (
+  <motion.div 
+    className="bg-slate-900/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-6"
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.6 }}
+  >
+    <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
+      <BarChart3 size={20} className={color} />
+      {title}
+    </h3>
+    <ResponsiveContainer width="100%" height={300}>
+      <AreaChart data={data}>
+        <defs>
+          <linearGradient id={`gradient-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,0.2)" />
+        <XAxis 
+          dataKey="periode" 
+          stroke="rgba(148,163,184,0.8)" 
+          fontSize={12}
+          tickFormatter={(value) => new Date(value).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}
+        />
+        <YAxis stroke="rgba(148,163,184,0.8)" fontSize={12} />
+        <Tooltip 
+          contentStyle={{ 
+            backgroundColor: 'rgba(15,23,42,0.95)', 
+            border: '1px solid rgba(100,116,139,0.3)',
+            borderRadius: '12px',
+            backdropFilter: 'blur(10px)'
+          }}
+        />
+        <Area
+          type="monotone"
+          dataKey={dataKey}
+          stroke="#8b5cf6"
+          strokeWidth={2}
+          fill={`url(#gradient-${dataKey})`}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  </motion.div>
+)
+
+const DistributionChart: React.FC<{ data: any[], title: string, colors: string[] }> = ({
+  data, title, colors
+}) => (
+  <motion.div 
+    className="bg-slate-900/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-6"
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.6, delay: 0.2 }}
+  >
+    <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
+      <PieChart size={20} className="text-purple-400" />
+      {title}
+    </h3>
+    <ResponsiveContainer width="100%" height={250}>
+      <RechartsPieChart>
+        <Pie
+          data={data}
+          cx="50%"
+          cy="50%"
+          outerRadius={80}
+          fill="#8884d8"
+          dataKey="value"
+          label={({ name, percent }: any) => `${name} ${percent ? (percent * 100).toFixed(1) : 0}%`}
+        >
+          {data.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+          ))}
+        </Pie>
+        <Tooltip />
+      </RechartsPieChart>
+    </ResponsiveContainer>
+  </motion.div>
+)
 
 // ==========================================
 // MAIN DASHBOARD COMPONENT
 // ==========================================
 
-export default function OptimizedDashboard() {
+export default function RHQuantumDashboard() {
   const [company, setCompany] = useState<Company | null>(null)
-  const [establishments, setEstablishments] = useState<Establishment[]>([])
   const [selectedEstablishment, setSelectedEstablishment] = useState<Establishment | null>(null)
   const [periods, setPeriods] = useState<string[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState<string>('')
-  const [currentSnapshot, setCurrentSnapshot] = useState<Snapshot | null>(null)
-  const [previousSnapshot, setPreviousSnapshot] = useState<Snapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
   const [showPeriodSelector, setShowPeriodSelector] = useState(false)
-  const [debugMode, setDebugMode] = useState(false)
+  const [kpiData, setKpiData] = useState<KPIData | null>(null)
+  const [historicalData, setHistoricalData] = useState<any[]>([])
 
   const supabase = createClient()
   const router = useRouter()
@@ -187,7 +445,6 @@ export default function OptimizedDashboard() {
       setLoading(true)
       setError(null)
 
-      // Get company from session
       const sessionStr = localStorage.getItem('company_session')
       if (!sessionStr) {
         router.push('/login')
@@ -196,7 +453,6 @@ export default function OptimizedDashboard() {
 
       const session = JSON.parse(sessionStr)
 
-      // Fetch company with establishments
       const { data: companyData, error: companyError } = await supabase
         .from('entreprises')
         .select(`*, etablissements (*)`)
@@ -206,11 +462,9 @@ export default function OptimizedDashboard() {
       if (companyError) throw companyError
 
       setCompany(companyData)
-      const ests = companyData.etablissements || []
-      setEstablishments(ests)
-
-      // Select first establishment
-      const defaultEst = ests.find((e: any) => e.is_headquarters) || ests[0]
+      const establishments = companyData.etablissements || []
+      
+      const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
       if (defaultEst) {
         setSelectedEstablishment(defaultEst)
         await loadPeriodsForEstablishment(defaultEst.id)
@@ -225,46 +479,23 @@ export default function OptimizedDashboard() {
 
   const loadPeriodsForEstablishment = async (establishmentId: string) => {
     try {
-      console.log('Loading periods for establishment:', establishmentId)
-
-      // Get available periods from snapshots
-      const { data: snapshots, error: snapshotsError } = await supabase
-        .from('snapshots_mensuels')
-        .select('periode, effectif_fin_mois')
+      // Get available periods from employees table
+      const { data: periodData, error } = await supabase
+        .from('employes')
+        .select('periode')
         .eq('etablissement_id', establishmentId)
         .order('periode', { ascending: false })
 
-      if (snapshotsError) throw snapshotsError
+      if (error) throw error
 
-      console.log('Available snapshots:', snapshots)
+      const uniquePeriods = [...new Set(periodData?.map(p => p.periode) || [])]
+      setPeriods(uniquePeriods)
 
-      if (!snapshots || snapshots.length === 0) {
-        // No snapshots - check if there's any data
-        const { data: employees } = await supabase
-          .from('employes')
-          .select('periode')
-          .eq('etablissement_id', establishmentId)
-          .limit(1)
-
-        if (!employees || employees.length === 0) {
-          setError('Aucune donnée disponible. Veuillez importer des données.')
-          setPeriods([])
-          return
-        }
-
-        // Data exists but no snapshots - offer to calculate
-        setError('Les KPIs doivent être calculés. Utilisez le bouton "Calculer KPIs".')
-        setPeriods([])
-        return
-      }
-
-      const availablePeriods = snapshots.map(s => s.periode)
-      setPeriods(availablePeriods)
-
-      // Select most recent period
-      if (availablePeriods.length > 0) {
-        setSelectedPeriod(availablePeriods[0])
-        await loadSnapshotData(establishmentId, availablePeriods[0])
+      if (uniquePeriods.length > 0) {
+        setSelectedPeriod(uniquePeriods[0])
+        await loadDataForPeriod(establishmentId, uniquePeriods[0])
+      } else {
+        setError('Aucune donnée disponible. Veuillez importer des données.')
       }
     } catch (err) {
       console.error('Load periods error:', err)
@@ -272,475 +503,861 @@ export default function OptimizedDashboard() {
     }
   }
 
-  const loadSnapshotData = async (establishmentId: string, period: string) => {
+  const loadDataForPeriod = async (establishmentId: string, period: string) => {
     try {
-      console.log('Loading snapshot for:', { establishmentId, period })
-
-      // Normalize period to YYYY-MM-01
       const normalizedPeriod = period.substring(0, 7) + '-01'
+      const prevPeriod = getPreviousPeriod(normalizedPeriod)
+      const prevYearPeriod = getPreviousYearPeriod(normalizedPeriod)
 
-      // Get current snapshot
-      const { data: current, error: currentError } = await supabase
-        .from('snapshots_mensuels')
-        .select('*')
+      // Load current, previous month, and previous year data
+      const [currentEmployees, prevEmployees, prevYearEmployees, currentRem, prevRem, prevYearRem, currentAbs] = await Promise.all([
+        // Current period employees
+        supabase
+          .from('employes')
+          .select('*')
+          .eq('etablissement_id', establishmentId)
+          .eq('periode', normalizedPeriod),
+        
+        // Previous month employees
+        supabase
+          .from('employes')
+          .select('*')
+          .eq('etablissement_id', establishmentId)
+          .eq('periode', prevPeriod),
+        
+        // Previous year employees
+        supabase
+          .from('employes')
+          .select('*')
+          .eq('etablissement_id', establishmentId)
+          .eq('periode', prevYearPeriod),
+        
+        // Current remunerations
+        supabase
+          .from('remunerations')
+          .select('*')
+          .eq('etablissement_id', establishmentId)
+          .eq('mois_paie', normalizedPeriod),
+        
+        // Previous month remunerations
+        supabase
+          .from('remunerations')
+          .select('*')
+          .eq('etablissement_id', establishmentId)
+          .eq('mois_paie', prevPeriod),
+        
+        // Previous year remunerations
+        supabase
+          .from('remunerations')
+          .select('*')
+          .eq('etablissement_id', establishmentId)
+          .eq('mois_paie', prevYearPeriod),
+        
+        // Current absences
+        supabase
+          .from('absences')
+          .select('*')
+          .eq('etablissement_id', establishmentId)
+          .gte('date_debut', normalizedPeriod)
+          .lt('date_debut', new Date(new Date(normalizedPeriod).getTime() + 32 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      ])
+
+      // Calculate KPIs
+      const calculatedKPIs = calculateKPIs(
+        currentEmployees.data || [],
+        prevEmployees.data || [],
+        prevYearEmployees.data || [],
+        currentRem.data || [],
+        prevRem.data || [],
+        prevYearRem.data || [],
+        currentAbs.data || []
+      )
+
+      setKpiData(calculatedKPIs)
+
+      // Load historical data for charts
+      const { data: historicalEmployees } = await supabase
+        .from('employes')
+        .select('periode, temps_travail, type_contrat')
         .eq('etablissement_id', establishmentId)
-        .eq('periode', normalizedPeriod)
-        .single()
+        .order('periode', { ascending: true })
 
-      if (currentError) {
-        console.error('Snapshot error:', currentError)
-        setError('Impossible de charger les données pour cette période')
-        return
+      if (historicalEmployees) {
+        const groupedByPeriod = historicalEmployees.reduce((acc: any, emp) => {
+          if (!acc[emp.periode]) {
+            acc[emp.periode] = { periode: emp.periode, effectifs: 0, contracts: {} }
+          }
+          acc[emp.periode].effectifs += emp.temps_travail
+          acc[emp.periode].contracts[emp.type_contrat] = (acc[emp.periode].contracts[emp.type_contrat] || 0) + 1
+          return acc
+        }, {})
+
+        setHistoricalData(Object.values(groupedByPeriod))
       }
 
-      setCurrentSnapshot(current)
-      console.log('Current snapshot loaded:', current)
-
-      // Get previous month snapshot
-      const currentDate = new Date(normalizedPeriod)
-      const previousMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
-      const previousPeriod = previousMonth.toISOString().split('T')[0]
-
-      const { data: previous } = await supabase
-        .from('snapshots_mensuels')
-        .select('*')
-        .eq('etablissement_id', establishmentId)
-        .eq('periode', previousPeriod)
-        .single()
-
-      setPreviousSnapshot(previous)
     } catch (err) {
-      console.error('Load snapshot error:', err)
-      setError('Erreur lors du chargement des KPIs')
+      console.error('Load data error:', err)
+      setError('Erreur lors du chargement des données')
     }
   }
 
-  // Calculate KPIs manually
-  const calculateKPIs = async () => {
-    if (!selectedEstablishment || !selectedPeriod) return
+  const calculateKPIs = (
+    currentEmployees: Employee[],
+    prevEmployees: Employee[],
+    prevYearEmployees: Employee[],
+    currentRem: Remuneration[],
+    prevRem: Remuneration[],
+    prevYearRem: Remuneration[],
+    currentAbs: Absence[]
+  ): KPIData => {
+    
+    // EFFECTIF & WORKFORCE
+    const currentFTE = currentEmployees.reduce((sum, emp) => sum + emp.temps_travail, 0)
+    const prevFTE = prevEmployees.reduce((sum, emp) => sum + emp.temps_travail, 0)
+    const prevYearFTE = prevYearEmployees.reduce((sum, emp) => sum + emp.temps_travail, 0)
 
-    try {
-      setRefreshing(true)
-      const normalizedPeriod = selectedPeriod.substring(0, 7) + '-01'
+    const currentEntrees = currentEmployees.filter(emp => {
+      const entryMonth = emp.date_entree.substring(0, 7)
+      const currentMonth = currentEmployees[0]?.periode.substring(0, 7)
+      return entryMonth === currentMonth
+    }).length
 
-      console.log('Manually calculating KPIs for:', normalizedPeriod)
+    const currentSorties = currentEmployees.filter(emp => {
+      if (!emp.date_sortie) return false
+      const exitMonth = emp.date_sortie.substring(0, 7)
+      const currentMonth = currentEmployees[0]?.periode.substring(0, 7)
+      return exitMonth === currentMonth
+    }).length
 
-      const { data, error } = await supabase.rpc('calculate_snapshot_for_period', {
-        p_etablissement_id: selectedEstablishment.id,
-        p_periode: normalizedPeriod,
-        p_force: true
-      })
+    const currentTurnover = currentFTE > 0 ? (currentSorties / currentFTE) * 100 : 0
+    const prevTurnover = prevFTE > 0 ? (prevEmployees.filter(emp => emp.date_sortie?.substring(0, 7) === prevEmployees[0]?.periode.substring(0, 7)).length / prevFTE) * 100 : 0
+    const prevYearTurnover = prevYearFTE > 0 ? (prevYearEmployees.filter(emp => emp.date_sortie?.substring(0, 7) === prevYearEmployees[0]?.periode.substring(0, 7)).length / prevYearFTE) * 100 : 0
 
-      if (error) {
-        console.error('KPI calculation error:', error)
-        alert(`Erreur: ${error.message}`)
-      } else {
-        console.log('KPIs calculated successfully')
-        await loadSnapshotData(selectedEstablishment.id, selectedPeriod)
-      }
-    } catch (err) {
-      console.error('Calculate KPIs error:', err)
-    } finally {
-      setRefreshing(false)
+    // PAYROLL & COST
+    const currentMasseBrute = currentRem.reduce((sum, rem) => sum + (rem.salaire_de_base + rem.primes_fixes + rem.primes_variables + rem.heures_supp_payees + rem.avantages_nature + rem.indemnites), 0)
+    const prevMasseBrute = prevRem.reduce((sum, rem) => sum + (rem.salaire_de_base + rem.primes_fixes + rem.primes_variables + rem.heures_supp_payees + rem.avantages_nature + rem.indemnites), 0)
+    const prevYearMasseBrute = prevYearRem.reduce((sum, rem) => sum + (rem.salaire_de_base + rem.primes_fixes + rem.primes_variables + rem.heures_supp_payees + rem.avantages_nature + rem.indemnites), 0)
+
+    const currentCoutTotal = currentRem.reduce((sum, rem) => sum + rem.cout_total_employeur, 0)
+    const prevCoutTotal = prevRem.reduce((sum, rem) => sum + rem.cout_total_employeur, 0)
+    const prevYearCoutTotal = prevYearRem.reduce((sum, rem) => sum + rem.cout_total_employeur, 0)
+
+    const currentSalaireMoyenETP = currentFTE > 0 ? currentCoutTotal / currentFTE : 0
+    const prevSalaireMoyenETP = prevFTE > 0 ? prevCoutTotal / prevFTE : 0
+    const prevYearSalaireMoyenETP = prevYearFTE > 0 ? prevYearCoutTotal / prevYearFTE : 0
+
+    const currentPartVariable = currentMasseBrute > 0 ? (currentRem.reduce((sum, rem) => sum + rem.primes_variables, 0) / currentMasseBrute) * 100 : 0
+    const prevPartVariable = prevMasseBrute > 0 ? (prevRem.reduce((sum, rem) => sum + rem.primes_variables, 0) / prevMasseBrute) * 100 : 0
+    const prevYearPartVariable = prevYearMasseBrute > 0 ? (prevYearRem.reduce((sum, rem) => sum + rem.primes_variables, 0) / prevYearMasseBrute) * 100 : 0
+
+    // ABSENCES & WELLBEING
+    const totalAbsenceDays = currentAbs.reduce((sum, abs) => sum + abs.nb_jours_ouvres, 0)
+    const theoreticalWorkDays = currentFTE * 22 // Approximation: 22 working days per month
+    const currentAbsenteisme = theoreticalWorkDays > 0 ? (totalAbsenceDays / theoreticalWorkDays) * 100 : 0
+
+    // Estimate cost of absences (simplified)
+    const averageDailySalary = currentFTE > 0 ? (currentMasseBrute / currentFTE) / 22 : 0
+    const currentCoutAbsences = totalAbsenceDays * averageDailySalary
+
+    // Top 3 absence types
+    const absenceByType = currentAbs.reduce((acc: any, abs) => {
+      acc[abs.type_absence] = (acc[abs.type_absence] || 0) + abs.nb_jours_ouvres
+      return acc
+    }, {})
+
+    const topAbsences = Object.entries(absenceByType)
+      .map(([type, jours]: [string, any]) => ({
+        type,
+        jours,
+        percentage: totalAbsenceDays > 0 ? (jours / totalAbsenceDays) * 100 : 0
+      }))
+      .sort((a, b) => b.jours - a.jours)
+      .slice(0, 3)
+
+    // DEMOGRAPHICS
+    const currentAgeSum = currentEmployees.reduce((sum, emp) => sum + (emp.age_at_periode || 0), 0)
+    const currentAgeMoyen = currentEmployees.length > 0 ? currentAgeSum / currentEmployees.length : 0
+    const prevAgeMoyen = prevEmployees.length > 0 ? prevEmployees.reduce((sum, emp) => sum + (emp.age_at_periode || 0), 0) / prevEmployees.length : 0
+    const prevYearAgeMoyen = prevYearEmployees.length > 0 ? prevYearEmployees.reduce((sum, emp) => sum + (emp.age_at_periode || 0), 0) / prevYearEmployees.length : 0
+
+    const currentAncienneteSum = currentEmployees.reduce((sum, emp) => sum + (emp.anciennete_mois || 0), 0)
+    const currentAncienneteMoyenne = currentEmployees.length > 0 ? currentAncienneteSum / currentEmployees.length : 0
+    const prevAncienneteMoyenne = prevEmployees.length > 0 ? prevEmployees.reduce((sum, emp) => sum + (emp.anciennete_mois || 0), 0) / prevEmployees.length : 0
+    const prevYearAncienneteMoyenne = prevYearEmployees.length > 0 ? prevYearEmployees.reduce((sum, emp) => sum + (emp.anciennete_mois || 0), 0) / prevYearEmployees.length : 0
+
+    // Contract distribution
+    const contractCounts = currentEmployees.reduce((acc: any, emp) => {
+      acc[emp.type_contrat] = (acc[emp.type_contrat] || 0) + 1
+      return acc
+    }, {})
+
+    const repartitionContrats = Object.entries(contractCounts).map(([type, count]: [string, any]) => ({
+      type,
+      count,
+      percentage: currentEmployees.length > 0 ? (count / currentEmployees.length) * 100 : 0
+    }))
+
+    // Site distribution
+    const siteCounts = currentEmployees.reduce((acc: any, emp) => {
+      const site = emp.code_site || 'Non défini'
+      acc[site] = (acc[site] || 0) + 1
+      return acc
+    }, {})
+
+    const repartitionSites = Object.entries(siteCounts).map(([site, count]: [string, any]) => ({
+      site,
+      count,
+      percentage: currentEmployees.length > 0 ? (count / currentEmployees.length) * 100 : 0
+    }))
+
+    return {
+      effectifTotal: calculateEvolution(currentFTE, prevFTE, prevYearFTE),
+      entreesSorties: {
+        entrees: currentEntrees,
+        sorties: currentSorties,
+        evolution: calculateEvolution(currentSorties, 0, 0) // Simplified for turnover
+      },
+      tauxRotation: calculateEvolution(currentTurnover, prevTurnover, prevYearTurnover),
+      masseSalarialeBrute: calculateEvolution(currentMasseBrute, prevMasseBrute, prevYearMasseBrute),
+      coutTotalEmployeur: calculateEvolution(currentCoutTotal, prevCoutTotal, prevYearCoutTotal),
+      salaireMoyenETP: calculateEvolution(currentSalaireMoyenETP, prevSalaireMoyenETP, prevYearSalaireMoyenETP),
+      partVariable: calculateEvolution(currentPartVariable, prevPartVariable, prevYearPartVariable),
+      tauxAbsenteisme: calculateEvolution(currentAbsenteisme, 0, 0), // Simplified
+      coutAbsences: calculateEvolution(currentCoutAbsences, 0, 0), // Simplified
+      topAbsences,
+      ageMoyen: calculateEvolution(currentAgeMoyen, prevAgeMoyen, prevYearAgeMoyen),
+      ancienneteMoyenne: calculateEvolution(currentAncienneteMoyenne / 12, prevAncienneteMoyenne / 12, prevYearAncienneteMoyenne / 12), // Convert to years
+      repartitionContrats,
+      repartitionSites
     }
   }
 
-  // Handle period change
   const handlePeriodChange = async (period: string) => {
     setSelectedPeriod(period)
     setShowPeriodSelector(false)
     if (selectedEstablishment) {
-      await loadSnapshotData(selectedEstablishment.id, period)
+      await loadDataForPeriod(selectedEstablishment.id, period)
     }
   }
-
-  // Calculate evolutions
-  const evolutions = useMemo(() => {
-    if (!currentSnapshot || !previousSnapshot) return {}
-
-    return {
-      effectif: calculateEvolution(currentSnapshot.effectif_fin_mois, previousSnapshot.effectif_fin_mois),
-      masse: calculateEvolution(currentSnapshot.masse_salariale_brute, previousSnapshot.masse_salariale_brute),
-      turnover: currentSnapshot.taux_turnover - previousSnapshot.taux_turnover,
-      absenteisme: currentSnapshot.taux_absenteisme - previousSnapshot.taux_absenteisme
-    }
-  }, [currentSnapshot, previousSnapshot])
 
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white">Chargement...</p>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center">
+        <motion.div 
+          className="text-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <motion.div 
+            className="w-20 h-20 border-4 border-purple-500/30 rounded-full mb-6 mx-auto"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          >
+            <div className="w-20 h-20 border-4 border-t-purple-500 rounded-full animate-spin"></div>
+          </motion.div>
+          <motion.p 
+            className="text-white text-xl"
+            animate={{ opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+          >
+            Chargement de votre dashboard RH...
+          </motion.p>
+        </motion.div>
       </div>
     )
   }
 
   // Error state
-  if (error && !currentSnapshot) {
+  if (error && !kpiData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 flex items-center justify-center p-6">
-        <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-8 max-w-lg text-center border border-slate-700/50">
-          <AlertCircle size={48} className="text-red-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-4">Erreur</h2>
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center p-6">
+        <motion.div 
+          className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-8 max-w-lg text-center border border-red-500/30"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <AlertTriangle size={48} className="text-red-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-4">Erreur de chargement</h2>
           <p className="text-slate-300 mb-6">{error}</p>
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={() => router.push('/import')}
-              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-xl font-medium"
-            >
-              Importer des données
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-6 py-3 bg-slate-700 text-white rounded-xl font-medium"
-            >
-              Réessayer
-            </button>
-          </div>
-        </div>
+          <button
+            onClick={() => router.push('/import')}
+            className="px-6 py-3 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
+          >
+            Importer des données
+          </button>
+        </motion.div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      {/* Background effects */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0 opacity-[0.015]" style={{
-          backgroundImage: `radial-gradient(circle at 2px 2px, rgba(139, 92, 246, 0.15) 1px, transparent 1px)`,
-          backgroundSize: '48px 48px'
-        }} />
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-pulse" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/10 to-slate-950">
+      {/* Animated background effects */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <motion.div 
+          className="absolute inset-0 opacity-[0.02]"
+          style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgba(139, 92, 246, 0.3) 1px, transparent 1px)`,
+            backgroundSize: '48px 48px'
+          }}
+          animate={{
+            backgroundPosition: ['0px 0px', '48px 48px']
+          }}
+          transition={{
+            duration: 20,
+            repeat: Infinity,
+            ease: "linear"
+          }}
+        />
+        <motion.div 
+          className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl"
+          animate={{
+            x: [0, 100, 0],
+            y: [0, -50, 0],
+            scale: [1, 1.2, 1]
+          }}
+          transition={{
+            duration: 15,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        />
+        <motion.div 
+          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl"
+          animate={{
+            x: [0, -80, 0],
+            y: [0, 60, 0],
+            scale: [1, 0.8, 1]
+          }}
+          transition={{
+            duration: 12,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        />
       </div>
 
       {/* Header */}
-      <div className="relative z-10 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/50">
+      <motion.div 
+        className="relative z-10 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800/50"
+        initial={{ opacity: 0, y: -50 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+      >
         <div className="px-8 py-6">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-6">
-              <div className="w-14 h-14 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-2xl flex items-center justify-center">
-                <Brain size={28} className="text-white" />
-              </div>
+              <motion.div 
+                className="w-16 h-16 bg-gradient-to-br from-purple-500 via-pink-500 to-cyan-500 rounded-3xl flex items-center justify-center shadow-2xl"
+                whileHover={{ scale: 1.1, rotate: 360 }}
+                transition={{ duration: 0.6 }}
+              >
+                <Brain size={32} className="text-white drop-shadow-lg" />
+              </motion.div>
               <div>
-                <h1 className="text-3xl font-bold text-white">Dashboard Analytics</h1>
-                <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
+                <motion.h1 
+                  className="text-4xl font-bold bg-gradient-to-r from-white via-purple-200 to-cyan-200 bg-clip-text text-transparent"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  RH Quantum Analytics
+                </motion.h1>
+                <motion.div 
+                  className="flex items-center gap-3 text-sm text-slate-400 mt-2"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                >
                   <Building2 size={14} />
                   <span>{company?.nom}</span>
                   <span>•</span>
                   <span>{selectedEstablishment?.nom}</span>
-                </div>
+                  <span>•</span>
+                  <span className="text-green-400">Live Dashboard</span>
+                </motion.div>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              {/* Debug mode toggle */}
-              <button
-                onClick={() => setDebugMode(!debugMode)}
-                className={`p-2 rounded-lg transition-colors ${
-                  debugMode ? 'bg-purple-500/20 text-purple-400' : 'text-slate-400 hover:text-white'
-                }`}
-                title="Mode debug"
-              >
-                <Gauge size={20} />
-              </button>
-
               {/* Period selector */}
               <div className="relative">
-                <button
+                <motion.button
                   onClick={() => setShowPeriodSelector(!showPeriodSelector)}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-xl border border-slate-700 hover:bg-slate-700/50 transition-colors"
+                  className={`flex items-center gap-2 px-6 py-3 rounded-xl border transition-all duration-200 ${
+                    showPeriodSelector 
+                      ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-lg shadow-purple-500/20' 
+                      : 'bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 text-white hover:border-purple-500/30'
+                  }`}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                 >
-                  <Calendar size={16} className="text-purple-400" />
-                  <span className="text-white">{formatPeriodDisplay(selectedPeriod)}</span>
-                  <ChevronDown size={16} className="text-slate-400" />
-                </button>
+                  <Calendar size={18} className="text-purple-400" />
+                  <span className={showPeriodSelector ? 'text-purple-300' : 'text-white'}>
+                    {selectedPeriod ? formatPeriodDisplay(selectedPeriod) : 'Sélectionner'}
+                  </span>
+                  <motion.div
+                    animate={{ rotate: showPeriodSelector ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronDown size={18} className="text-slate-400" />
+                  </motion.div>
+                </motion.button>
 
-{showPeriodSelector && (
-  <>
-    {/* Backdrop to close dropdown */}
-    <div 
-      className="fixed inset-0 z-[999999]" 
-      onClick={() => setShowPeriodSelector(false)}
-    ></div>
-    
-    {/* Enhanced dropdown with maximum z-index */}
-    <div className="absolute top-full right-0 mt-2 w-64 bg-slate-900 backdrop-blur-xl rounded-xl border border-slate-700/50 shadow-2xl overflow-hidden z-[999999]">
-      <div className="max-h-80 overflow-y-auto">
-        {periods.length > 0 ? periods.map(period => (
-          <button
-            key={period}
-            onClick={() => handlePeriodChange(period)}
-            className={`w-full px-4 py-3 text-left hover:bg-slate-800/50 transition-colors border-b border-slate-800/30 last:border-b-0 ${
-              period === selectedPeriod 
-                ? 'bg-purple-500/20 text-purple-400 font-medium' 
-                : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            {formatPeriodDisplay(period)}
-          </button>
-        )) : (
-          <div className="px-4 py-8 text-center text-slate-500">
-            <Calendar size={32} className="mx-auto mb-3 opacity-50" />
-            <p className="text-sm">Aucune période disponible</p>
-            <p className="text-xs mt-1">Importez des données pour voir les périodes</p>
-          </div>
-        )}
-      </div>
-    </div>
-  </>
-)}
+                <AnimatePresence>
+                  {showPeriodSelector && (
+                    <>
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9998]" 
+                        onClick={() => setShowPeriodSelector(false)}
+                      />
+                      
+                      <motion.div 
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        className="fixed bg-slate-900/95 backdrop-blur-xl rounded-xl border border-slate-700/50 shadow-2xl z-[9999] overflow-hidden"
+                        style={{
+                          top: '120px',
+                          right: '32px',
+                          width: '300px',
+                          maxHeight: '400px'
+                        }}
+                      >
+                        <div className="p-2">
+                          <div className="text-xs font-medium text-slate-400 px-3 py-3 border-b border-slate-700/50 bg-slate-800/50">
+                            📅 Sélectionner une période
+                          </div>
+                          <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                            {periods.length > 0 ? (
+                              <div className="py-2">
+                                {periods.map(period => (
+                                  <motion.button
+                                    key={period}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handlePeriodChange(period)
+                                    }}
+                                    className={`w-full px-4 py-3 text-left rounded-lg mx-2 my-1 transition-all duration-150 ${
+                                      period === selectedPeriod 
+                                        ? 'bg-gradient-to-r from-purple-500/20 to-cyan-500/20 text-purple-300 font-medium border border-purple-500/30 shadow-lg' 
+                                        : 'text-slate-300 hover:text-white hover:bg-slate-800/70 hover:shadow-md'
+                                    }`}
+                                    whileHover={{ scale: 1.02, x: 4 }}
+                                    whileTap={{ scale: 0.98 }}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span>{formatPeriodDisplay(period)}</span>
+                                      {period === selectedPeriod && (
+                                        <motion.div 
+                                          className="w-2 h-2 bg-purple-400 rounded-full shadow-lg shadow-purple-400/50"
+                                          animate={{ scale: [1, 1.2, 1] }}
+                                          transition={{ duration: 1, repeat: Infinity }}
+                                        />
+                                      )}
+                                    </div>
+                                  </motion.button>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="px-6 py-8 text-center text-slate-500">
+                                <Calendar size={32} className="mx-auto mb-3 opacity-50" />
+                                <p className="text-sm">Aucune période disponible</p>
+                                <p className="text-xs mt-2 opacity-75">Importez des données d'abord</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
 
-              {/* Calculate KPIs button */}
-              <button
-                onClick={calculateKPIs}
-                disabled={refreshing}
-                className="px-4 py-2 bg-purple-500/20 border border-purple-500/30 rounded-xl text-purple-400 hover:bg-purple-500/30 transition-colors disabled:opacity-50"
-              >
-                {refreshing ? (
-                  <RefreshCw size={18} className="animate-spin" />
-                ) : (
-                  'Calculer KPIs'
-                )}
-              </button>
-
-              {/* Import button */}
-              <button
+              <motion.button
                 onClick={() => router.push('/import')}
-                className="px-6 py-2 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
+                className="px-6 py-3 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-xl font-medium hover:opacity-90 transition-opacity shadow-lg"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
-                Import
-              </button>
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} />
+                  Import
+                </div>
+              </motion.button>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Debug info */}
-      {debugMode && (
-        <div className="relative z-10 p-4 bg-purple-900/20 border-b border-purple-500/30">
-          <div className="text-xs font-mono text-purple-300">
-            <p>Establishment ID: {selectedEstablishment?.id}</p>
-            <p>Period: {selectedPeriod}</p>
-            <p>Snapshot ID: {currentSnapshot?.id}</p>
-            <p>Data quality: {currentSnapshot?.data_quality_score}%</p>
-            <p>Last calculated: {currentSnapshot?.calculated_at}</p>
-          </div>
-        </div>
-      )}
+      </motion.div>
 
       {/* Main content */}
-      <div className="relative z-10 p-8">
-        {currentSnapshot ? (
+      <div className="relative z-10 p-8 space-y-12">
+        {kpiData ? (
           <>
-            {/* Alerts */}
-            {(currentSnapshot.alerte_turnover_eleve || currentSnapshot.alerte_absenteisme_eleve) && (
-              <div className="mb-6 p-4 bg-red-900/20 border border-red-500/30 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle size={20} className="text-red-400" />
-                  <div>
-                    <p className="text-red-400 font-medium">Alertes actives</p>
-                    <p className="text-red-300 text-sm">
-                      {currentSnapshot.alerte_turnover_eleve && 'Turnover élevé'}
-                      {currentSnapshot.alerte_turnover_eleve && currentSnapshot.alerte_absenteisme_eleve && ' • '}
-                      {currentSnapshot.alerte_absenteisme_eleve && 'Absentéisme élevé'}
-                    </p>
+            {/* 👥 EFFECTIF & WORKFORCE */}
+            <motion.section
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+            >
+              <SectionHeader 
+                title="👥 Effectif & Workforce" 
+                icon={Users} 
+                gradient="bg-gradient-to-r from-blue-500 to-purple-600" 
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                <KPICard
+                  title="Effectif Total (ETP)"
+                  value={kpiData.effectifTotal.value}
+                  format="number"
+                  icon={Users}
+                  gradient="bg-gradient-to-r from-blue-500 to-blue-600"
+                  evolution={kpiData.effectifTotal}
+                  subtitle="Équivalent Temps Plein"
+                />
+
+                <KPICard
+                  title="Entrées / Sorties"
+                  value={`${kpiData.entreesSorties.entrees} / ${kpiData.entreesSorties.sorties}`}
+                  format="text"
+                  icon={TrendingUp}
+                  gradient="bg-gradient-to-r from-green-500 to-emerald-600"
+                  subtitle="Mouvements du mois"
+                />
+
+                <KPICard
+                  title="Taux de Rotation"
+                  value={kpiData.tauxRotation.value}
+                  format="percent"
+                  icon={RefreshCw}
+                  gradient="bg-gradient-to-r from-orange-500 to-red-600"
+                  evolution={kpiData.tauxRotation}
+                  subtitle="Benchmark industrie"
+                  alert={kpiData.tauxRotation.value > 15}
+                />
+              </div>
+            </motion.section>
+
+            {/* 💶 PAYROLL & COST */}
+            <motion.section
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
+              <SectionHeader 
+                title="💶 Payroll & Cost" 
+                icon={DollarSign} 
+                gradient="bg-gradient-to-r from-emerald-500 to-cyan-600" 
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                <KPICard
+                  title="Masse Salariale Brute"
+                  value={kpiData.masseSalarialeBrute.value}
+                  format="currency"
+                  icon={Euro}
+                  gradient="bg-gradient-to-r from-emerald-500 to-emerald-600"
+                  evolution={kpiData.masseSalarialeBrute}
+                  subtitle="Total payroll mensuel"
+                />
+
+                <KPICard
+                  title="Coût Total Employeur"
+                  value={kpiData.coutTotalEmployeur.value}
+                  format="currency"
+                  icon={Calculator}
+                  gradient="bg-gradient-to-r from-cyan-500 to-cyan-600"
+                  evolution={kpiData.coutTotalEmployeur}
+                  subtitle="Charges incluses"
+                />
+
+                <KPICard
+                  title="Salaire Moyen par ETP"
+                  value={kpiData.salaireMoyenETP.value}
+                  format="currency"
+                  icon={Target}
+                  gradient="bg-gradient-to-r from-teal-500 to-teal-600"
+                  evolution={kpiData.salaireMoyenETP}
+                  subtitle="Coût employeur unitaire"
+                />
+
+                <KPICard
+                  title="Part Variable"
+                  value={kpiData.partVariable.value}
+                  format="percent"
+                  icon={Percent}
+                  gradient="bg-gradient-to-r from-indigo-500 to-indigo-600"
+                  evolution={kpiData.partVariable}
+                  subtitle="Motivation & performance"
+                />
+              </div>
+            </motion.section>
+
+            {/* 🏥 ABSENCES & WELLBEING */}
+            <motion.section
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
+              <SectionHeader 
+                title="🏥 Absences & Wellbeing" 
+                icon={Stethoscope} 
+                gradient="bg-gradient-to-r from-pink-500 to-rose-600" 
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                <KPICard
+                  title="Taux d'Absentéisme"
+                  value={kpiData.tauxAbsenteisme.value}
+                  format="percent"
+                  icon={Heart}
+                  gradient="bg-gradient-to-r from-pink-500 to-pink-600"
+                  evolution={kpiData.tauxAbsenteisme}
+                  subtitle="Engagement & santé"
+                  alert={kpiData.tauxAbsenteisme.value > 8}
+                />
+
+                <KPICard
+                  title="Coût des Absences"
+                  value={kpiData.coutAbsences.value}
+                  format="currency"
+                  icon={DollarSign}
+                  gradient="bg-gradient-to-r from-rose-500 to-rose-600"
+                  evolution={kpiData.coutAbsences}
+                  subtitle="Impact financier"
+                />
+
+                <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-6">
+                  <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
+                    <FileText size={20} className="text-orange-400" />
+                    Top 3 Motifs d'Absence
+                  </h3>
+                  <div className="space-y-3">
+                    {kpiData.topAbsences.map((absence, index) => (
+                      <motion.div 
+                        key={absence.type} 
+                        className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${
+                            index === 0 ? 'bg-red-500' : index === 1 ? 'bg-orange-500' : 'bg-yellow-500'
+                          }`} />
+                          <span className="text-slate-300">{absence.type}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-white font-medium">{absence.jours} jours</div>
+                          <div className="text-xs text-slate-400">{absence.percentage.toFixed(1)}%</div>
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
                 </div>
               </div>
+            </motion.section>
+
+            {/* 📊 DEMOGRAPHICS */}
+            <motion.section
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+            >
+              <SectionHeader 
+                title="📊 Demographics" 
+                icon={UserCheck} 
+                gradient="bg-gradient-to-r from-violet-500 to-purple-600" 
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+                <KPICard
+                  title="Âge Moyen"
+                  value={kpiData.ageMoyen.value.toFixed(1)}
+                  format="text"
+                  icon={Award}
+                  gradient="bg-gradient-to-r from-violet-500 to-violet-600"
+                  evolution={kpiData.ageMoyen}
+                  subtitle="ans"
+                />
+
+                <KPICard
+                  title="Ancienneté Moyenne"
+                  value={kpiData.ancienneteMoyenne.value.toFixed(1)}
+                  format="text"
+                  icon={Clock}
+                  gradient="bg-gradient-to-r from-purple-500 to-purple-600"
+                  evolution={kpiData.ancienneteMoyenne}
+                  subtitle="années"
+                />
+
+                <div className="col-span-1 md:col-span-2 bg-slate-900/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-6">
+                  <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
+                    <Briefcase size={20} className="text-blue-400" />
+                    Répartition par Contrat
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {kpiData.repartitionContrats.map((contract, index) => (
+                      <motion.div 
+                        key={contract.type} 
+                        className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: index * 0.1 }}
+                      >
+                        <span className="text-slate-300">{contract.type}</span>
+                        <div className="text-right">
+                          <div className="text-white font-medium">{contract.count}</div>
+                          <div className="text-xs text-slate-400">{contract.percentage.toFixed(1)}%</div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sites Distribution */}
+              <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-6">
+                <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
+                  <MapPin size={20} className="text-green-400" />
+                  Répartition par Département & Site
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {kpiData.repartitionSites.map((site, index) => (
+                    <motion.div 
+                      key={site.site} 
+                      className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg hover:bg-slate-800/70 transition-colors"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 bg-gradient-to-r from-green-400 to-emerald-400 rounded-full" />
+                        <span className="text-slate-300">{site.site}</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-white font-medium">{site.count} pers.</div>
+                        <div className="text-xs text-slate-400">{site.percentage.toFixed(1)}%</div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </motion.section>
+
+            {/* Charts Section */}
+            {historicalData.length > 0 && (
+              <motion.section
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.5 }}
+              >
+                <SectionHeader 
+                  title="📈 Évolution Temporelle" 
+                  icon={BarChart3} 
+                  gradient="bg-gradient-to-r from-cyan-500 to-blue-600" 
+                />
+                <div className="grid lg:grid-cols-2 gap-8">
+                  <EvolutionChart
+                    data={historicalData}
+                    title="Évolution des Effectifs"
+                    dataKey="effectifs"
+                    color="text-purple-400"
+                  />
+                  
+                  <DistributionChart
+                    data={kpiData.repartitionContrats.map(c => ({ name: c.type, value: c.count }))}
+                    title="Distribution des Contrats"
+                    colors={['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444']}
+                  />
+                </div>
+              </motion.section>
             )}
 
-            {/* KPI Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-              <KPICard
-                title="Effectif Total"
-                value={currentSnapshot.effectif_fin_mois}
-                format="number"
-                icon={Users}
-                color="bg-gradient-to-r from-purple-500 to-purple-600"
-                evolution={evolutions.effectif}
-                subtitle={`ETP: ${currentSnapshot.etp_fin_mois.toFixed(1)}`}
-              />
-
-              <KPICard
-                title="Masse Salariale"
-                value={currentSnapshot.masse_salariale_brute}
-                format="currency"
-                icon={Euro}
-                color="bg-gradient-to-r from-cyan-500 to-cyan-600"
-                evolution={evolutions.masse}
-                subtitle={`Moyen: ${formatCurrency(currentSnapshot.salaire_base_moyen)}`}
-              />
-
-              <KPICard
-                title="Taux de Turnover"
-                value={currentSnapshot.taux_turnover}
-                format="percent"
-                icon={TrendingUp}
-                color={currentSnapshot.alerte_turnover_eleve 
-                  ? "bg-gradient-to-r from-red-500 to-red-600"
-                  : "bg-gradient-to-r from-green-500 to-green-600"}
-                evolution={evolutions.turnover}
-                subtitle={`${currentSnapshot.nb_entrees} entrées, ${currentSnapshot.nb_sorties} sorties`}
-                alert={currentSnapshot.alerte_turnover_eleve}
-              />
-
-              <KPICard
-                title="Taux d'Absentéisme"
-                value={currentSnapshot.taux_absenteisme}
-                format="percent"
-                icon={Heart}
-                color={currentSnapshot.alerte_absenteisme_eleve
-                  ? "bg-gradient-to-r from-orange-500 to-orange-600"
-                  : "bg-gradient-to-r from-blue-500 to-blue-600"}
-                evolution={evolutions.absenteisme}
-                subtitle={`${currentSnapshot.nb_jours_absence} jours`}
-                alert={currentSnapshot.alerte_absenteisme_eleve}
-              />
-
-              <KPICard
-                title="Coût Total"
-                value={currentSnapshot.cout_total_employeur}
-                format="currency"
-                icon={CircleDollarSign}
-                color="bg-gradient-to-r from-amber-500 to-amber-600"
-                subtitle={`Par ETP: ${formatCurrency(currentSnapshot.cout_moyen_par_fte)}`}
-              />
-
-              <KPICard
-                title="Taux CDI"
-                value={currentSnapshot.pct_cdi}
-                format="percent"
-                icon={Shield}
-                color="bg-gradient-to-r from-emerald-500 to-emerald-600"
-                subtitle={`${currentSnapshot.nb_cdi} CDI`}
-              />
-
-              <KPICard
-                title="Âge Moyen"
-                value={currentSnapshot.age_moyen}
-                format="number"
-                icon={Award}
-                color="bg-gradient-to-r from-indigo-500 to-indigo-600"
-                subtitle="ans"
-              />
-
-              <KPICard
-                title="Ancienneté"
-                value={currentSnapshot.anciennete_moyenne_mois / 12}
-                format="number"
-                icon={Clock}
-                color="bg-gradient-to-r from-pink-500 to-pink-600"
-                subtitle="années en moyenne"
-              />
-            </div>
-
-            {/* Additional metrics */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Contract distribution */}
-              <div className="p-6 bg-slate-900/50 rounded-2xl border border-slate-700/30">
-                <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
-                  <PieChart size={20} className="text-purple-400" />
-                  Répartition Contractuelle
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">CDI</span>
-                    <span className="text-white font-medium">{currentSnapshot.nb_cdi}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">CDD</span>
-                    <span className="text-white font-medium">{currentSnapshot.nb_cdd}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">Précarité</span>
-                    <span className="text-white font-medium">{formatPercentage(currentSnapshot.pct_precarite)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Demographics */}
-              <div className="p-6 bg-slate-900/50 rounded-2xl border border-slate-700/30">
-                <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
-                  <Users size={20} className="text-cyan-400" />
-                  Démographie
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">Hommes</span>
-                    <span className="text-white font-medium">{formatPercentage(currentSnapshot.pct_hommes)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">Femmes</span>
-                    <span className="text-white font-medium">{formatPercentage(currentSnapshot.pct_femmes)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">Âge moyen</span>
-                    <span className="text-white font-medium">{currentSnapshot.age_moyen.toFixed(1)} ans</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Performance metrics */}
-              <div className="p-6 bg-slate-900/50 rounded-2xl border border-slate-700/30">
-                <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
-                  <BarChart3 size={20} className="text-green-400" />
-                  Performance
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">Qualité données</span>
-                    <span className="text-white font-medium">{currentSnapshot.data_quality_score}%</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">Durée absence moy.</span>
-                    <span className="text-white font-medium">{currentSnapshot.duree_moyenne_absence.toFixed(1)}j</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">Taux charges</span>
-                    <span className="text-white font-medium">{formatPercentage(currentSnapshot.taux_charges)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Footer */}
-            <div className="mt-8 p-4 bg-slate-900/30 rounded-xl border border-slate-700/50">
+            <motion.div 
+              className="mt-16 p-6 bg-gradient-to-r from-slate-900/50 to-slate-800/50 backdrop-blur-xl rounded-2xl border border-slate-700/50"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+            >
               <div className="flex items-center justify-between text-sm text-slate-400">
-                <div className="flex items-center gap-6">
-                  <span>Dernière mise à jour: {new Date(currentSnapshot.calculated_at).toLocaleDateString('fr-FR')}</span>
+                <div className="flex items-center gap-8">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                    <span>Dashboard en temps réel</span>
+                  </div>
                   <span>Période: {formatPeriodDisplay(selectedPeriod)}</span>
+                  <span>Mise à jour: {new Date().toLocaleDateString('fr-FR')}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Database size={14} />
-                  <span>Dashboard v3.0</span>
+                  <Zap size={14} className="text-purple-400" />
+                  <span>RH Quantum Analytics v4.0</span>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </>
         ) : (
           /* No data state */
-          <div className="text-center py-20">
-            <div className="w-24 h-24 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
-              <Upload size={40} className="text-white" />
-            </div>
-            <h2 className="text-3xl font-bold text-white mb-4">Aucune donnée disponible</h2>
-            <p className="text-slate-400 mb-8 max-w-md mx-auto">
-              Importez vos fichiers Excel pour commencer à visualiser vos KPIs RH
-            </p>
-            <button
-              onClick={() => router.push('/import')}
-              className="px-8 py-4 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-2xl font-bold hover:opacity-90 transition-opacity"
+          <motion.div 
+            className="text-center py-20"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+          >
+            <motion.div 
+              className="w-32 h-32 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl"
+              animate={{ 
+                rotate: [0, 10, -10, 0],
+                scale: [1, 1.05, 1]
+              }}
+              transition={{ 
+                duration: 4,
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
             >
-              Importer des données
-            </button>
-          </div>
+              <BarChart3 size={64} className="text-white drop-shadow-lg" />
+            </motion.div>
+            <h2 className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent mb-6">
+              Aucune donnée disponible
+            </h2>
+            <p className="text-slate-400 text-lg mb-8 max-w-md mx-auto">
+              Importez vos fichiers Excel RH pour générer automatiquement vos KPIs et analytics
+            </p>
+            <motion.button
+              onClick={() => router.push('/import')}
+              className="px-12 py-4 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-2xl font-bold text-lg hover:opacity-90 transition-opacity shadow-xl"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <div className="flex items-center gap-3">
+                <Sparkles size={24} />
+                Commencer l'import
+                <ArrowUp size={24} className="rotate-45" />
+              </div>
+            </motion.button>
+          </motion.div>
         )}
       </div>
+
+      {/* Custom scrollbar styles */}
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(51, 65, 85, 0.2);
+          border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(180deg, #8b5cf6, #06b6d4);
+          border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(180deg, #a78bfa, #22d3ee);
+        }
+      `}</style>
     </div>
   )
 }
