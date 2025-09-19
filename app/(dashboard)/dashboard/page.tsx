@@ -10,6 +10,7 @@ import {
   PieChart, Activity, Award, Briefcase, MapPin, Zap, Gauge,
   DollarSign, Calculator, Stethoscope, UserCheck, FileText
 } from 'lucide-react'
+import ReactDOM from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { 
   LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, 
@@ -439,6 +440,16 @@ export default function RHQuantumDashboard() {
   useEffect(() => {
     initializeData()
   }, [])
+
+  useEffect(() => {
+    if (showPeriodSelector) {
+      // Prevent body scroll when dropdown is open
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = 'unset'
+      }
+    }
+  }, [showPeriodSelector])
 
   const initializeData = async () => {
     try {
@@ -904,78 +915,6 @@ export default function RHQuantumDashboard() {
                     <ChevronDown size={18} className="text-slate-400" />
                   </motion.div>
                 </motion.button>
-
-                <AnimatePresence>
-                  {showPeriodSelector && (
-                    <>
-                      <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9998]" 
-                        onClick={() => setShowPeriodSelector(false)}
-                      />
-                      
-                      <motion.div 
-                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        className="fixed bg-slate-900/95 backdrop-blur-xl rounded-xl border border-slate-700/50 shadow-2xl z-[9999] overflow-hidden"
-                        style={{
-                          top: '120px',
-                          right: '32px',
-                          width: '300px',
-                          maxHeight: '400px'
-                        }}
-                      >
-                        <div className="p-2">
-                          <div className="text-xs font-medium text-slate-400 px-3 py-3 border-b border-slate-700/50 bg-slate-800/50">
-                            📅 Sélectionner une période
-                          </div>
-                          <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                            {periods.length > 0 ? (
-                              <div className="py-2">
-                                {periods.map(period => (
-                                  <motion.button
-                                    key={period}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handlePeriodChange(period)
-                                    }}
-                                    className={`w-full px-4 py-3 text-left rounded-lg mx-2 my-1 transition-all duration-150 ${
-                                      period === selectedPeriod 
-                                        ? 'bg-gradient-to-r from-purple-500/20 to-cyan-500/20 text-purple-300 font-medium border border-purple-500/30 shadow-lg' 
-                                        : 'text-slate-300 hover:text-white hover:bg-slate-800/70 hover:shadow-md'
-                                    }`}
-                                    whileHover={{ scale: 1.02, x: 4 }}
-                                    whileTap={{ scale: 0.98 }}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span>{formatPeriodDisplay(period)}</span>
-                                      {period === selectedPeriod && (
-                                        <motion.div 
-                                          className="w-2 h-2 bg-purple-400 rounded-full shadow-lg shadow-purple-400/50"
-                                          animate={{ scale: [1, 1.2, 1] }}
-                                          transition={{ duration: 1, repeat: Infinity }}
-                                        />
-                                      )}
-                                    </div>
-                                  </motion.button>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="px-6 py-8 text-center text-slate-500">
-                                <Calendar size={32} className="mx-auto mb-3 opacity-50" />
-                                <p className="text-sm">Aucune période disponible</p>
-                                <p className="text-xs mt-2 opacity-75">Importez des données d'abord</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
               </div>
 
               <motion.button
@@ -993,6 +932,83 @@ export default function RHQuantumDashboard() {
           </div>
         </div>
       </motion.div>
+
+      {/* Portal-rendered dropdown */}
+      {typeof document !== 'undefined' && ReactDOM.createPortal(
+        <AnimatePresence>
+          {showPeriodSelector && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] flex items-start justify-end pt-24 pr-8"
+              onClick={() => setShowPeriodSelector(false)}
+            >
+              {/* Background overlay */}
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+              
+              {/* Dropdown content */}
+              <motion.div
+                initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                onClick={(e) => e.stopPropagation()}
+                className="relative w-80 max-h-96 bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-slate-700/50 shadow-2xl overflow-hidden"
+              >
+                {/* Header */}
+                <div className="px-4 py-3 border-b border-slate-700/50 bg-slate-800/50">
+                  <div className="flex items-center gap-2">
+                    <Calendar size={16} className="text-purple-400" />
+                    <span className="text-sm font-medium text-slate-300">Sélectionner une période</span>
+                  </div>
+                </div>
+                
+                {/* Period list */}
+                <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                  {periods.length > 0 ? (
+                    <div className="p-2 space-y-1">
+                      {periods.map(period => (
+                        <motion.button
+                          key={period}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handlePeriodChange(period)
+                          }}
+                          className={`w-full px-4 py-3 text-left rounded-xl transition-all duration-200 ${
+                            period === selectedPeriod 
+                              ? 'bg-gradient-to-r from-purple-500/30 to-cyan-500/30 text-white border border-purple-500/50 shadow-lg' 
+                              : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+                          }`}
+                          whileHover={{ scale: 1.02, x: 4 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{formatPeriodDisplay(period)}</span>
+                            {period === selectedPeriod && (
+                              <motion.div 
+                                className="w-3 h-3 bg-purple-400 rounded-full"
+                                animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                              />
+                            )}
+                          </div>
+                        </motion.button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-6 py-12 text-center text-slate-500">
+                      <Calendar size={48} className="mx-auto mb-4 opacity-30" />
+                      <p className="text-sm font-medium">Aucune période disponible</p>
+                      <p className="text-xs mt-2 opacity-75">Importez vos données d'abord</p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* Main content */}
       <div className="relative z-10 p-8 space-y-12">
