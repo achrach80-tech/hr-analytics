@@ -340,37 +340,30 @@ const CyberMetrics: React.FC<{
 )
 
 const CyberSidebar: React.FC<{
-  isOpen: boolean
-  onToggle: () => void
   onDownloadTemplate: () => void
   logs: string[]
   fileAnalysis?: FileAnalysis | null
   importStats?: ImportStats | null
-}> = ({ isOpen, onToggle, onDownloadTemplate, logs, fileAnalysis, importStats }) => (
-<div className={`fixed left-16 top-0 h-full z-50 transition-transform duration-300 ${
-  isOpen ? 'translate-x-0' : '-translate-x-full'
-}`}>
-    <NeoBorder className="h-full w-80 m-4">
+}> = ({ onDownloadTemplate, logs, fileAnalysis, importStats }) => (
+  <div className="fixed right-0 top-0 h-full w-80 z-40">
+    <NeoBorder className="h-full m-4">
       <div className="p-6 h-full flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Terminal size={20} className="text-cyan-400" />
-            <h2 className="text-cyan-400 font-mono font-bold">CYBER CONSOLE</h2>
+        {/* Header - OPTIMIZED */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-xl flex items-center justify-center">
+            <Terminal size={20} className="text-white" />
           </div>
-          <button
-            onClick={onToggle}
-            className="p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
-          >
-            <ChevronLeft size={16} className="text-slate-400" />
-          </button>
+          <div>
+            <h2 className="text-cyan-400 font-mono font-bold text-lg">CYBER CONSOLE</h2>
+            <p className="text-slate-500 text-xs font-mono">System Monitor v5.0</p>
+          </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="mb-6 space-y-3">
+        {/* Quick Actions - OPTIMIZED */}
+        <div className="mb-6 space-y-2">
           <HolographicButton
             onClick={onDownloadTemplate}
-            variant="secondary"
+            variant="primary"
             size="sm"
             className="w-full"
           >
@@ -389,10 +382,13 @@ const CyberSidebar: React.FC<{
           </HolographicButton>
         </div>
 
-        {/* File Analysis Metrics */}
+        {/* File Analysis Metrics - CONDENSED */}
         {fileAnalysis && (
           <div className="mb-6">
-            <h3 className="text-purple-400 font-mono text-sm font-bold mb-3">ANALYSE FICHIER</h3>
+            <h3 className="text-purple-400 font-mono text-sm font-bold mb-3 flex items-center gap-2">
+              <Microscope size={16} />
+              ANALYSE FICHIER
+            </h3>
             <div className="grid grid-cols-2 gap-2">
               <CyberMetrics
                 title="Onglets"
@@ -422,11 +418,14 @@ const CyberSidebar: React.FC<{
           </div>
         )}
 
-        {/* Import Stats */}
+        {/* Import Stats - CONDENSED */}
         {importStats && (
           <div className="mb-6">
-            <h3 className="text-purple-400 font-mono text-sm font-bold mb-3">STATS IMPORT</h3>
-            <div className="space-y-2">
+            <h3 className="text-purple-400 font-mono text-sm font-bold mb-3 flex items-center gap-2">
+              <Activity size={16} />
+              STATS IMPORT
+            </h3>
+            <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">Progression</span>
                 <span className="text-cyan-400">{importStats.processedRows}/{importStats.totalRows}</span>
@@ -445,10 +444,13 @@ const CyberSidebar: React.FC<{
           </div>
         )}
 
-        {/* System Logs */}
+        {/* System Logs - OPTIMIZED */}
         <div className="flex-1 overflow-hidden">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-purple-400 font-mono text-sm font-bold">LOGS SYSTÈME</h3>
+            <h3 className="text-purple-400 font-mono text-sm font-bold flex items-center gap-2">
+              <Terminal size={16} />
+              LOGS SYSTÈME
+            </h3>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
               <span className="text-green-400 text-xs font-mono">LIVE</span>
@@ -459,20 +461,23 @@ const CyberSidebar: React.FC<{
             {logs.length === 0 ? (
               <div className="flex items-center justify-center h-full text-slate-500">
                 <div className="text-center">
-                  <Terminal size={32} className="mx-auto mb-2 opacity-30" />
-                  <p>Aucun log système...</p>
-                  <p className="text-xs mt-1">En attente d'activité</p>
+                  <Terminal size={24} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-xs">Système en attente...</p>
+                  <p className="text-xs mt-1 opacity-60">Prêt pour injection</p>
                 </div>
               </div>
             ) : (
               <div className="space-y-1">
-                {logs.slice(-50).map((log, index) => (
+                {logs.slice(-20).map((log, index) => (
                   <motion.div 
                     key={index} 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="text-green-400 break-words border-l-2 border-green-500/30 pl-2 hover:bg-green-500/10 rounded-r transition-colors"
+                    className="text-green-400 break-words border-l-2 border-green-500/30 pl-2 py-1 hover:bg-green-500/5 rounded-r transition-colors"
                   >
+                    <span className="text-green-600 text-xs mr-2">
+                      {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
                     {log}
                   </motion.div>
                 ))}
@@ -484,33 +489,29 @@ const CyberSidebar: React.FC<{
           </div>
         </div>
 
-        {/* System Status */}
+        {/* System Status - ENHANCED */}
         <div className="mt-4 pt-4 border-t border-slate-700/50">
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <div className="flex items-center gap-2">
+          <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
+            <div className="flex items-center gap-2 p-2 bg-slate-800/30 rounded-lg">
               <Cpu size={12} className="text-purple-400" />
-              <span>Processeur Optimisé</span>
+              <span className="font-mono">CPU Optimized</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 p-2 bg-slate-800/30 rounded-lg">
               <Database size={12} className="text-cyan-400" />
-              <span>Split Tables</span>
+              <span className="font-mono">Split Tables</span>
+            </div>
+            <div className="flex items-center gap-2 p-2 bg-slate-800/30 rounded-lg">
+              <Layers size={12} className="text-green-400" />
+              <span className="font-mono">Partitioned</span>
+            </div>
+            <div className="flex items-center gap-2 p-2 bg-slate-800/30 rounded-lg">
+              <Zap size={12} className="text-orange-400" />
+              <span className="font-mono">v5.0 Ready</span>
             </div>
           </div>
         </div>
       </div>
     </NeoBorder>
-
-    {/* Sidebar Toggle */}
-    {!isOpen && (
-      <motion.button
-        onClick={onToggle}
-        className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-slate-900/90 backdrop-blur-xl rounded-r-xl border border-l-0 border-slate-700/50 hover:bg-slate-800/90 transition-colors shadow-lg"
-        whileHover={{ scale: 1.1, x: 2 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        <ChevronRight size={20} className="text-cyan-400" />
-      </motion.button>
-    )}
   </div>
 )
 
@@ -1118,7 +1119,6 @@ export default function OptimizedImportPage() {
   const [establishments, setEstablishments] = useState<Establishment[]>([])
   const [selectedEstablishment, setSelectedEstablishment] = useState<Establishment | null>(null)
   const [fileAnalysis, setFileAnalysis] = useState<FileAnalysis | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [importStats, setImportStats] = useState<ImportStats | null>(null)
 
@@ -1777,29 +1777,25 @@ export default function OptimizedImportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
-      <StaticCyberpunkBackground />
-      
-      <div className="relative z-10 flex min-h-screen">
+<div className="min-h-screen bg-slate-950 relative overflow-hidden">
+  <StaticCyberpunkBackground />
+  
+  <div className="relative z-10 min-h-screen">
         <CyberSidebar 
-          isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen(!sidebarOpen)}
-          onDownloadTemplate={downloadTemplate}
-          logs={importLogs}
-          fileAnalysis={fileAnalysis}
-          importStats={importStats}
+onDownloadTemplate={downloadTemplate}
+  logs={importLogs}
+  fileAnalysis={fileAnalysis}
+  importStats={importStats}
         />
 
-<div className={`flex-1 container max-w-6xl mx-auto px-8 py-8 transition-all duration-300 ${
-  sidebarOpen ? 'ml-96' : 'ml-16'
-}`}>
+<div className="flex-1 container max-w-4xl mx-auto px-6 py-6 pr-80">
           {/* Header */}
-          <motion.div 
-            className="text-center mb-10"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
+<motion.div 
+  className="text-center mb-8"
+  initial={{ opacity: 0, y: -20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.6 }}
+>
             <div className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-slate-900/70 to-slate-800/70 border border-cyan-500/30 rounded-2xl backdrop-blur-sm mb-6">
               <Database size={20} className="text-cyan-400" />
               <span className="text-cyan-400 font-mono text-sm">CYBER-HR SYSTEM v5.0 OPTIMIZED</span>

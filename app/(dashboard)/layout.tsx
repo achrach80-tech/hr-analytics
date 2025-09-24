@@ -5,8 +5,8 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { 
-  LayoutDashboard, Users, Upload, Settings, LogOut,
-  Menu, X, Building2, Calendar, Shield
+  LayoutDashboard, Upload, Settings, LogOut,
+  Menu, X, Building2, Shield
 } from 'lucide-react'
 
 export default function DashboardLayout({
@@ -34,7 +34,6 @@ export default function DashboardLayout({
 
     const session = JSON.parse(sessionStr)
     
-    // Load company and establishments
     const { data: companyData } = await supabase
       .from('entreprises')
       .select('*, etablissements(*)')
@@ -56,16 +55,13 @@ export default function DashboardLayout({
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Import', href: '/import', icon: Upload },
-    { name: 'Employés', href: '/employees', icon: Users },
     { name: 'Paramètres', href: '/settings', icon: Settings },
   ]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900">
-      {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900/50 backdrop-blur-xl border-r border-slate-800 transform transition-transform ${
-        isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      }`}>
+      {/* Main Navigation Sidebar - Always Visible */}
+      <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-slate-900/50 backdrop-blur-xl border-r border-slate-800 transform transition-transform lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}">
         <div className="p-6 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-xl flex items-center justify-center">
@@ -109,8 +105,16 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      {/* Main content */}
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />
+        </div>
+      )}
+
+      {/* Main Content Area */}
       <div className="lg:pl-64">
+        {/* Header */}
         <header className="bg-slate-900/50 backdrop-blur-xl border-b border-slate-800 px-6 py-4">
           <div className="flex items-center justify-between">
             <button
@@ -130,6 +134,7 @@ export default function DashboardLayout({
           </div>
         </header>
 
+        {/* Page Content */}
         <main className="p-6">
           {children}
         </main>
