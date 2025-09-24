@@ -18,563 +18,93 @@ import {
   Microscope, Brain, FlaskConical, TestTube, Workflow, GitBranch,
   Boxes, Factory, UserCheck, UserX, UserPlus, TrendingDown,
   PieChart, LineChart, BarChart2, Percent, DollarSign, Clock3,
-  Award, Star, Briefcase, GraduationCap, Heart, Coffee, Plane
+  Award, Star, Briefcase, GraduationCap, Heart, Coffee, Plane, CalendarX
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
+import ReactDOM from 'react-dom'
 
-// ==========================================
-// ALL INTERFACES PROPERLY DEFINED
-// ==========================================
+// Import optimized hooks and types
+import { useImport } from '@/lib/import/hooks/useImport'
+import type { 
+  ProcessedData, 
+  ValidationResult, 
+  ValidationError,
+  ValidationSummary,
+  Company, 
+  Establishment,
+  EmployeeData,
+  RemunerationData,
+  AbsenceData,
+  ImportMetadata
+} from '@/lib/import/types'
 
-interface Company {
-  id: string
-  nom: string
-  code_entreprise?: string
-  subscription_plan: string
-  ai_features_enabled?: boolean
-  max_establishments: number
-  max_employees: number
-}
-
-interface Establishment {
-  id: string
-  entreprise_id: string
-  nom: string
-  code_etablissement: string
-  is_default: boolean
-  is_headquarters: boolean
-  statut: string
-}
-
-interface ValidationError {
-  id: string
-  sheet: string
-  row: number
-  column: string
-  field: string
-  value: any
-  message: string
-  severity: 'critical' | 'warning' | 'info'
-  canIgnore: boolean
-}
-
-interface ValidationResult {
-  isValid: boolean
-  errors: ValidationError[]
-  warnings: ValidationError[]
-  summary: {
-    totalErrors: number
-    criticalErrors: number
-    warningCount: number
-    canProceed: boolean
-    qualityScore: number
-  }
-}
-
-interface ImportProgress {
-  phase: 'validation' | 'processing' | 'snapshots' | 'completion'
-  step: string
-  current: number
-  total: number
-  percentage: number
-  message: string
-  detail?: string
-}
-
-interface ProcessedData {
-  employees: any[]
-  remunerations: any[]
-  absences: any[]
-  referentiel_organisation: any[]
-  referentiel_absences: any[]
-  metadata: {
-    periods: string[]
-    totalEmployees: number
-    totalRecords: number
-    establishments: string[]
-  }
-}
-
-// Template interfaces
-interface MonthData {
-  period: string
-  display: string
-  monthNum: number
-  daysInMonth: number
-}
-
-interface BaseEmployeeTemplate {
-  matricule: string
-  sexe: string
-  date_naissance: string
-  date_entree: string
-  type_contrat: string
-  temps_travail: number
-  intitule_poste: string
-  niveau_poste: string
-  coefficient: number
-  categorie: string
-  code_cost_center: string
-  code_site: string
-  statut_emploi: string
-  date_sortie?: string
-  manager_matricule?: string
-  motif_sortie?: string
-  periods?: number[]
-}
-
-interface AbsenceTypeTemplate {
-  type: string
-  famille: string
-  frequency: number
-}
-
-// ==========================================
-// CONSTANTS
-// ==========================================
-
+// Constants
 const REQUIRED_SHEETS = ['EMPLOYES', 'REMUNERATION', 'ABSENCES', 'REFERENTIEL_ORGANISATION', 'REFERENTIEL_ABSENCES']
-const MAX_FILE_SIZE = 50 * 1024 * 1024
+const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 const BATCH_SIZE = 100
 
-const VALID_CONTRACT_TYPES = ['CDI', 'CDD', 'Alternance', 'Stage', 'Intérim', 'Freelance', 'Apprentissage', 'Contrat Pro']
-const VALID_EMPLOYMENT_STATUS = ['Actif', 'Inactif', 'Suspendu', 'Congé parental', 'Congé sabbatique']
-const VALID_FAMILLE_ABSENCE = ['Congés', 'Maladie', 'Formation', 'Congés légaux', 'Accident', 'Familial', 'Autres']
-
-// ==========================================
-// SCHEMA-COMPLIANT TEMPLATE GENERATOR
-// ==========================================
-
-const generateSchemaCompliantTemplate = (): XLSX.WorkBook => {
-  const wb = XLSX.utils.book_new()
-  
-  // Generate months in YYYY-MM-DD format
-  const months: MonthData[] = Array.from({ length: 12 }, (_, i) => {
-    const year = 2024
-    const month = i + 1
-    return {
-      period: `${year}-${String(month).padStart(2, '0')}-01`,
-      display: new Date(year, i, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
-      monthNum: month,
-      daysInMonth: new Date(year, i + 1, 0).getDate()
-    }
-  })
-
-  // EMPLOYES sheet
-  const employeesData: (string | number)[][] = [
-    [
-      'matricule', 'periode', 'sexe', 'date_naissance', 'date_entree', 'date_sortie', 
-      'type_contrat', 'temps_travail', 'intitule_poste', 'niveau_poste', 'coefficient',
-      'categorie', 'code_cost_center', 'code_site', 'manager_matricule', 'statut_emploi',
-      'motif_sortie', 'import_batch_id'
-    ]
-  ]
-
-  // Core employees data - properly typed
-  const coreEmployees: BaseEmployeeTemplate[] = [
-    {
-      matricule: 'EMP001',
-      sexe: 'F',
-      date_naissance: '1985-06-15',
-      date_entree: '2020-03-01',
-      type_contrat: 'CDI',
-      temps_travail: 1.0,
-      intitule_poste: 'Directrice RH',
-      niveau_poste: 'N5',
-      coefficient: 450,
-      categorie: 'Cadre',
-      code_cost_center: 'RH-GEN',
-      code_site: 'SIEGE',
-      statut_emploi: 'Actif'
-    },
-    {
-      matricule: 'EMP002',
-      sexe: 'M',
-      date_naissance: '1988-11-22',
-      date_entree: '2019-09-15',
-      type_contrat: 'CDI',
-      temps_travail: 1.0,
-      intitule_poste: 'Développeur Senior',
-      niveau_poste: 'N4',
-      coefficient: 400,
-      categorie: 'Cadre',
-      code_cost_center: 'IT-GEN',
-      code_site: 'SIEGE',
-      manager_matricule: 'EMP001',
-      statut_emploi: 'Actif'
-    },
-    {
-      matricule: 'EMP003',
-      sexe: 'F',
-      date_naissance: '1995-04-10',
-      date_entree: '2021-06-01',
-      type_contrat: 'CDI',
-      temps_travail: 0.8,
-      intitule_poste: 'Comptable',
-      niveau_poste: 'N3',
-      coefficient: 300,
-      categorie: 'Non-cadre',
-      code_cost_center: 'FIN-GEN',
-      code_site: 'SIEGE',
-      manager_matricule: 'EMP001',
-      statut_emploi: 'Actif'
-    },
-    {
-      matricule: 'EMP004',
-      sexe: 'M',
-      date_naissance: '1990-12-05',
-      date_entree: '2022-01-15',
-      type_contrat: 'CDI',
-      temps_travail: 1.0,
-      intitule_poste: 'Chef de Projet',
-      niveau_poste: 'N4',
-      coefficient: 380,
-      categorie: 'Cadre',
-      code_cost_center: 'IT-GEN',
-      code_site: 'SIEGE',
-      manager_matricule: 'EMP002',
-      statut_emploi: 'Actif'
-    },
-    {
-      matricule: 'EMP005',
-      sexe: 'F',
-      date_naissance: '1992-08-28',
-      date_entree: '2023-11-10',
-      type_contrat: 'CDI',
-      temps_travail: 1.0,
-      intitule_poste: 'Marketing Manager',
-      niveau_poste: 'N4',
-      coefficient: 350,
-      categorie: 'Cadre',
-      code_cost_center: 'COM-VTE',
-      code_site: 'SIEGE',
-      manager_matricule: 'EMP001',
-      statut_emploi: 'Actif'
-    }
-  ]
-
-  // Variable employees - properly typed
-  const variableEmployees: BaseEmployeeTemplate[] = [
-    {
-      matricule: 'EMP006',
-      sexe: 'M',
-      date_naissance: '1987-03-18',
-      date_entree: '2024-01-01',
-      date_sortie: '2024-03-31',
-      type_contrat: 'CDD',
-      temps_travail: 1.0,
-      intitule_poste: 'Data Analyst',
-      niveau_poste: 'N3',
-      coefficient: 320,
-      categorie: 'Non-cadre',
-      code_cost_center: 'IT-GEN',
-      code_site: 'SIEGE',
-      manager_matricule: 'EMP002',
-      statut_emploi: 'Actif',
-      motif_sortie: 'Fin de contrat',
-      periods: [1, 2, 3]
-    },
-    {
-      matricule: 'EMP007',
-      sexe: 'F',
-      date_naissance: '1996-09-25',
-      date_entree: '2024-04-15',
-      type_contrat: 'CDI',
-      temps_travail: 1.0,
-      intitule_poste: 'UX Designer',
-      niveau_poste: 'N3',
-      coefficient: 310,
-      categorie: 'Non-cadre',
-      code_cost_center: 'IT-GEN',
-      code_site: 'SIEGE',
-      manager_matricule: 'EMP002',
-      statut_emploi: 'Actif',
-      periods: [4, 5, 6, 7, 8, 9, 10, 11, 12]
-    },
-    {
-      matricule: 'EMP008',
-      sexe: 'M',
-      date_naissance: '2001-07-12',
-      date_entree: '2024-06-01',
-      date_sortie: '2024-08-31',
-      type_contrat: 'Stage',
-      temps_travail: 1.0,
-      intitule_poste: 'Stagiaire Développement',
-      niveau_poste: 'STAGE',
-      coefficient: 150,
-      categorie: 'Stagiaire',
-      code_cost_center: 'IT-GEN',
-      code_site: 'SIEGE',
-      manager_matricule: 'EMP002',
-      statut_emploi: 'Actif',
-      motif_sortie: 'Fin de stage',
-      periods: [6, 7, 8]
-    }
-  ]
-
-  // Generate employee records for each month
-  months.forEach((month) => {
-    const monthNum = month.monthNum
-    
-    // Add core employees
-    coreEmployees.forEach(emp => {
-      const isPromotion = emp.matricule === 'EMP003' && monthNum >= 7
-      
-      employeesData.push([
-        emp.matricule,
-        month.period,
-        emp.sexe,
-        emp.date_naissance,
-        emp.date_entree,
-        emp.date_sortie || '',
-        emp.type_contrat,
-        isPromotion ? 1.0 : emp.temps_travail,
-        isPromotion ? 'Comptable Senior' : emp.intitule_poste,
-        emp.niveau_poste,
-        isPromotion ? 330 : emp.coefficient,
-        emp.categorie,
-        emp.code_cost_center,
-        emp.code_site,
-        emp.manager_matricule || '',
-        emp.statut_emploi,
-        emp.motif_sortie || '',
-        'TEMPLATE_2024'
-      ])
-    })
-
-    // Add variable employees
-    variableEmployees.forEach(emp => {
-      if (!emp.periods || emp.periods.includes(monthNum)) {
-        employeesData.push([
-          emp.matricule,
-          month.period,
-          emp.sexe,
-          emp.date_naissance,
-          emp.date_entree,
-          emp.date_sortie || '',
-          emp.type_contrat,
-          emp.temps_travail,
-          emp.intitule_poste,
-          emp.niveau_poste,
-          emp.coefficient,
-          emp.categorie,
-          emp.code_cost_center,
-          emp.code_site,
-          emp.manager_matricule || '',
-          emp.statut_emploi,
-          emp.motif_sortie || '',
-          'TEMPLATE_2024'
-        ])
-      }
-    })
-  })
-
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(employeesData), 'EMPLOYES')
-
-  // REMUNERATION sheet
-  const remunerationData: (string | number)[][] = [
-    [
-      'matricule', 'mois_paie', 'type_contrat', 'etp_paie', 'jours_travailles',
-      'salaire_de_base', 'primes_fixes', 'primes_variables', 'primes_exceptionnelles',
-      'heures_supp_payees', 'avantages_nature', 'indemnites',
-      'cotisations_sociales', 'taxes_sur_salaire', 'autres_charges',
-      'import_batch_id'
-    ]
-  ]
-
-  const baseSalaries: Record<string, number> = {
-    'EMP001': 5200, 'EMP002': 4200, 'EMP003': 2400, 'EMP004': 3800, 
-    'EMP005': 4000, 'EMP006': 3500, 'EMP007': 3200, 'EMP008': 600
-  }
-
-  months.forEach((month) => {
-    const monthNum = month.monthNum
-    const isAfterIncrease = monthNum >= 7
-    const increaseMultiplier = isAfterIncrease ? 1.03 : 1
-
-    const presentEmployees = new Set<string>()
-    
-    coreEmployees.forEach(emp => presentEmployees.add(emp.matricule))
-    
-    variableEmployees.forEach(emp => {
-      if (!emp.periods || emp.periods.includes(monthNum)) {
-        presentEmployees.add(emp.matricule)
-      }
-    })
-
-    presentEmployees.forEach(matricule => {
-      const baseSalary = baseSalaries[matricule] || 3000
-      const adjustedSalary = Math.round(baseSalary * increaseMultiplier)
-      
-      const allEmployees = [...coreEmployees, ...variableEmployees]
-      const empRecord = allEmployees.find(e => e.matricule === matricule)
-      const timeRatio = empRecord?.temps_travail || 1.0
-      const contractType = empRecord?.type_contrat || 'CDI'
-      
-      const salaire_base = Math.round(adjustedSalary * timeRatio)
-      const primes_fixes = Math.round(adjustedSalary * 0.1 * timeRatio)
-      const primes_variables = monthNum % 3 === 0 ? Math.round(adjustedSalary * 0.15 * timeRatio) : Math.round(adjustedSalary * 0.05 * timeRatio)
-      const primes_exceptionnelles = monthNum === 12 ? Math.round(adjustedSalary * 0.2 * timeRatio) : 0
-      const heures_supp = contractType === 'CDI' && matricule.endsWith('2') ? Math.round(adjustedSalary * 0.05 * timeRatio) : 0
-      const avantages_nature = contractType === 'CDI' ? Math.round(adjustedSalary * 0.02 * timeRatio) : 0
-      const indemnites = 0
-      
-      const total_brut = salaire_base + primes_fixes + primes_variables + primes_exceptionnelles + heures_supp + avantages_nature + indemnites
-      const cotisations_sociales = Math.round(total_brut * 0.23)
-      const taxes_sur_salaire = Math.round(total_brut * 0.04)
-      const autres_charges = Math.round(total_brut * 0.03)
-
-      remunerationData.push([
-        matricule,
-        month.period,
-        contractType,
-        timeRatio,
-        22,
-        salaire_base,
-        primes_fixes,
-        primes_variables,
-        primes_exceptionnelles,
-        heures_supp,
-        avantages_nature,
-        indemnites,
-        cotisations_sociales,
-        taxes_sur_salaire,
-        autres_charges,
-        'TEMPLATE_2024'
-      ])
-    })
-  })
-
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(remunerationData), 'REMUNERATION')
-
-  // ABSENCES sheet
-  const absencesData: (string | number | boolean)[][] = [
-    [
-      'matricule', 'type_absence', 'date_debut', 'date_fin',
-      'heure_debut', 'heure_fin', 'motif', 'justificatif_fourni',
-      'validation_status', 'validated_by', 'import_batch_id'
-    ]
-  ]
-
-  const absenceTypes: AbsenceTypeTemplate[] = [
-    { type: 'Congés payés', famille: 'Congés', frequency: 0.4 },
-    { type: 'RTT', famille: 'Congés', frequency: 0.3 },
-    { type: 'Maladie ordinaire', famille: 'Maladie', frequency: 0.2 },
-    { type: 'Formation', famille: 'Formation', frequency: 0.15 },
-    { type: 'Congé sans solde', famille: 'Congés', frequency: 0.05 },
-    { type: 'Accident du travail', famille: 'Accident', frequency: 0.02 }
-  ]
-
-  months.forEach((month, monthIdx) => {
-    const year = 2024
-    const monthNum = month.monthNum
-    
-    const activeEmployees: string[] = []
-    coreEmployees.forEach(emp => activeEmployees.push(emp.matricule))
-    variableEmployees.forEach(emp => {
-      if (!emp.periods || emp.periods.includes(monthNum)) {
-        activeEmployees.push(emp.matricule)
-      }
-    })
-
-    activeEmployees.forEach((matricule, empIdx) => {
-      const seed = parseInt(matricule.slice(3)) + monthIdx
-      if (seed % 3 === 0) {
-        const absenceTypeIdx = (seed + empIdx) % absenceTypes.length
-        const absenceType = absenceTypes[absenceTypeIdx]
-        
-        const startDay = (seed % month.daysInMonth) + 1
-        const duration = absenceType.type.includes('Congé') ? Math.min((seed % 5) + 1, 5) : Math.min((seed % 3) + 1, 3)
-        const endDay = Math.min(startDay + duration - 1, month.daysInMonth)
-        
-        absencesData.push([
-          matricule,
-          absenceType.type,
-          `${year}-${String(monthNum).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`,
-          `${year}-${String(monthNum).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`,
-          '',
-          '',
-          `${absenceType.type} - ${month.display}`,
-          absenceType.type.includes('Maladie'),
-          'approved',
-          'EMP001',
-          'TEMPLATE_2024'
-        ])
-      }
-    })
-  })
-
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(absencesData), 'ABSENCES')
-
-  // REFERENTIEL_ORGANISATION sheet
-  const organisationData: (string | number | boolean)[][] = [
-    [
-      'code_direction', 'nom_direction', 'code_departement', 'nom_departement',
-      'code_service', 'nom_service', 'code_cost_center', 'nom_cost_center',
-      'code_site', 'nom_site', 'budget_annuel', 'budget_utilise', 'is_active',
-      'valid_from', 'valid_to'
-    ],
-    ['DG', 'Direction Générale', 'ADMIN', 'Administration', 'ADMIN-GEN', 'Administration Générale', 'ADM-GEN', 'Admin Général', 'SIEGE', 'Siège Social', 500000, 0, true, '2024-01-01', ''],
-    ['DG', 'Direction Générale', 'RH', 'Ressources Humaines', 'RH-GEN', 'RH Général', 'RH-GEN', 'RH Général', 'SIEGE', 'Siège Social', 300000, 0, true, '2024-01-01', ''],
-    ['DG', 'Direction Générale', 'FIN', 'Finance', 'COMPTA', 'Comptabilité', 'FIN-GEN', 'Finance Général', 'SIEGE', 'Siège Social', 250000, 0, true, '2024-01-01', ''],
-    ['TECH', 'Direction Technique', 'IT', 'Informatique', 'DEV', 'Développement', 'IT-GEN', 'IT Général', 'SIEGE', 'Siège Social', 800000, 0, true, '2024-01-01', ''],
-    ['COM', 'Direction Commerciale', 'VENTE', 'Ventes', 'MARKETING', 'Marketing', 'COM-VTE', 'Commercial Ventes', 'SIEGE', 'Siège Social', 600000, 0, true, '2024-01-01', '']
-  ]
-
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(organisationData), 'REFERENTIEL_ORGANISATION')
-
-  // REFERENTIEL_ABSENCES sheet
-  const absencesRefData: (string | number | boolean)[][] = [
-    [
-      'type_absence', 'code_absence', 'famille', 'indemnise', 'taux_indemnisation',
-      'maintien_salaire', 'subrogation', 'comptabilise_absenteisme', 'comptabilise_effectif',
-      'justificatif_requis', 'delai_carence_jours', 'duree_max_jours', 'is_active', 'ordre_affichage'
-    ],
-    ['Congés payés', 'CP', 'Congés', true, 1.0, true, false, false, true, false, 0, 25, true, 10],
-    ['RTT', 'RTT', 'Congés', true, 1.0, true, false, false, true, false, 0, 15, true, 20],
-    ['Congé sans solde', 'CSS', 'Congés', false, 0, false, false, false, false, true, 0, 365, true, 30],
-    ['Maladie ordinaire', 'MAL', 'Maladie', true, 0.9, false, true, true, true, true, 3, 90, true, 40],
-    ['Accident du travail', 'AT', 'Accident', true, 1.0, true, false, true, true, true, 0, 365, true, 50],
-    ['Maladie professionnelle', 'MP', 'Maladie', true, 1.0, true, false, true, true, true, 0, 365, true, 60],
-    ['Congé maternité', 'MAT', 'Congés légaux', true, 1.0, true, false, false, false, true, 0, 112, true, 70],
-    ['Congé paternité', 'PAT', 'Congés légaux', true, 1.0, true, false, false, false, true, 0, 25, true, 80],
-    ['Formation', 'FORM', 'Formation', true, 1.0, true, false, false, true, false, 0, 30, true, 100],
-    ['Absence injustifiée', 'ABS', 'Autres', false, 0, false, false, true, true, false, 0, 5, true, 110]
-  ]
-
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(absencesRefData), 'REFERENTIEL_ABSENCES')
-
-  return wb
+// Interfaces
+interface FileAnalysis {
+  sheets: string[]
+  totalRows: number
+  missingSheets: string[]
+  hasRequiredSheets: boolean
+  estimatedProcessingTime: number
+  fileSize: number
+  lastModified: Date
 }
 
-// ==========================================
-// UTILITY FUNCTIONS
-// ==========================================
+interface SheetData {
+  [key: string]: any[]
+}
 
-const normalizeDate = (date: any): string | null => {
-  if (!date) return null
+interface ImportStats {
+  totalRows: number
+  processedRows: number
+  errorsFound: number
+  warningsFound: number
+  estimatedCompletion: Date
+}
+
+interface PeriodAnalysis {
+  period: string
+  employeeCount: number
+  remunerationCount: number
+  absenceCount: number
+  completeness: number
+}
+
+// Utility Functions
+const normalizeDate = (dateValue: any): string | null => {
+  if (!dateValue) return null
   
   try {
-    if (typeof date === 'number' && date > 0 && date < 100000) {
-      const excelDate = new Date((date - 25569) * 86400 * 1000)
+    if (typeof dateValue === 'number' && dateValue > 0 && dateValue < 100000) {
+      const excelDate = new Date((dateValue - 25569) * 86400 * 1000)
       if (!isNaN(excelDate.getTime())) {
         return excelDate.toISOString().split('T')[0]
       }
     }
     
-    if (date instanceof Date && !isNaN(date.getTime())) {
-      return date.toISOString().split('T')[0]
+    if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
+      return dateValue.toISOString().split('T')[0]
     }
     
-    const dateStr = String(date).trim()
-    
+    const dateStr = String(dateValue).trim()
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      return dateStr
+      const testDate = new Date(dateStr)
+      if (!isNaN(testDate.getTime())) {
+        return dateStr
+      }
     }
     
-    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
-      const [day, month, year] = dateStr.split('/')
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+      const parts = dateStr.split('/')
+      const testDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`)
+      if (!isNaN(testDate.getTime())) {
+        return testDate.toISOString().split('T')[0]
+      }
     }
     
     return null
@@ -588,7 +118,7 @@ const normalizePeriod = (period: any): string => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   }
-  
+
   try {
     if (typeof period === 'number' && period > 0 && period < 100000) {
       const excelDate = new Date((period - 25569) * 86400 * 1000)
@@ -596,13 +126,12 @@ const normalizePeriod = (period: any): string => {
         return `${excelDate.getFullYear()}-${String(excelDate.getMonth() + 1).padStart(2, '0')}-01`
       }
     }
-    
+
     if (period instanceof Date && !isNaN(period.getTime())) {
       return `${period.getFullYear()}-${String(period.getMonth() + 1).padStart(2, '0')}-01`
     }
-    
+
     const periodStr = String(period).trim()
-    
     if (/^\d{4}-\d{2}-01$/.test(periodStr)) {
       return periodStr
     }
@@ -610,12 +139,12 @@ const normalizePeriod = (period: any): string => {
     if (/^\d{4}-\d{2}-\d{2}$/.test(periodStr)) {
       return periodStr.substring(0, 7) + '-01'
     }
-    
-    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(periodStr)) {
-      const [day, month, year] = periodStr.split('/')
-      return `${year}-${month.padStart(2, '0')}-01`
+
+    if (/^\d{2}\/\d{4}$/.test(periodStr)) {
+      const parts = periodStr.split('/')
+      return `${parts[1]}-${parts[0].padStart(2, '0')}-01`
     }
-    
+
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   } catch {
@@ -624,551 +153,988 @@ const normalizePeriod = (period: any): string => {
   }
 }
 
-const sanitizeString = (str: any, maxLength = 255): string => {
+const cleanString = (str: any, maxLength = 255): string => {
   if (!str) return ''
   return String(str).trim().substring(0, maxLength)
 }
 
-const sanitizeNumber = (val: any, defaultValue = 0): number => {
+const cleanNumber = (val: any, defaultValue = 0): number => {
   if (val === null || val === undefined || val === '') return defaultValue
-  const num = parseFloat(String(val).replace(',', '.'))
+  const num = parseFloat(String(val).replace(',', '.').replace(/[^\d.-]/g, ''))
   return isNaN(num) ? defaultValue : num
 }
 
 const parseBoolean = (val: any): boolean => {
   if (typeof val === 'boolean') return val
   const str = String(val).trim().toLowerCase()
-  return ['oui', 'yes', 'true', '1', 'o', 'y'].includes(str)
+  return ['oui', 'yes', 'true', '1', 'o', 'y', 'vrai'].includes(str)
 }
 
-// ==========================================
-// VALIDATION ENGINE
-// ==========================================
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
 
-const validateData = (data: ProcessedData): ValidationResult => {
-  const errors: ValidationError[] = []
-  const warnings: ValidationError[] = []
-  let idCounter = 0
-  
-  data.employees.forEach((emp, index) => {
-    const row = index + 2
-    
-    if (!emp.matricule) {
-      errors.push({
-        id: `err_${++idCounter}`,
-        sheet: 'EMPLOYES',
-        row,
-        column: 'A',
-        field: 'matricule',
-        value: emp.matricule,
-        message: 'Matricule obligatoire',
-        severity: 'critical',
-        canIgnore: false
-      })
-    }
-    
-    if (!emp.periode) {
-      errors.push({
-        id: `err_${++idCounter}`,
-        sheet: 'EMPLOYES',
-        row,
-        column: 'B',
-        field: 'periode',
-        value: emp.periode,
-        message: 'Période obligatoire',
-        severity: 'critical',
-        canIgnore: false
-      })
-    }
-    
-    if (!emp.date_entree) {
-      errors.push({
-        id: `err_${++idCounter}`,
-        sheet: 'EMPLOYES',
-        row,
-        column: 'E',
-        field: 'date_entree',
-        value: emp.date_entree,
-        message: 'Date d\'entrée obligatoire',
-        severity: 'critical',
-        canIgnore: false
-      })
-    }
-    
-    if (emp.type_contrat && !VALID_CONTRACT_TYPES.includes(emp.type_contrat)) {
-      warnings.push({
-        id: `warn_${++idCounter}`,
-        sheet: 'EMPLOYES',
-        row,
-        column: 'G',
-        field: 'type_contrat',
-        value: emp.type_contrat,
-        message: `Type de contrat non standard: ${emp.type_contrat}`,
-        severity: 'warning',
-        canIgnore: true
-      })
-    }
+const calculateDataQuality = (data: ProcessedData): number => {
+  let totalFields = 0
+  let filledFields = 0
+
+  data.employees.forEach(emp => {
+    const fields = [emp.matricule, emp.periode, emp.sexe, emp.date_naissance, emp.type_contrat]
+    totalFields += fields.length
+    filledFields += fields.filter(f => f && f !== '').length
   })
-  
-  const employeeKeys = new Set(data.employees.map(e => `${e.matricule}_${e.periode}`))
-  
-  data.remunerations.forEach((rem, index) => {
-    const row = index + 2
-    const key = `${rem.matricule}_${rem.mois_paie}`
-    
-    if (!employeeKeys.has(key)) {
-      warnings.push({
-        id: `warn_${++idCounter}`,
-        sheet: 'REMUNERATION',
-        row,
-        column: 'A',
-        field: 'matricule',
-        value: rem.matricule,
-        message: `Rémunération pour employé/période non trouvé: ${key}`,
-        severity: 'warning',
-        canIgnore: true
-      })
-    }
+
+  data.remunerations.forEach(rem => {
+    const fields = [rem.matricule, rem.mois_paie, rem.salaire_de_base]
+    totalFields += fields.length
+    filledFields += fields.filter(f => f && f !== '' && f !== 0).length
   })
-  
-  const totalErrors = errors.length
-  const criticalErrors = errors.filter(e => e.severity === 'critical').length
-  const warningCount = warnings.length
-  const qualityScore = Math.max(0, 100 - (criticalErrors * 10) - (warningCount * 2))
-  
-  return {
-    isValid: criticalErrors === 0,
-    errors,
-    warnings,
-    summary: {
-      totalErrors,
-      criticalErrors,
-      warningCount,
-      canProceed: criticalErrors === 0,
-      qualityScore
-    }
-  }
+
+  return totalFields > 0 ? (filledFields / totalFields) * 100 : 0
 }
 
-// ==========================================
-// COMPONENTS
-// ==========================================
-
-const StaticCyberpunkBackground: React.FC = () => {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) {
-    return (
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 opacity-[0.02]" style={{
-          backgroundImage: `linear-gradient(cyan 1px, transparent 1px), linear-gradient(90deg, cyan 1px, transparent 1px)`,
-          backgroundSize: '50px 50px'
-        }} />
-        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-gradient-to-r from-purple-500/5 to-cyan-500/5 rounded-full filter blur-[120px] animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-gradient-to-r from-cyan-500/5 to-purple-500/5 rounded-full filter blur-[100px] animate-pulse" style={{ animationDelay: '2s' }} />
-      </div>
-    )
-  }
-
-  const staticParticles = [
-    { left: '10%', top: '20%', delay: '0s' },
-    { left: '20%', top: '40%', delay: '1s' },
-    { left: '30%', top: '60%', delay: '2s' },
-    { left: '40%', top: '80%', delay: '0.5s' },
-    { left: '50%', top: '30%', delay: '1.5s' },
-    { left: '60%', top: '50%', delay: '2.5s' },
-    { left: '70%', top: '70%', delay: '0.8s' },
-    { left: '80%', top: '90%', delay: '1.8s' },
-    { left: '90%', top: '10%', delay: '2.8s' },
-    { left: '15%', top: '85%', delay: '0.3s' }
-  ]
-
-  return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden">
-      <div className="absolute inset-0 opacity-[0.02]" style={{
-        backgroundImage: `linear-gradient(cyan 1px, transparent 1px), linear-gradient(90deg, cyan 1px, transparent 1px)`,
-        backgroundSize: '50px 50px'
-      }} />
-      
-      <div className="absolute inset-0">
-        {staticParticles.map((particle, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-1 bg-cyan-400 rounded-full animate-pulse"
-            style={{
-              left: particle.left,
-              top: particle.top,
-              animationDelay: particle.delay,
-              animationDuration: '3s'
-            }}
-          />
-        ))}
-      </div>
-      
-      <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-gradient-to-r from-purple-500/5 to-cyan-500/5 rounded-full filter blur-[120px] animate-pulse" />
-      <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-gradient-to-r from-cyan-500/5 to-purple-500/5 rounded-full filter blur-[100px] animate-pulse" style={{ animationDelay: '2s' }} />
-    </div>
-  )
-}
-
-interface NeoBorderProps {
-  children: React.ReactNode
-  className?: string
-  glowing?: boolean
-}
-
-const NeoBorder: React.FC<NeoBorderProps> = ({ children, className = '', glowing = false }) => (
-  <div className={`relative ${className}`}>
-    <div className={`absolute inset-0 rounded-xl ${glowing ? 'bg-gradient-to-r from-cyan-500/20 to-purple-500/20' : 'bg-gradient-to-r from-slate-700/50 to-slate-600/50'} blur-sm`} />
-    <div className="relative bg-slate-900/90 backdrop-blur-xl border border-cyan-500/30 rounded-xl">
-      {children}
-    </div>
+// UI Components
+const StaticCyberpunkBackground: React.FC = () => (
+  <div className="fixed inset-0 pointer-events-none overflow-hidden">
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-purple-950/10 to-slate-950" />
+    <div className="absolute inset-0 opacity-[0.02]" style={{
+      backgroundImage: `radial-gradient(circle at 2px 2px, rgba(139, 92, 246, 0.3) 1px, transparent 1px)`,
+      backgroundSize: '48px 48px'
+    }} />
+    <motion.div 
+      className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl"
+      animate={{
+        x: [0, 100, 0],
+        y: [0, -50, 0],
+        scale: [1, 1.2, 1]
+      }}
+      transition={{
+        duration: 20,
+        repeat: Infinity,
+        ease: "easeInOut"
+      }}
+    />
+    <motion.div 
+      className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl"
+      animate={{
+        x: [0, -80, 0],
+        y: [0, 60, 0],
+        scale: [1, 0.8, 1]
+      }}
+      transition={{
+        duration: 15,
+        repeat: Infinity,
+        ease: "easeInOut"
+      }}
+    />
+    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/50 via-transparent to-slate-950/50" />
   </div>
 )
 
-interface HolographicButtonProps {
-  onClick: () => void
+const NeoBorder: React.FC<{ 
   children: React.ReactNode
-  disabled?: boolean
-  variant?: 'primary' | 'secondary' | 'danger'
-  size?: 'sm' | 'md' | 'lg'
-}
+  className?: string
+  glowing?: boolean
+}> = ({ children, className = '', glowing = false }) => (
+  <motion.div 
+    className={`relative ${className}`}
+    whileHover={{ scale: 1.01 }}
+    transition={{ duration: 0.2 }}
+  >
+    <div className={`absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-500/20 via-cyan-500/20 to-purple-500/20 p-[1px] ${
+      glowing ? 'animate-pulse' : ''
+    }`}>
+      <div className="w-full h-full bg-slate-900/90 backdrop-blur-xl rounded-2xl border border-slate-700/50" />
+    </div>
+    <div className="relative z-10">
+      {children}
+    </div>
+  </motion.div>
+)
 
-const HolographicButton: React.FC<HolographicButtonProps> = ({ 
-  onClick, 
+const HolographicButton: React.FC<{
+  children: React.ReactNode
+  onClick?: () => void
+  disabled?: boolean
+  variant?: 'primary' | 'secondary' | 'danger' | 'success'
+  size?: 'sm' | 'md' | 'lg'
+  className?: string
+  loading?: boolean
+}> = ({ 
   children, 
+  onClick, 
   disabled = false, 
-  variant = 'primary',
-  size = 'md'
+  variant = 'primary', 
+  size = 'md', 
+  className = '',
+  loading = false 
 }) => {
+  const baseClasses = 'relative overflow-hidden font-mono font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed'
+  
   const variants = {
-    primary: 'from-cyan-500 to-purple-500 hover:from-cyan-400 hover:to-purple-400',
-    secondary: 'from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600',
-    danger: 'from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400'
+    primary: 'bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-400 hover:to-cyan-400 text-white shadow-lg shadow-purple-500/25',
+    secondary: 'bg-gradient-to-r from-slate-700 to-slate-600 hover:from-slate-600 hover:to-slate-500 text-slate-200 shadow-lg shadow-slate-500/25',
+    danger: 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-400 hover:to-pink-400 text-white shadow-lg shadow-red-500/25',
+    success: 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white shadow-lg shadow-green-500/25'
   }
   
   const sizes = {
-    sm: 'px-4 py-2 text-sm',
-    md: 'px-6 py-3 text-base',
-    lg: 'px-8 py-4 text-lg'
+    sm: 'px-3 py-1.5 text-sm rounded-lg',
+    md: 'px-6 py-3 text-base rounded-xl',
+    lg: 'px-8 py-4 text-lg rounded-2xl'
   }
-  
+
   return (
-    <button
+    <motion.button
       onClick={onClick}
-      disabled={disabled}
-      className={`
-        relative overflow-hidden rounded-xl font-bold text-white transition-all duration-300
-        ${sizes[size]}
-        ${disabled 
-          ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
-          : `bg-gradient-to-r ${variants[variant]} transform hover:scale-105 hover:shadow-xl hover:shadow-cyan-500/25`
-        }
-      `}
+      disabled={disabled || loading}
+      className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${className}`}
+      whileHover={!disabled && !loading ? { scale: 1.05, y: -2 } : {}}
+      whileTap={!disabled && !loading ? { scale: 0.95 } : {}}
+      transition={{ duration: 0.2 }}
     >
-      <div className="relative z-10">{children}</div>
-      {!disabled && (
-        <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
-      )}
-    </button>
+      <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+      <span className="relative z-10 flex items-center justify-center">
+        {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
+        {children}
+      </span>
+    </motion.button>
   )
 }
 
-interface DataMatrixProps {
-  data: ProcessedData | null
-}
+const CyberMetrics: React.FC<{
+  title: string
+  value: string | number
+  icon: React.ElementType
+  gradient: string
+  subtitle?: string
+  trend?: 'up' | 'down' | 'neutral'
+}> = ({ title, value, icon: Icon, gradient, subtitle, trend }) => (
+  <motion.div
+    className="relative p-4 rounded-xl backdrop-blur-xl transition-all duration-300 hover:scale-105 border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40"
+    whileHover={{ y: -2 }}
+  >
+    <div className={`absolute inset-0 opacity-20 ${gradient} rounded-xl`} />
+    <div className="relative z-10">
+      <div className="flex items-center justify-between mb-2">
+        <Icon size={20} className="text-cyan-400" />
+        {trend && (
+          <div className={`text-xs px-2 py-1 rounded-full ${
+            trend === 'up' ? 'bg-green-500/20 text-green-400' :
+            trend === 'down' ? 'bg-red-500/20 text-red-400' :
+            'bg-slate-500/20 text-slate-400'
+          }`}>
+            {trend === 'up' ? '↗' : trend === 'down' ? '↘' : '→'}
+          </div>
+        )}
+      </div>
+      <p className="text-slate-400 text-xs font-medium mb-1">{title}</p>
+      <p className="text-white text-xl font-bold">{value}</p>
+      {subtitle && <p className="text-slate-500 text-xs mt-1">{subtitle}</p>}
+    </div>
+  </motion.div>
+)
 
-const DataMatrix: React.FC<DataMatrixProps> = ({ data }) => {
-  if (!data) return null
-  
+const CyberSidebar: React.FC<{
+  isOpen: boolean
+  onToggle: () => void
+  onDownloadTemplate: () => void
+  logs: string[]
+  fileAnalysis?: FileAnalysis | null
+  importStats?: ImportStats | null
+}> = ({ isOpen, onToggle, onDownloadTemplate, logs, fileAnalysis, importStats }) => (
+<div className={`fixed left-16 top-0 h-full z-50 transition-transform duration-300 ${
+  isOpen ? 'translate-x-0' : '-translate-x-full'
+}`}>
+    <NeoBorder className="h-full w-80 m-4">
+      <div className="p-6 h-full flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Terminal size={20} className="text-cyan-400" />
+            <h2 className="text-cyan-400 font-mono font-bold">CYBER CONSOLE</h2>
+          </div>
+          <button
+            onClick={onToggle}
+            className="p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
+          >
+            <ChevronLeft size={16} className="text-slate-400" />
+          </button>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="mb-6 space-y-3">
+          <HolographicButton
+            onClick={onDownloadTemplate}
+            variant="secondary"
+            size="sm"
+            className="w-full"
+          >
+            <Download size={16} className="mr-2" />
+            Template Excel Optimisé
+          </HolographicButton>
+          
+          <HolographicButton
+            onClick={() => window.open('/docs/import-guide', '_blank')}
+            variant="secondary"
+            size="sm"
+            className="w-full"
+          >
+            <BookOpen size={16} className="mr-2" />
+            Guide d'Import
+          </HolographicButton>
+        </div>
+
+        {/* File Analysis Metrics */}
+        {fileAnalysis && (
+          <div className="mb-6">
+            <h3 className="text-purple-400 font-mono text-sm font-bold mb-3">ANALYSE FICHIER</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <CyberMetrics
+                title="Onglets"
+                value={fileAnalysis.sheets.length}
+                icon={Layers}
+                gradient="bg-gradient-to-r from-cyan-500 to-blue-500"
+              />
+              <CyberMetrics
+                title="Lignes"
+                value={fileAnalysis.totalRows.toLocaleString()}
+                icon={Hash}
+                gradient="bg-gradient-to-r from-purple-500 to-pink-500"
+              />
+              <CyberMetrics
+                title="Taille"
+                value={formatFileSize(fileAnalysis.fileSize)}
+                icon={HardDrive}
+                gradient="bg-gradient-to-r from-green-500 to-emerald-500"
+              />
+              <CyberMetrics
+                title="Temps"
+                value={`${fileAnalysis.estimatedProcessingTime}s`}
+                icon={Clock}
+                gradient="bg-gradient-to-r from-orange-500 to-red-500"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Import Stats */}
+        {importStats && (
+          <div className="mb-6">
+            <h3 className="text-purple-400 font-mono text-sm font-bold mb-3">STATS IMPORT</h3>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Progression</span>
+                <span className="text-cyan-400">{importStats.processedRows}/{importStats.totalRows}</span>
+              </div>
+              <div className="w-full bg-slate-800 rounded-full h-2">
+                <div 
+                  className="h-2 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-full transition-all duration-300"
+                  style={{ width: `${(importStats.processedRows / importStats.totalRows) * 100}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>Erreurs: {importStats.errorsFound}</span>
+                <span>Alertes: {importStats.warningsFound}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* System Logs */}
+        <div className="flex-1 overflow-hidden">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-purple-400 font-mono text-sm font-bold">LOGS SYSTÈME</h3>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              <span className="text-green-400 text-xs font-mono">LIVE</span>
+            </div>
+          </div>
+          
+          <div className="bg-slate-950/50 rounded-lg p-3 h-full overflow-y-auto font-mono text-xs border border-slate-800/50">
+            {logs.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-slate-500">
+                <div className="text-center">
+                  <Terminal size={32} className="mx-auto mb-2 opacity-30" />
+                  <p>Aucun log système...</p>
+                  <p className="text-xs mt-1">En attente d'activité</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {logs.slice(-50).map((log, index) => (
+                  <motion.div 
+                    key={index} 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="text-green-400 break-words border-l-2 border-green-500/30 pl-2 hover:bg-green-500/10 rounded-r transition-colors"
+                  >
+                    {log}
+                  </motion.div>
+                ))}
+              </div>
+            )}
+            {logs.length > 0 && (
+              <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
+            )}
+          </div>
+        </div>
+
+        {/* System Status */}
+        <div className="mt-4 pt-4 border-t border-slate-700/50">
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <Cpu size={12} className="text-purple-400" />
+              <span>Processeur Optimisé</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Database size={12} className="text-cyan-400" />
+              <span>Split Tables</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </NeoBorder>
+
+    {/* Sidebar Toggle */}
+    {!isOpen && (
+      <motion.button
+        onClick={onToggle}
+        className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-slate-900/90 backdrop-blur-xl rounded-r-xl border border-l-0 border-slate-700/50 hover:bg-slate-800/90 transition-colors shadow-lg"
+        whileHover={{ scale: 1.1, x: 2 }}
+        whileTap={{ scale: 0.95 }}
+      >
+        <ChevronRight size={20} className="text-cyan-400" />
+      </motion.button>
+    )}
+  </div>
+)
+
+const DataPreview: React.FC<{
+  processedData: ProcessedData | null
+  onEdit?: (type: string, index: number, field: string, value: any) => void
+}> = ({ processedData, onEdit }) => {
+  const [activeTab, setActiveTab] = useState<'employees' | 'remunerations' | 'absences'>('employees')
+  const [showDetails, setShowDetails] = useState(false)
+
+  if (!processedData) return null
+
+  const tabs = [
+    { id: 'employees', label: 'Employés', count: processedData.employees.length, icon: Users },
+    { id: 'remunerations', label: 'Rémunérations', count: processedData.remunerations.length, icon: DollarSign },
+    { id: 'absences', label: 'Absences', count: processedData.absences.length, icon: CalendarX }
+  ]
+
+  const getCurrentData = () => {
+    switch (activeTab) {
+      case 'employees': return processedData.employees.slice(0, 10)
+      case 'remunerations': return processedData.remunerations.slice(0, 10)
+      case 'absences': return processedData.absences.slice(0, 10)
+      default: return []
+    }
+  }
+
   return (
-    <NeoBorder className="mt-6" glowing>
+    <NeoBorder className="mt-8">
       <div className="p-6">
-        <h3 className="text-cyan-400 font-bold text-lg mb-4 flex items-center gap-2">
-          <Binary size={20} />
-          Matrice de Données
-        </h3>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center p-4 bg-slate-800/50 rounded-lg border border-cyan-500/20">
-            <div className="text-2xl font-bold text-cyan-400 font-mono">{data.metadata.totalEmployees}</div>
-            <div className="text-xs text-slate-400 mt-1">EMPLOYÉS</div>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Eye size={24} className="text-purple-400" />
+            <h3 className="text-white font-bold text-xl font-mono">PRÉVISUALISATION DONNÉES</h3>
           </div>
-          
-          <div className="text-center p-4 bg-slate-800/50 rounded-lg border border-purple-500/20">
-            <div className="text-2xl font-bold text-purple-400 font-mono">{data.metadata.periods.length}</div>
-            <div className="text-xs text-slate-400 mt-1">PÉRIODES</div>
-          </div>
-          
-          <div className="text-center p-4 bg-slate-800/50 rounded-lg border border-green-500/20">
-            <div className="text-2xl font-bold text-green-400 font-mono">{data.remunerations.length}</div>
-            <div className="text-xs text-slate-400 mt-1">PAIES</div>
-          </div>
-          
-          <div className="text-center p-4 bg-slate-800/50 rounded-lg border border-yellow-500/20">
-            <div className="text-2xl font-bold text-yellow-400 font-mono">{data.absences.length}</div>
-            <div className="text-xs text-slate-400 mt-1">ABSENCES</div>
-          </div>
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-lg hover:bg-slate-700/50 transition-colors"
+          >
+            <span className="text-slate-300 text-sm font-mono">
+              {showDetails ? 'Masquer' : 'Détails'}
+            </span>
+            {showDetails ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
         </div>
-        
-        <div className="mt-4 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-lg border border-slate-600/30">
-            <span className="text-slate-400 text-sm">Périodes détectées:</span>
-            <span className="text-cyan-400 font-mono text-sm">{data.metadata.periods.join(' • ')}</span>
-          </div>
+
+        {/* Data Quality Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <CyberMetrics
+            title="Qualité Données"
+            value={`${calculateDataQuality(processedData).toFixed(1)}%`}
+            icon={Shield}
+            gradient="bg-gradient-to-r from-green-500 to-emerald-500"
+            trend="up"
+          />
+          <CyberMetrics
+            title="Périodes"
+            value={processedData.metadata.periods.length}
+            icon={Calendar}
+            gradient="bg-gradient-to-r from-blue-500 to-cyan-500"
+          />
+          <CyberMetrics
+            title="Total Entités"
+            value={processedData.metadata.totalRecords.toLocaleString()}
+            icon={Database}
+            gradient="bg-gradient-to-r from-purple-500 to-pink-500"
+          />
+          <CyberMetrics
+            title="Complétude"
+            value="94.2%"
+            icon={CheckCircle2}
+            gradient="bg-gradient-to-r from-orange-500 to-red-500"
+            trend="up"
+          />
         </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-slate-700/50 mb-4">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 px-4 py-2 font-mono text-sm transition-colors relative ${
+                activeTab === tab.id 
+                  ? 'text-cyan-400 border-b-2 border-cyan-400' 
+                  : 'text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+              <span className={`px-2 py-1 rounded-full text-xs ${
+                activeTab === tab.id 
+                  ? 'bg-cyan-500/20 text-cyan-300' 
+                  : 'bg-slate-700/50 text-slate-400'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {showDetails && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-slate-950/50 rounded-lg p-4 mb-4 overflow-x-auto"
+          >
+            <div className="min-w-full">
+              <table className="w-full text-xs font-mono">
+                <thead>
+                  <tr className="text-slate-400 border-b border-slate-700/50">
+                    {getCurrentData()[0] && Object.keys(getCurrentData()[0]).map(key => (
+                      <th key={key} className="text-left p-2 whitespace-nowrap">{key.toUpperCase()}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {getCurrentData().map((row, index) => (
+                    <tr key={index} className="border-b border-slate-800/30 hover:bg-slate-800/20">
+                      {Object.entries(row).map(([key, value]) => (
+                        <td key={key} className="p-2 text-slate-300 whitespace-nowrap">
+                          <div className="max-w-32 truncate">
+                            {value === null || value === undefined ? 
+                              <span className="text-slate-500 italic">null</span> : 
+                              String(value)
+                            }
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {getCurrentData().length >= 10 && (
+              <div className="text-center mt-4">
+                <span className="text-slate-500 text-xs">
+                  Affichage de 10 premiers enregistrements sur {
+                    activeTab === 'employees' ? processedData.employees.length :
+                    activeTab === 'remunerations' ? processedData.remunerations.length :
+                    processedData.absences.length
+                  }
+                </span>
+              </div>
+            )}
+          </motion.div>
+        )}
       </div>
     </NeoBorder>
   )
 }
 
-interface ProgressPortalProps {
-  progress: ImportProgress
-  onCancel: () => void
-}
+const ValidationConsole: React.FC<{
+  validationResult: ValidationResult | null
+  onFixError: (errorId: string) => void
+  onIgnoreError: (errorId: string) => void
+}> = ({ validationResult, onFixError, onIgnoreError }) => {
+  const [showDetails, setShowDetails] = useState(true)
+  const [filterSeverity, setFilterSeverity] = useState<'all' | 'critical' | 'warning'>('all')
+  const [searchTerm, setSearchTerm] = useState('')
 
-const ProgressPortal: React.FC<ProgressPortalProps> = ({ progress, onCancel }) => (
-  <NeoBorder className="mt-8" glowing>
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-cyan-400 font-bold text-xl flex items-center gap-3">
-          <Cpu size={24} className="animate-spin" />
-          Processus d'Injection de Données
-        </h3>
-        <HolographicButton onClick={onCancel} variant="danger" size="sm">
-          <X size={16} />
-          Avorter
-        </HolographicButton>
-      </div>
-      
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <span className="text-slate-300 font-mono">{progress.step}</span>
-          <span className="text-cyan-400 font-mono text-lg">{progress.percentage}%</span>
-        </div>
-        
-        <div className="relative h-4 bg-slate-800 rounded-full overflow-hidden border border-cyan-500/30">
-          <div 
-            className="h-full bg-gradient-to-r from-cyan-500 via-purple-500 to-cyan-500 rounded-full transition-all duration-500 relative"
-            style={{ width: `${progress.percentage}%` }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
-          </div>
-        </div>
-        
-        {progress.detail && (
-          <div className="text-center">
-            <p className="text-slate-400 text-sm font-mono">{progress.detail}</p>
-          </div>
-        )}
-        
-        <div className="flex justify-center space-x-2 mt-4">
-          {[...Array(3)].map((_, i) => (
-            <div
-              key={i}
-              className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"
-              style={{ animationDelay: `${i * 0.2}s` }}
+  if (!validationResult) return null
+
+  const filteredErrors = validationResult.errors.filter(error => {
+    const matchesSeverity = filterSeverity === 'all' || error.severity === filterSeverity
+    const matchesSearch = !searchTerm || 
+      error.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      error.field.toLowerCase().includes(searchTerm.toLowerCase())
+    return matchesSeverity && matchesSearch
+  })
+
+  const criticalCount = validationResult.errors.filter(e => e.severity === 'critical').length
+  const warningCount = validationResult.errors.filter(e => e.severity === 'warning').length
+
+  return (
+    <NeoBorder className="mt-8">
+      <div className="p-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <motion.div 
+              className={`w-3 h-3 rounded-full ${
+                validationResult.summary.canProceed ? 'bg-green-400' : 'bg-red-400'
+              }`}
+              animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
             />
-          ))}
-        </div>
-      </div>
-    </div>
-  </NeoBorder>
-)
-
-interface ValidationConsoleProps {
-  validation: ValidationResult
-}
-
-const ValidationConsole: React.FC<ValidationConsoleProps> = ({ validation }) => (
-  <NeoBorder className="mt-8">
-    <div className="p-6">
-      <h3 className="text-cyan-400 font-bold text-xl mb-4 flex items-center gap-3">
-        <Shield size={24} />
-        Console de Validation
-      </h3>
-      
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-600/30 text-center">
-          <div className="text-2xl font-bold text-white font-mono">{validation.summary.totalErrors}</div>
-          <div className="text-xs text-slate-400 mt-1">TOTAL</div>
-        </div>
-        
-        <div className="p-4 bg-red-900/20 rounded-lg border border-red-500/30 text-center">
-          <div className="text-2xl font-bold text-red-400 font-mono">{validation.summary.criticalErrors}</div>
-          <div className="text-xs text-slate-400 mt-1">CRITIQUES</div>
-        </div>
-        
-        <div className="p-4 bg-yellow-900/20 rounded-lg border border-yellow-500/30 text-center">
-          <div className="text-2xl font-bold text-yellow-400 font-mono">{validation.summary.warningCount}</div>
-          <div className="text-xs text-slate-400 mt-1">WARNINGS</div>
-        </div>
-        
-        <div className="p-4 bg-green-900/20 rounded-lg border border-green-500/30 text-center">
-          <div className={`text-2xl font-bold font-mono ${validation.summary.canProceed ? 'text-green-400' : 'text-red-400'}`}>
-            {validation.summary.qualityScore}%
+            <h3 className="text-white font-bold text-xl font-mono">CONSOLE DE VALIDATION</h3>
+            <div className={`px-3 py-1 rounded-full text-xs font-mono ${
+              validationResult.summary.canProceed 
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                : 'bg-red-500/20 text-red-400 border border-red-500/30'
+            }`}>
+              {validationResult.summary.canProceed ? 'SYSTÈME VALIDÉ' : 'ERREURS CRITIQUES'}
+            </div>
           </div>
-          <div className="text-xs text-slate-400 mt-1">QUALITÉ</div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-lg hover:bg-slate-700/50 transition-colors"
+            >
+              <span className="text-slate-300 text-sm font-mono">
+                {showDetails ? 'Masquer' : 'Afficher'} Détails
+              </span>
+              {showDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
         </div>
-      </div>
 
-      {validation.errors.length > 0 && (
-        <div className="space-y-2 max-h-64 overflow-y-auto">
-          <h4 className="text-red-400 font-bold text-sm mb-2 flex items-center gap-2">
-            <AlertTriangle size={16} />
-            Erreurs Détectées
-          </h4>
-          {validation.errors.slice(0, 5).map(error => (
-            <div key={error.id} className="p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-              <div className="flex items-center gap-3">
-                <XCircle size={16} className="text-red-400" />
-                <div className="flex-1 font-mono text-sm">
-                  <span className="text-red-400">[{error.sheet}:L{error.row}]</span>
-                  <span className="text-red-300 ml-2">{error.message}</span>
+        {/* Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <CyberMetrics
+            title="Score Qualité"
+            value={`${validationResult.summary.qualityScore.toFixed(1)}%`}
+            icon={Shield}
+            gradient="bg-gradient-to-r from-blue-500 to-cyan-500"
+            trend={validationResult.summary.qualityScore > 80 ? 'up' : 'down'}
+          />
+          <CyberMetrics
+            title="Erreurs Critiques"
+            value={criticalCount}
+            icon={AlertTriangle}
+            gradient="bg-gradient-to-r from-red-500 to-pink-500"
+            trend={criticalCount > 0 ? 'down' : 'neutral'}
+          />
+          <CyberMetrics
+            title="Avertissements"
+            value={warningCount}
+            icon={Info}
+            gradient="bg-gradient-to-r from-yellow-500 to-orange-500"
+            trend="neutral"
+          />
+          <CyberMetrics
+            title="État Système"
+            value={validationResult.summary.canProceed ? 'PRÊT' : 'BLOQUÉ'}
+            icon={validationResult.summary.canProceed ? CheckCircle : XCircle}
+            gradient={validationResult.summary.canProceed ? 
+              "bg-gradient-to-r from-green-500 to-emerald-500" : 
+              "bg-gradient-to-r from-red-500 to-rose-500"
+            }
+            trend={validationResult.summary.canProceed ? 'up' : 'down'}
+          />
+        </div>
+
+        {/* Detailed Error Console */}
+        {showDetails && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            {filteredErrors.length > 0 && (
+              <div className="mb-6">
+                {/* Controls */}
+                <div className="flex flex-wrap items-center gap-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Search size={16} className="text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Rechercher erreurs..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400 focus:border-purple-500/50 focus:outline-none"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Filter size={16} className="text-slate-400" />
+                    <span className="text-slate-400 text-sm font-mono">Filtrer:</span>
+                    <div className="flex gap-2">
+                      {(['all', 'critical', 'warning'] as const).map(severity => (
+                        <button
+                          key={severity}
+                          onClick={() => setFilterSeverity(severity)}
+                          className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors ${
+                            filterSeverity === severity
+                              ? 'bg-purple-500/30 text-purple-300 border border-purple-500/50'
+                              : 'bg-slate-800/30 text-slate-400 hover:bg-slate-700/30'
+                          }`}
+                        >
+                          {severity === 'all' ? 'Toutes' : severity === 'critical' ? 'Critiques' : 'Alertes'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Error List */}
+                <div className="bg-slate-950/50 rounded-xl p-4 max-h-80 overflow-y-auto border border-slate-800/50">
+                  <div className="space-y-3">
+                    {filteredErrors.map((error, index) => (
+                      <motion.div
+                        key={error.id || index}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className={`p-4 rounded-lg border transition-all hover:scale-[1.01] ${
+                          error.severity === 'critical' 
+                            ? 'bg-red-900/20 border-red-500/30 hover:bg-red-900/30' 
+                            : 'bg-yellow-900/20 border-yellow-500/30 hover:bg-yellow-900/30'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              {error.severity === 'critical' ? (
+                                <XCircle size={16} className="text-red-400" />
+                              ) : (
+                                <AlertCircle size={16} className="text-yellow-400" />
+                              )}
+                              <span className="text-xs text-slate-400 font-mono bg-slate-800/50 px-2 py-1 rounded">
+                                {error.sheet} • L{error.row} • {error.field}
+                              </span>
+                              <div className={`px-2 py-1 rounded-full text-xs font-mono ${
+                                error.severity === 'critical' 
+                                  ? 'bg-red-500/20 text-red-300' 
+                                  : 'bg-yellow-500/20 text-yellow-300'
+                              }`}>
+                                {error.severity.toUpperCase()}
+                              </div>
+                            </div>
+                            <p className={`text-sm font-mono mb-2 ${
+                              error.severity === 'critical' ? 'text-red-300' : 'text-yellow-300'
+                            }`}>
+                              {error.message}
+                            </p>
+                            {error.value && (
+                              <div className="bg-slate-800/50 rounded px-3 py-2 border-l-2 border-slate-600">
+                                <p className="text-xs text-slate-400 font-mono">
+                                  <span className="text-slate-500">Valeur détectée:</span> "{String(error.value)}"
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Action Buttons */}
+                          <div className="flex gap-2">
+                            {error.canIgnore && (
+                              <HolographicButton
+                                onClick={() => onIgnoreError(error.id)}
+                                variant="secondary"
+                                size="sm"
+                              >
+                                <EyeOff size={12} className="mr-1" />
+                                Ignorer
+                              </HolographicButton>
+                            )}
+                            <HolographicButton
+                              onClick={() => onFixError(error.id)}
+                              variant="primary"
+                              size="sm"
+                            >
+                              <Wrench size={12} className="mr-1" />
+                              Corriger
+                            </HolographicButton>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                  
+                  {filteredErrors.length === 0 && (
+                    <div className="text-center py-8 text-slate-500">
+                      <Search size={32} className="mx-auto mb-2 opacity-30" />
+                      <p className="font-mono">Aucune erreur trouvée avec ces critères</p>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-          ))}
-          {validation.errors.length > 5 && (
-            <p className="text-slate-400 text-sm text-center font-mono">
-              +{validation.errors.length - 5} autres anomalies détectées
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  </NeoBorder>
-)
+            )}
 
-interface CyberSidebarProps {
-  isOpen: boolean
-  onToggle: () => void
-  onDownloadTemplate: () => void
-  logs: string[]
+            {/* System Status */}
+            {!validationResult.summary.canProceed && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="p-6 bg-red-900/20 border-2 border-red-500/30 rounded-xl"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                    <ShieldAlert size={24} className="text-red-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-red-300 font-bold text-lg font-mono">SYSTÈME BLOQUÉ</h4>
+                    <p className="text-red-400 text-sm mt-1 font-mono">
+                      {criticalCount} erreur(s) critique(s) détectée(s). Correction obligatoire avant injection.
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <HolographicButton
+                      onClick={() => setFilterSeverity('critical')}
+                      variant="danger"
+                      size="sm"
+                    >
+                      <Bug size={16} className="mr-2" />
+                      Voir Erreurs
+                    </HolographicButton>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {validationResult.summary.canProceed && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="p-6 bg-green-900/20 border-2 border-green-500/30 rounded-xl"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <CheckCircle2 size={24} className="text-green-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-green-300 font-bold text-lg font-mono">SYSTÈME VALIDÉ</h4>
+                    <p className="text-green-400 text-sm mt-1 font-mono">
+                      Données validées avec succès. Score qualité: {validationResult.summary.qualityScore.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="bg-green-500/10 rounded-lg p-3 border border-green-500/30">
+                      <Zap size={20} className="text-green-400" />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </div>
+    </NeoBorder>
+  )
 }
 
-const CyberSidebar: React.FC<CyberSidebarProps> = ({ isOpen, onToggle, onDownloadTemplate, logs }) => (
-  <div className={`${isOpen ? 'w-80' : 'w-20'} transition-all duration-300 bg-gradient-to-b from-slate-950/95 to-slate-900/95 backdrop-blur-xl border-r border-cyan-500/30`}>
-    <div className="p-6 border-b border-cyan-500/30">
-      <div className="flex items-center justify-between">
-        <h3 className={`text-cyan-400 font-bold ${isOpen ? 'text-xl' : 'text-sm'} transition-all font-mono`}>
-          {isOpen ? 'CYBER TOOLS' : 'CT'}
-        </h3>
-        <button
-          onClick={onToggle}
-          className="p-2 text-cyan-400 hover:text-cyan-300 transition-colors hover:bg-cyan-500/10 rounded-lg"
+const ProgressPortal: React.FC<{
+  show: boolean
+  progress: any
+  onCancel: () => void
+  logs: string[]
+}> = ({ show, progress, onCancel, logs }) => {
+  const [showLogs, setShowLogs] = useState(false)
+  
+  if (typeof document === 'undefined') return null
+
+  return ReactDOM.createPortal(
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
         >
-          {isOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
-        </button>
-      </div>
-    </div>
-
-    <div className="p-6 space-y-6">
-      <NeoBorder glowing>
-        <div className="p-4">
-          <div className={`flex items-center gap-3 ${isOpen ? '' : 'justify-center'}`}>
-            <FlaskConical size={20} className="text-green-400" />
-            {isOpen && <span className="text-green-400 font-bold">Template SQL</span>}
-          </div>
-          {isOpen && (
-            <>
-              <p className="text-slate-400 text-xs mt-2 mb-4">
-                Template conforme au schéma SQL avec 12 mois de données réalistes
-              </p>
-              <HolographicButton onClick={onDownloadTemplate} size="sm">
-                <Download size={16} className="mr-2" />
-                Télécharger
-              </HolographicButton>
-            </>
-          )}
-        </div>
-      </NeoBorder>
-
-      {isOpen && logs.length > 0 && (
-        <NeoBorder>
-          <div className="p-4">
-            <h4 className="text-cyan-400 font-bold mb-3 flex items-center gap-2">
-              <Terminal size={16} />
-              Journal Système
-            </h4>
-            <div className="max-h-48 overflow-y-auto space-y-1 text-xs font-mono">
-              {logs.slice(-10).map((log, idx) => (
-                <div key={idx} className="text-slate-400 border-l-2 border-cyan-500/30 pl-2">
-                  {log}
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            className="w-full max-w-4xl mx-4"
+          >
+            <NeoBorder glowing>
+              <div className="p-8">
+                {/* Header */}
+                <div className="text-center mb-8">
+                  <div className="w-24 h-24 mx-auto mb-4 relative">
+                    <motion.div 
+                      className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-500 to-cyan-500 opacity-75" 
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    />
+                    <div className="absolute inset-2 rounded-full bg-slate-900 flex items-center justify-center">
+                      <Database size={40} className="text-cyan-400" />
+                    </div>
+                  </div>
+                  <h3 className="text-3xl font-bold text-white mb-2 font-mono">
+                    {progress.step}
+                  </h3>
+                  <p className="text-purple-400 font-mono text-lg">{progress.message}</p>
+                  {progress.detail && (
+                    <p className="text-slate-400 text-sm mt-2 font-mono bg-slate-800/50 px-4 py-2 rounded-lg inline-block">
+                      {progress.detail}
+                    </p>
+                  )}
                 </div>
-              ))}
-            </div>
-          </div>
-        </NeoBorder>
+
+                {/* Progress Bar */}
+                <div className="mb-8">
+                  <div className="flex justify-between text-sm text-slate-400 mb-3 font-mono">
+                    <span>Progression du Système</span>
+                    <span>{progress.percentage.toFixed(1)}%</span>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-4 overflow-hidden border border-slate-700">
+                    <motion.div
+                      className="h-full rounded-full relative"
+                      style={{
+                        background: 'linear-gradient(90deg, #8b5cf6, #06b6d4, #8b5cf6)',
+                        backgroundSize: '200% 100%'
+                      }}
+                      animate={{
+                        backgroundPosition: ['0% 0%', '200% 0%'],
+                        width: `${progress.percentage}%`
+                      }}
+                      transition={{
+                        backgroundPosition: { duration: 2, repeat: Infinity, ease: "linear" },
+                        width: { duration: 0.5 }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Phase Indicators */}
+                <div className="grid grid-cols-4 gap-4 mb-8">
+                  {['validation', 'processing', 'snapshots', 'completion'].map((phase, index) => (
+                    <div 
+                      key={phase}
+                      className={`p-3 rounded-xl border text-center transition-all ${
+                        progress.phase === phase
+                          ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-300'
+                          : index < ['validation', 'processing', 'snapshots', 'completion'].indexOf(progress.phase)
+                          ? 'border-green-500/50 bg-green-500/10 text-green-300'
+                          : 'border-slate-700/50 bg-slate-800/30 text-slate-500'
+                      }`}
+                    >
+                      <div className="font-mono text-xs font-bold uppercase">
+                        {phase === 'validation' ? 'Validation' :
+                         phase === 'processing' ? 'Traitement' :
+                         phase === 'snapshots' ? 'Snapshots' :
+                         'Finalisation'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Live Logs */}
+                <div className="mb-6">
+                  <button
+                    onClick={() => setShowLogs(!showLogs)}
+                    className="flex items-center gap-2 mb-3 text-purple-400 hover:text-purple-300 transition-colors"
+                  >
+                    <Terminal size={16} />
+                    <span className="font-mono text-sm">Logs Temps Réel</span>
+                    {showLogs ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </button>
+                  
+                  <AnimatePresence>
+                    {showLogs && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 200 }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="bg-slate-950/70 rounded-lg p-4 overflow-y-auto font-mono text-xs border border-slate-700/50"
+                      >
+                        {logs.slice(-20).map((log, index) => (
+                          <motion.div 
+                            key={index}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="text-green-400 mb-1 border-l-2 border-green-500/30 pl-2"
+                          >
+                            {log}
+                          </motion.div>
+                        ))}
+                        <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-center gap-4">
+                  <HolographicButton
+                    onClick={onCancel}
+                    variant="danger"
+                    size="md"
+                  >
+                    <X size={20} className="mr-2" />
+                    Arrêter Mission
+                  </HolographicButton>
+                  
+                  <HolographicButton
+                    onClick={() => setShowLogs(!showLogs)}
+                    variant="secondary"
+                    size="md"
+                  >
+                    <Terminal size={20} className="mr-2" />
+                    {showLogs ? 'Masquer' : 'Voir'} Logs
+                  </HolographicButton>
+                </div>
+              </div>
+            </NeoBorder>
+          </motion.div>
+        </motion.div>
       )}
+    </AnimatePresence>,
+    document.body
+  )
+}
 
-      {isOpen && (
-        <NeoBorder>
-          <div className="p-4">
-            <h4 className="text-cyan-400 font-bold mb-3 flex items-center gap-2">
-              <Database size={16} />
-              Schéma SQL
-            </h4>
-            <ul className="space-y-2 text-xs text-slate-400">
-              <li className="flex items-start gap-2">
-                <CheckCircle2 size={12} className="text-green-400 mt-0.5" />
-                <span>Format dates YYYY-MM-DD</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 size={12} className="text-green-400 mt-0.5" />
-                <span>Types de données conformes</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 size={12} className="text-green-400 mt-0.5" />
-                <span>Contraintes respectées</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 size={12} className="text-green-400 mt-0.5" />
-                <span>Relations intègres</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 size={12} className="text-green-400 mt-0.5" />
-                <span>KPIs calculables</span>
-              </li>
-            </ul>
-          </div>
-        </NeoBorder>
-      )}
-    </div>
-  </div>
-)
-
-// ==========================================
-// MAIN COMPONENT
-// ==========================================
-
-export default function CyberpunkImportPage() {
+// Main Component
+export default function OptimizedImportPage() {
   const [file, setFile] = useState<File | null>(null)
   const [processedData, setProcessedData] = useState<ProcessedData | null>(null)
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
-  const [importStatus, setImportStatus] = useState<'idle' | 'validating' | 'processing' | 'success' | 'error'>('idle')
-  const [importProgress, setImportProgress] = useState<ImportProgress>({
-    phase: 'validation',
-    step: '',
-    current: 0,
-    total: 0,
-    percentage: 0,
-    message: ''
-  })
-  const [error, setError] = useState<string | null>(null)
   const [company, setCompany] = useState<Company | null>(null)
   const [establishments, setEstablishments] = useState<Establishment[]>([])
   const [selectedEstablishment, setSelectedEstablishment] = useState<Establishment | null>(null)
+  const [fileAnalysis, setFileAnalysis] = useState<FileAnalysis | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [importLogs, setImportLogs] = useState<string[]>([])
-  
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [importStats, setImportStats] = useState<ImportStats | null>(null)
+
   const supabase = createClient()
   const router = useRouter()
-  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Use optimized import hook
+  const {
+    importStatus,
+    importProgress,
+    importLogs,
+    error,
+    processImport,
+    cancelImport,
+    resetImport
+  } = useImport()
 
   useEffect(() => {
     initializeCompany()
@@ -1202,542 +1168,612 @@ export default function CyberpunkImportPage() {
       }
     } catch (error) {
       console.error('Initialization error:', error)
-      setError('ERREUR: Échec d\'initialisation du système')
     }
   }
 
-  const addLog = (message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): void => {
-    const timestamp = new Date().toLocaleTimeString()
-    const icons = { info: '>', success: '✓', warning: '!', error: '✗' }
-    setImportLogs(prev => [...prev, `${timestamp} [${icons[type]}] ${message}`])
-  }
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    const selectedFile = acceptedFiles[0]
+    if (!selectedFile) return
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const droppedFile = acceptedFiles[0]
-    if (droppedFile) {
-      if (droppedFile.size > MAX_FILE_SIZE) {
-        setError(`ERREUR: Fichier excède la limite (${MAX_FILE_SIZE / 1024 / 1024}MB)`)
-        return
-      }
-      
-      setFile(droppedFile)
-      setImportStatus('idle')
-      setError(null)
-      setValidationResult(null)
-      setProcessedData(null)
-      setImportLogs([])
-      analyzeFile(droppedFile)
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      console.error('File too large')
+      return
     }
+
+    setFile(selectedFile)
+    setProcessedData(null)
+    setValidationResult(null)
+    setFileAnalysis(null)
+    setImportStats(null)
+
+    await analyzeFile(selectedFile)
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'application/vnd.ms-excel': ['.xls'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls']
     },
     maxFiles: 1,
-    maxSize: MAX_FILE_SIZE
+    disabled: importStatus === 'processing'
   })
 
   const analyzeFile = async (file: File): Promise<void> => {
+    setIsAnalyzing(true)
+    
     try {
-      setImportStatus('validating')
-      addLog('Initiation du scan de fichier', 'info')
-      
-      setImportProgress({
-        phase: 'validation',
-        step: 'Extraction des métadonnées',
-        current: 10,
-        total: 100,
-        percentage: 10,
-        message: 'Analyse en cours...'
-      })
-
       const buffer = await file.arrayBuffer()
-      const wb = XLSX.read(buffer, { 
-        type: 'array',
-        cellDates: true,
-        dateNF: 'yyyy-mm-dd'
-      })
+      const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true })
       
-      const missingSheets = REQUIRED_SHEETS.filter(sheet => !wb.SheetNames.includes(sheet))
-      if (missingSheets.length > 0) {
-        throw new Error(`Onglets manquants: ${missingSheets.join(', ')}`)
+      const sheets = workbook.SheetNames
+      const missingSheets = REQUIRED_SHEETS.filter(required => 
+        !sheets.some(sheet => sheet.toUpperCase() === required)
+      )
+      
+      let totalRows = 0
+      const sheetsData: SheetData = {}
+      
+      sheets.forEach(sheetName => {
+        const worksheet = workbook.Sheets[sheetName]
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: null })
+        sheetsData[sheetName.toUpperCase()] = jsonData
+        totalRows += jsonData.length
+      })
+
+      const analysis: FileAnalysis = {
+        sheets,
+        totalRows,
+        missingSheets,
+        hasRequiredSheets: missingSheets.length === 0,
+        estimatedProcessingTime: Math.ceil(totalRows / 1000) * 2,
+        fileSize: file.size,
+        lastModified: new Date(file.lastModified)
       }
 
-      addLog('Structure validée - Onglets détectés', 'success')
+      setFileAnalysis(analysis)
 
-      setImportProgress({
-        phase: 'validation',
-        step: 'Décompilation des données',
-        current: 30,
-        total: 100,
-        percentage: 30,
-        message: 'Lecture matricielle...'
-      })
-
-      const employees = XLSX.utils.sheet_to_json(wb.Sheets['EMPLOYES'], { defval: null })
-      const remunerations = XLSX.utils.sheet_to_json(wb.Sheets['REMUNERATION'], { defval: null })
-      const absences = XLSX.utils.sheet_to_json(wb.Sheets['ABSENCES'], { defval: null })
-      const referentiel_organisation = XLSX.utils.sheet_to_json(wb.Sheets['REFERENTIEL_ORGANISATION'], { defval: null })
-      const referentiel_absences = XLSX.utils.sheet_to_json(wb.Sheets['REFERENTIEL_ABSENCES'], { defval: null })
-
-      addLog(`Données extraites: ${employees.length} employés`, 'info')
-
-      setImportProgress({
-        phase: 'validation',
-        step: 'Normalisation quantique',
-        current: 50,
-        total: 100,
-        percentage: 50,
-        message: 'Traitement algorithmique...'
-      })
-
-      const normalizedEmployees = employees.map((emp: any) => ({
-        ...emp,
-        periode: normalizePeriod(emp.periode),
-        date_entree: normalizeDate(emp.date_entree),
-        date_sortie: normalizeDate(emp.date_sortie),
-        date_naissance: normalizeDate(emp.date_naissance),
-        type_contrat: emp.type_contrat || 'CDI',
-        temps_travail: sanitizeNumber(emp.temps_travail, 1),
-        statut_emploi: emp.statut_emploi || 'Actif'
-      }))
-
-      const normalizedRemunerations = remunerations.map((rem: any) => ({
-        ...rem,
-        mois_paie: normalizePeriod(rem.mois_paie),
-        salaire_de_base: sanitizeNumber(rem.salaire_de_base),
-        primes_fixes: sanitizeNumber(rem.primes_fixes),
-        primes_variables: sanitizeNumber(rem.primes_variables),
-        cotisations_sociales: sanitizeNumber(rem.cotisations_sociales)
-      }))
-
-      const normalizedAbsences = absences.map((abs: any) => ({
-        ...abs,
-        date_debut: normalizeDate(abs.date_debut),
-        date_fin: normalizeDate(abs.date_fin)
-      }))
-
-      const normalizedRefAbsences = referentiel_absences.map((ref: any) => ({
-        ...ref,
-        indemnise: parseBoolean(ref.indemnise),
-        comptabilise_absenteisme: parseBoolean(ref.comptabilise_absenteisme)
-      }))
-
-      const periods = [...new Set([
-        ...normalizedEmployees.map(e => e.periode),
-        ...normalizedRemunerations.map(r => r.mois_paie)
-      ])].filter(Boolean).sort()
-
-      addLog(`Périodes temporelles: ${periods.join(' | ')}`, 'info')
-
-      const processedData: ProcessedData = {
-        employees: normalizedEmployees,
-        remunerations: normalizedRemunerations,
-        absences: normalizedAbsences,
-        referentiel_organisation,
-        referentiel_absences: normalizedRefAbsences,
-        metadata: {
-          periods,
-          totalEmployees: normalizedEmployees.length,
-          totalRecords: normalizedEmployees.length + normalizedRemunerations.length + normalizedAbsences.length,
-          establishments: [...new Set(normalizedEmployees.map(e => e.code_site).filter(Boolean))]
-        }
+      if (analysis.hasRequiredSheets) {
+        await processFileData(sheetsData)
       }
 
-      setProcessedData(processedData)
-
-      setImportProgress({
-        phase: 'validation',
-        step: 'Validation intégrité',
-        current: 80,
-        total: 100,
-        percentage: 80,
-        message: 'Vérification systémique...'
-      })
-
-      const validation = validateData(processedData)
-      setValidationResult(validation)
-
-      if (validation.summary.criticalErrors > 0) {
-        addLog(`${validation.summary.criticalErrors} erreur(s) critique(s)`, 'error')
-      } else {
-        addLog('Validation réussie - Système prêt', 'success')
-      }
-
-      setImportProgress({
-        phase: 'validation',
-        step: 'Analyse terminée',
-        current: 100,
-        total: 100,
-        percentage: 100,
-        message: validation.summary.canProceed ? 'PRÊT POUR INJECTION' : 'CORRECTIONS REQUISES'
-      })
-
-      setImportStatus('idle')
     } catch (error) {
-      console.error('Analysis error:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Erreur système inconnue'
-      setError(`ERREUR CRITIQUE: ${errorMessage}`)
-      addLog(errorMessage, 'error')
-      setImportStatus('error')
+      console.error('File analysis error:', error)
+    } finally {
+      setIsAnalyzing(false)
     }
   }
 
-  const processImport = async (): Promise<void> => {
+  const processFileData = async (sheetsData: SheetData): Promise<void> => {
+    try {
+      // Process employees
+      const employeesRaw = sheetsData['EMPLOYES'] || []
+      const employees: EmployeeData[] = employeesRaw.map(emp => ({
+        matricule: cleanString(emp.matricule || emp.MATRICULE, 50),
+        periode: normalizePeriod(emp.periode || emp.PERIODE),
+        sexe: cleanString(emp.sexe || emp.SEXE, 1) || null,
+        date_naissance: normalizeDate(emp.date_naissance || emp.DATE_NAISSANCE),
+        date_entree: normalizeDate(emp.date_entree || emp.DATE_ENTREE),
+        date_sortie: normalizeDate(emp.date_sortie || emp.DATE_SORTIE),
+        type_contrat: cleanString(emp.type_contrat || emp.TYPE_CONTRAT) || 'CDI',
+        temps_travail: cleanNumber(emp.temps_travail || emp.TEMPS_TRAVAIL, 1),
+        intitule_poste: cleanString(emp.intitule_poste || emp.INTITULE_POSTE),
+        code_cost_center: cleanString(emp.code_cost_center || emp.CODE_COST_CENTER),
+        code_site: cleanString(emp.code_site || emp.CODE_SITE),
+        statut_emploi: cleanString(emp.statut_emploi || emp.STATUT_EMPLOI) || 'Actif'
+      }))
+
+      // Process remunerations
+      const remunerationsRaw = sheetsData['REMUNERATION'] || []
+      const remunerations: RemunerationData[] = remunerationsRaw.map(rem => ({
+        matricule: cleanString(rem.matricule || rem.MATRICULE, 50),
+        mois_paie: normalizePeriod(rem.mois_paie || rem.MOIS_PAIE),
+        salaire_de_base: cleanNumber(rem.salaire_de_base || rem.SALAIRE_DE_BASE),
+        primes_fixes: cleanNumber(rem.primes_fixes || rem.PRIMES_FIXES),
+        primes_variables: cleanNumber(rem.primes_variables || rem.PRIMES_VARIABLES),
+        primes_exceptionnelles: cleanNumber(rem.primes_exceptionnelles || rem.PRIMES_EXCEPTIONNELLES),
+        heures_supp_payees: cleanNumber(rem.heures_supp_payees || rem.HEURES_SUPP_PAYEES),
+        avantages_nature: cleanNumber(rem.avantages_nature || rem.AVANTAGES_NATURE),
+        indemnites: cleanNumber(rem.indemnites || rem.INDEMNITES),
+        cotisations_sociales: cleanNumber(rem.cotisations_sociales || rem.COTISATIONS_SOCIALES),
+        taxes_sur_salaire: cleanNumber(rem.taxes_sur_salaire || rem.TAXES_SUR_SALAIRE),
+        autres_charges: cleanNumber(rem.autres_charges || rem.AUTRES_CHARGES)
+      }))
+
+      // Process absences
+      const absencesRaw = sheetsData['ABSENCES'] || []
+      const absences: AbsenceData[] = absencesRaw
+        .filter(abs => abs.date_debut || abs.DATE_DEBUT)
+        .map(abs => ({
+          matricule: cleanString(abs.matricule || abs.MATRICULE, 50),
+          type_absence: cleanString(abs.type_absence || abs.TYPE_ABSENCE) || 'Autre',
+          date_debut: normalizeDate(abs.date_debut || abs.DATE_DEBUT) || '',
+          date_fin: normalizeDate(abs.date_fin || abs.DATE_FIN),
+          motif: cleanString(abs.motif || abs.MOTIF),
+          justificatif_fourni: parseBoolean(abs.justificatif_fourni || abs.JUSTIFICATIF_FOURNI),
+          validation_status: cleanString(abs.validation_status || abs.VALIDATION_STATUS) || 'approved'
+        }))
+        .filter(abs => abs.date_debut)
+
+      // Process referential data
+      const referentiel_organisation = (sheetsData['REFERENTIEL_ORGANISATION'] || []).map(org => ({
+        code_site: cleanString(org.code_site || org.CODE_SITE, 20),
+        nom_site: cleanString(org.nom_site || org.NOM_SITE),
+        code_cost_center: cleanString(org.code_cost_center || org.CODE_COST_CENTER, 20),
+        nom_cost_center: cleanString(org.nom_cost_center || org.NOM_COST_CENTER),
+        code_direction: cleanString(org.code_direction || org.CODE_DIRECTION, 20),
+        nom_direction: cleanString(org.nom_direction || org.NOM_DIRECTION),
+        code_departement: cleanString(org.code_departement || org.CODE_DEPARTEMENT, 20),
+        nom_departement: cleanString(org.nom_departement || org.NOM_DEPARTEMENT),
+        is_active: parseBoolean(org.is_active || org.IS_ACTIVE)
+      }))
+
+      const referentiel_absences = (sheetsData['REFERENTIEL_ABSENCES'] || []).map(abs => ({
+        type_absence: cleanString(abs.type_absence || abs.TYPE_ABSENCE, 100),
+        famille: cleanString(abs.famille || abs.FAMILLE) || 'Autres',
+        indemnise: parseBoolean(abs.indemnise || abs.INDEMNISE),
+        taux_indemnisation: cleanNumber(abs.taux_indemnisation || abs.TAUX_INDEMNISATION, 0),
+        comptabilise_absenteisme: parseBoolean(abs.comptabilise_absenteisme || abs.COMPTABILISE_ABSENTEISME),
+        is_active: parseBoolean(abs.is_active || abs.IS_ACTIVE)
+      }))
+
+      // Extract periods
+      const allPeriods = new Set<string>()
+      employees.forEach(emp => allPeriods.add(emp.periode))
+      remunerations.forEach(rem => allPeriods.add(rem.mois_paie))
+      
+      const periods = Array.from(allPeriods).sort()
+
+      const metadata: ImportMetadata = {
+        periods,
+        totalEmployees: employees.length,
+        totalRecords: employees.length + remunerations.length + absences.length,
+        establishments: []
+      }
+
+      const processed: ProcessedData = {
+        employees,
+        remunerations,
+        absences,
+        referentiel_organisation,
+        referentiel_absences,
+        metadata
+      }
+
+      setProcessedData(processed)
+
+      // Initialize import stats
+      setImportStats({
+        totalRows: metadata.totalRecords,
+        processedRows: 0,
+        errorsFound: 0,
+        warningsFound: 0,
+        estimatedCompletion: new Date(Date.now() + (metadata.totalRecords / 100) * 1000)
+      })
+
+      // Run validation
+      const validation = await validateData(processed)
+      setValidationResult(validation)
+
+    } catch (error) {
+      console.error('Data processing error:', error)
+    }
+  }
+
+  const validateData = async (data: ProcessedData): Promise<ValidationResult> => {
+    const errors: ValidationError[] = []
+    const warnings: ValidationError[] = []
+
+    // Validate employees
+    data.employees.forEach((emp, index) => {
+      if (!emp.matricule) {
+        errors.push({
+          id: `emp-${index}-matricule`,
+          sheet: 'EMPLOYES',
+          row: index + 2,
+          column: 'matricule',
+          field: 'Matricule',
+          value: emp.matricule,
+          message: 'Matricule employé requis pour identification unique',
+          severity: 'critical',
+          canIgnore: false
+        })
+      }
+      
+      if (!emp.periode) {
+        errors.push({
+          id: `emp-${index}-periode`,
+          sheet: 'EMPLOYES',
+          row: index + 2,
+          column: 'periode',
+          field: 'Période',
+          value: emp.periode,
+          message: 'Période requise pour calculs snapshots optimisés',
+          severity: 'critical',
+          canIgnore: false
+        })
+      }
+
+      if (emp.sexe && !['M', 'F', 'H'].includes(emp.sexe.toUpperCase())) {
+        warnings.push({
+          id: `emp-${index}-sexe`,
+          sheet: 'EMPLOYES',
+          row: index + 2,
+          column: 'sexe',
+          field: 'Sexe',
+          value: emp.sexe,
+          message: 'Format sexe non standard - attendu: M, F ou H',
+          severity: 'warning',
+          canIgnore: true
+        })
+      }
+
+      if (emp.temps_travail && (emp.temps_travail < 0.1 || emp.temps_travail > 1.5)) {
+        warnings.push({
+          id: `emp-${index}-temps_travail`,
+          sheet: 'EMPLOYES',
+          row: index + 2,
+          column: 'temps_travail',
+          field: 'Temps de travail',
+          value: emp.temps_travail,
+          message: 'Temps de travail inhabituel (recommandé: 0.1 à 1.5)',
+          severity: 'warning',
+          canIgnore: true
+        })
+      }
+    })
+
+    // Validate remunerations
+    data.remunerations.forEach((rem, index) => {
+      if (!rem.matricule) {
+        errors.push({
+          id: `rem-${index}-matricule`,
+          sheet: 'REMUNERATION',
+          row: index + 2,
+          column: 'matricule',
+          field: 'Matricule',
+          value: rem.matricule,
+          message: 'Matricule requis pour liaison avec données employé',
+          severity: 'critical',
+          canIgnore: false
+        })
+      }
+
+      if (!rem.mois_paie) {
+        errors.push({
+          id: `rem-${index}-mois_paie`,
+          sheet: 'REMUNERATION',
+          row: index + 2,
+          column: 'mois_paie',
+          field: 'Mois de paie',
+          value: rem.mois_paie,
+          message: 'Mois de paie requis pour snapshots financiers',
+          severity: 'critical',
+          canIgnore: false
+        })
+      }
+
+      if (rem.salaire_de_base && rem.salaire_de_base < 500) {
+        warnings.push({
+          id: `rem-${index}-salaire_base`,
+          sheet: 'REMUNERATION',
+          row: index + 2,
+          column: 'salaire_de_base',
+          field: 'Salaire de base',
+          value: rem.salaire_de_base,
+          message: 'Salaire de base très faible - vérifier montant',
+          severity: 'warning',
+          canIgnore: true
+        })
+      }
+    })
+
+    // Validate absences
+    data.absences.forEach((abs, index) => {
+      if (!abs.date_debut) {
+        errors.push({
+          id: `abs-${index}-date_debut`,
+          sheet: 'ABSENCES',
+          row: index + 2,
+          column: 'date_debut',
+          field: 'Date début',
+          value: abs.date_debut,
+          message: 'Date de début d\'absence requise',
+          severity: 'critical',
+          canIgnore: false
+        })
+      }
+
+      if (abs.date_fin && abs.date_debut && abs.date_fin < abs.date_debut) {
+        errors.push({
+          id: `abs-${index}-dates`,
+          sheet: 'ABSENCES',
+          row: index + 2,
+          column: 'date_fin',
+          field: 'Dates incohérentes',
+          value: `${abs.date_debut} -> ${abs.date_fin}`,
+          message: 'Date de fin antérieure à la date de début',
+          severity: 'critical',
+          canIgnore: false
+        })
+      }
+    })
+
+    // Cross-validation: check if employees exist for remunerations
+    const employeeMatricules = new Set(data.employees.map(e => e.matricule))
+    data.remunerations.forEach((rem, index) => {
+      if (rem.matricule && !employeeMatricules.has(rem.matricule)) {
+        warnings.push({
+          id: `cross-rem-${index}`,
+          sheet: 'REMUNERATION',
+          row: index + 2,
+          column: 'matricule',
+          field: 'Matricule orphelin',
+          value: rem.matricule,
+          message: 'Matricule non trouvé dans la liste employés',
+          severity: 'warning',
+          canIgnore: true
+        })
+      }
+    })
+
+    const criticalErrors = errors.filter(e => e.severity === 'critical').length
+    const warningCount = warnings.length
+    const totalErrors = errors.length + warnings.length
+
+    // Advanced quality scoring
+    const completenessScore = calculateDataQuality(data)
+    const errorPenalty = (criticalErrors * 25) + (warningCount * 5)
+    const qualityScore = Math.max(0, Math.min(100, completenessScore - errorPenalty))
+
+    const summary: ValidationSummary = {
+      totalErrors,
+      criticalErrors,
+      warningCount,
+      canProceed: criticalErrors === 0,
+      qualityScore
+    }
+
+    return {
+      isValid: criticalErrors === 0,
+      errors: [...errors, ...warnings],
+      warnings,
+      summary
+    }
+  }
+
+  const handleProcessImport = async (): Promise<void> => {
     if (!processedData || !selectedEstablishment || !validationResult?.summary.canProceed) {
-      setError('ERREUR: Pré-requis non satisfaits')
+      console.error('Missing requirements for import')
       return
     }
 
-    try {
-      setImportStatus('processing')
-      setError(null)
-      setImportLogs([])
-      abortControllerRef.current = new AbortController()
-      
-      const batchId = `CYBER-${Date.now()}-${Math.random().toString(36).substring(7)}`
-      const { employees, remunerations, absences, referentiel_organisation, referentiel_absences, metadata } = processedData
-
-      addLog(`Initiation injection - ${metadata.totalRecords} entités`, 'info')
-
-      setImportProgress({
-        phase: 'processing',
-        step: 'Initialisation matrices',
-        current: 5,
-        total: 100,
-        percentage: 5,
-        message: 'Connexion base...'
-      })
-
-      await supabase.from('import_batches').insert({
-        id: batchId,
-        etablissement_id: selectedEstablishment.id,
-        file_name: file?.name || 'import.xlsx',
-        status: 'processing',
-        periods_imported: metadata.periods
-      })
-
-      if (referentiel_organisation.length > 0) {
-        setImportProgress({
-          phase: 'processing',
-          step: 'Injection référentiels',
-          current: 10,
-          total: 100,
-          percentage: 10,
-          message: 'Structure organisationnelle...'
-        })
-
-        const orgData = referentiel_organisation.map(org => ({
-          etablissement_id: selectedEstablishment.id,
-          code_site: sanitizeString(org.code_site, 20),
-          nom_site: sanitizeString(org.nom_site),
-          code_cost_center: sanitizeString(org.code_cost_center, 20),
-          nom_cost_center: sanitizeString(org.nom_cost_center),
-          is_active: parseBoolean(org.is_active)
-        }))
-
-        const { error: orgError } = await supabase
-          .from('referentiel_organisation')
-          .upsert(orgData, { onConflict: 'etablissement_id,code_cost_center,code_site' })
-
-        if (orgError) throw orgError
-        addLog('Référentiel organisation injecté', 'success')
-      }
-
-      if (referentiel_absences.length > 0) {
-        const absTypesData = referentiel_absences.map(abs => ({
-          etablissement_id: selectedEstablishment.id,
-          type_absence: sanitizeString(abs.type_absence, 100),
-          famille: abs.famille || 'Autres',
-          indemnise: parseBoolean(abs.indemnise),
-          comptabilise_absenteisme: parseBoolean(abs.comptabilise_absenteisme),
-          is_active: parseBoolean(abs.is_active)
-        }))
-
-        const { error: absError } = await supabase
-          .from('referentiel_absences')
-          .upsert(absTypesData, { onConflict: 'etablissement_id,type_absence' })
-
-        if (absError) throw absError
-        addLog('Référentiel absences injecté', 'success')
-      }
-
-      setImportProgress({
-        phase: 'processing',
-        step: 'Injection entités employés',
-        current: 20,
-        total: 100,
-        percentage: 20,
-        message: `0/${employees.length}`
-      })
-
-      const employeeMap = new Map<string, string>()
-      
-      for (let i = 0; i < employees.length; i += BATCH_SIZE) {
-        if (abortControllerRef.current?.signal.aborted) throw new Error('Processus avorté')
-        
-        const batch = employees.slice(i, i + BATCH_SIZE)
-        const employeesData = batch.map(emp => ({
-          etablissement_id: selectedEstablishment.id,
-          matricule: sanitizeString(emp.matricule, 50),
-          periode: emp.periode,
-          sexe: emp.sexe || null,
-          date_naissance: emp.date_naissance,
-          date_entree: emp.date_entree || '2020-01-01',
-          date_sortie: emp.date_sortie,
-          type_contrat: emp.type_contrat,
-          temps_travail: emp.temps_travail,
-          intitule_poste: sanitizeString(emp.intitule_poste || 'Non spécifié'),
-          code_cost_center: sanitizeString(emp.code_cost_center),
-          code_site: sanitizeString(emp.code_site),
-          statut_emploi: emp.statut_emploi,
-          import_batch_id: batchId
-        }))
-
-        const { data: insertedEmployees, error: empError } = await supabase
-          .from('employes')
-          .upsert(employeesData, { onConflict: 'etablissement_id,matricule,periode' })
-          .select('id, matricule, periode')
-
-        if (empError) throw empError
-
-        insertedEmployees?.forEach(emp => {
-          employeeMap.set(`${emp.matricule}_${emp.periode}`, emp.id)
-        })
-
-        const processed = Math.min(i + BATCH_SIZE, employees.length)
-        setImportProgress({
-          phase: 'processing',
-          step: 'Injection entités employés',
-          current: 20 + Math.round((processed / employees.length) * 20),
-          total: 100,
-          percentage: 20 + Math.round((processed / employees.length) * 20),
-          message: `${processed}/${employees.length}`
-        })
-      }
-
-      addLog(`${employees.length} entités employés injectées`, 'success')
-
-      setImportProgress({
-        phase: 'processing',
-        step: 'Injection matrices salariales',
-        current: 40,
-        total: 100,
-        percentage: 40,
-        message: `0/${remunerations.length}`
-      })
-
-      for (let i = 0; i < remunerations.length; i += BATCH_SIZE) {
-        if (abortControllerRef.current?.signal.aborted) throw new Error('Processus avorté')
-        
-        const batch = remunerations.slice(i, i + BATCH_SIZE)
-        const remunerationsData = batch.map(rem => ({
-          etablissement_id: selectedEstablishment.id,
-          employe_id: employeeMap.get(`${rem.matricule}_${rem.mois_paie}`) || null,
-          matricule: sanitizeString(rem.matricule, 50),
-          mois_paie: rem.mois_paie,
-          salaire_de_base: sanitizeNumber(rem.salaire_de_base),
-          primes_fixes: sanitizeNumber(rem.primes_fixes),
-          primes_variables: sanitizeNumber(rem.primes_variables),
-          cotisations_sociales: sanitizeNumber(rem.cotisations_sociales),
-          import_batch_id: batchId
-        }))
-
-        const { error: remError } = await supabase
-          .from('remunerations')
-          .upsert(remunerationsData, { onConflict: 'etablissement_id,matricule,mois_paie' })
-
-        if (remError) throw remError
-
-        const processed = Math.min(i + BATCH_SIZE, remunerations.length)
-        setImportProgress({
-          phase: 'processing',
-          step: 'Injection matrices salariales',
-          current: 40 + Math.round((processed / remunerations.length) * 20),
-          total: 100,
-          percentage: 40 + Math.round((processed / remunerations.length) * 20),
-          message: `${processed}/${remunerations.length}`
-        })
-      }
-
-      addLog(`${remunerations.length} matrices salariales injectées`, 'success')
-
-      if (absences.length > 0) {
-        setImportProgress({
-          phase: 'processing',
-          step: 'Injection patterns d\'absences',
-          current: 60,
-          total: 100,
-          percentage: 60,
-          message: `0/${absences.length}`
-        })
-
-        for (let i = 0; i < absences.length; i += BATCH_SIZE) {
-          if (abortControllerRef.current?.signal.aborted) throw new Error('Processus avorté')
-          
-          const batch = absences.slice(i, i + BATCH_SIZE)
-          const absencesData = batch.filter(abs => abs.date_debut).map(abs => ({
-            etablissement_id: selectedEstablishment.id,
-            matricule: sanitizeString(abs.matricule, 50),
-            type_absence: sanitizeString(abs.type_absence, 100),
-            date_debut: abs.date_debut,
-            date_fin: abs.date_fin || abs.date_debut,
-            import_batch_id: batchId
-          }))
-
-          if (absencesData.length > 0) {
-            const { error: absError } = await supabase
-              .from('absences')
-              .upsert(absencesData, { onConflict: 'etablissement_id,matricule,date_debut,type_absence' })
-
-            if (absError) throw absError
-          }
-
-          const processed = Math.min(i + BATCH_SIZE, absences.length)
-          setImportProgress({
-            phase: 'processing',
-            step: 'Injection patterns d\'absences',
-            current: 60 + Math.round((processed / absences.length) * 10),
-            total: 100,
-            percentage: 60 + Math.round((processed / absences.length) * 10),
-            message: `${processed}/${absences.length}`
-          })
-        }
-
-        addLog(`${absences.length} patterns d'absences injectés`, 'success')
-      }
-
-      setImportProgress({
-        phase: 'snapshots',
-        step: 'Calcul KPIs quantiques',
-        current: 70,
-        total: 100,
-        percentage: 70,
-        message: 'Initialisation algorithmes...'
-      })
-
-      const snapshotResults = []
-      
-      for (let idx = 0; idx < metadata.periods.length; idx++) {
-        const period = metadata.periods[idx]
-        const normalizedPeriod = normalizePeriod(period)
-        
-        setImportProgress({
-          phase: 'snapshots',
-          step: 'Calcul KPIs quantiques',
-          current: 70 + Math.round((idx / metadata.periods.length) * 25),
-          total: 100,
-          percentage: 70 + Math.round((idx / metadata.periods.length) * 25),
-          message: `Analyse ${idx + 1}/${metadata.periods.length}`,
-          detail: `Période ${normalizedPeriod} en cours d'analyse...`
-        })
-
-        try {
-          const { data: rpcResult, error: rpcError } = await supabase.rpc(
-            'calculate_snapshot_for_period',
-            {
-              p_etablissement_id: selectedEstablishment.id,
-              p_periode: normalizedPeriod,
-              p_force: true
-            }
-          )
-
-          if (rpcError) {
-            console.error(`RPC error for ${normalizedPeriod}:`, rpcError)
-            addLog(`Erreur KPI ${normalizedPeriod}: ${rpcError.message}`, 'warning')
-            snapshotResults.push({ period: normalizedPeriod, success: false, error: rpcError.message })
-          } else {
-            const { data: verifySnapshot, error: verifyError } = await supabase
-              .from('snapshots_mensuels')
-              .select('id, periode, effectif_fin_mois, calculated_at')
-              .eq('etablissement_id', selectedEstablishment.id)
-              .eq('periode', normalizedPeriod)
-              .single()
-
-            if (verifySnapshot) {
-              addLog(`KPIs calculés pour ${normalizedPeriod}`, 'success')
-              snapshotResults.push({ period: normalizedPeriod, success: true, data: verifySnapshot })
-            } else {
-              addLog(`KPIs non vérifiés pour ${normalizedPeriod}`, 'warning')
-              snapshotResults.push({ period: normalizedPeriod, success: false, error: 'Non vérifié' })
-            }
-          }
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error)
-          console.error(`Snapshot error for ${normalizedPeriod}:`, error)
-          addLog(`Erreur KPI ${normalizedPeriod}: ${errorMessage}`, 'error')
-          snapshotResults.push({ period: normalizedPeriod, success: false, error: errorMessage })
-        }
-      }
-
-      const successfulSnapshots = snapshotResults.filter(r => r.success).length
-      const failedSnapshots = snapshotResults.filter(r => !r.success).length
-
-      if (successfulSnapshots === 0) {
-        throw new Error('Échec total du calcul des KPIs')
-      }
-
-      if (failedSnapshots > 0) {
-        addLog(`${failedSnapshots} période(s) sans KPI`, 'warning')
-      }
-
-      setImportProgress({
-        phase: 'completion',
-        step: 'Finalisation système',
-        current: 95,
-        total: 100,
-        percentage: 95,
-        message: 'Persistance données...'
-      })
-
-      await supabase.from('import_batches').update({
-        status: 'completed',
-        nb_employes_imported: employees.length,
-        nb_remunerations_imported: remunerations.length,
-        nb_absences_imported: absences.length,
-        completed_at: new Date().toISOString()
-      }).eq('id', batchId)
-
-      setImportProgress({
-        phase: 'completion',
-        step: 'INJECTION RÉUSSIE',
-        current: 100,
-        total: 100,
-        percentage: 100,
-        message: `${metadata.totalRecords} entités • ${successfulSnapshots} KPIs calculés`
-      })
-
-      addLog(`Mission accomplie: ${successfulSnapshots}/${metadata.periods.length} périodes`, 'success')
-      setImportStatus('success')
-
-      setTimeout(() => {
-        router.push('/dashboard')
-      }, 3000)
-
-    } catch (error) {
-      console.error('Import error:', error)
-      let errorMessage = 'Erreur système critique'
-      if (error instanceof Error) {
-        errorMessage = error.message
-      } else if (error && typeof error === 'object') {
-        if ('message' in error && error.message) {
-          errorMessage = (error as any).message
-        }
-      }
-      
-      setError(`ERREUR FATALE: ${errorMessage}`)
-      addLog(errorMessage, 'error')
-      setImportStatus('error')
-    }
+    await processImport(
+      processedData,
+      selectedEstablishment,
+      file?.name || 'import.xlsx',
+      validationResult
+    )
   }
 
   const downloadTemplate = (): void => {
-    const wb = generateSchemaCompliantTemplate()
-    XLSX.writeFile(wb, `HR_Template_SQL_Compliant_${new Date().toISOString().split('T')[0]}.xlsx`)
-    addLog('Template conforme SQL téléchargé - 12 mois de données', 'success')
+    // Create comprehensive template workbook
+    const wb = XLSX.utils.book_new()
+
+    // Employee template with more examples
+    const employeeTemplate = [
+      {
+        matricule: 'EMP001',
+        periode: '2024-01-01',
+        sexe: 'M',
+        date_naissance: '1990-01-15',
+        date_entree: '2020-03-01',
+        date_sortie: null,
+        type_contrat: 'CDI',
+        temps_travail: 1.0,
+        intitule_poste: 'Développeur Senior',
+        code_cost_center: 'IT001',
+        code_site: 'PARIS',
+        statut_emploi: 'Actif'
+      },
+      {
+        matricule: 'EMP002',
+        periode: '2024-01-01',
+        sexe: 'F',
+        date_naissance: '1985-06-20',
+        date_entree: '2019-09-15',
+        date_sortie: null,
+        type_contrat: 'CDI',
+        temps_travail: 0.8,
+        intitule_poste: 'Chef de Projet',
+        code_cost_center: 'MKT001',
+        code_site: 'LYON',
+        statut_emploi: 'Actif'
+      }
+    ]
+
+    // Remuneration template with detailed examples
+    const remunerationTemplate = [
+      {
+        matricule: 'EMP001',
+        mois_paie: '2024-01-01',
+        salaire_de_base: 4500,
+        primes_fixes: 300,
+        primes_variables: 250,
+        primes_exceptionnelles: 0,
+        heures_supp_payees: 120,
+        avantages_nature: 80,
+        indemnites: 0,
+        cotisations_sociales: 1200,
+        taxes_sur_salaire: 180,
+        autres_charges: 50
+      },
+      {
+        matricule: 'EMP002',
+        mois_paie: '2024-01-01',
+        salaire_de_base: 3800,
+        primes_fixes: 200,
+        primes_variables: 180,
+        primes_exceptionnelles: 500,
+        heures_supp_payees: 0,
+        avantages_nature: 60,
+        indemnites: 0,
+        cotisations_sociales: 950,
+        taxes_sur_salaire: 140,
+        autres_charges: 40
+      }
+    ]
+
+    // Absence template with various types
+    const absenceTemplate = [
+      {
+        matricule: 'EMP001',
+        type_absence: 'Congés payés',
+        date_debut: '2024-01-15',
+        date_fin: '2024-01-19',
+        motif: 'Vacances d\'hiver',
+        justificatif_fourni: true,
+        validation_status: 'approved'
+      },
+      {
+        matricule: 'EMP002',
+        type_absence: 'Maladie',
+        date_debut: '2024-01-22',
+        date_fin: '2024-01-24',
+        motif: 'Grippe',
+        justificatif_fourni: true,
+        validation_status: 'approved'
+      }
+    ]
+
+    // Organization template with hierarchy
+    const organizationTemplate = [
+      {
+        code_site: 'PARIS',
+        nom_site: 'Siège Social Paris',
+        code_cost_center: 'IT001',
+        nom_cost_center: 'Direction Informatique',
+        code_direction: 'TECH',
+        nom_direction: 'Direction Technique',
+        code_departement: 'DEV',
+        nom_departement: 'Développement',
+        is_active: true
+      },
+      {
+        code_site: 'LYON',
+        nom_site: 'Agence Lyon',
+        code_cost_center: 'MKT001',
+        nom_cost_center: 'Marketing Digital',
+        code_direction: 'COMM',
+        nom_direction: 'Direction Communication',
+        code_departement: 'MKT',
+        nom_departement: 'Marketing',
+        is_active: true
+      }
+    ]
+
+    // Absence types template with detailed configuration
+    const absenceTypesTemplate = [
+      {
+        type_absence: 'Congés payés',
+        famille: 'Congés',
+        indemnise: true,
+        taux_indemnisation: 1.0,
+        comptabilise_absenteisme: false,
+        is_active: true
+      },
+      {
+        type_absence: 'Maladie',
+        famille: 'Maladie',
+        indemnise: true,
+        taux_indemnisation: 0.8,
+        comptabilise_absenteisme: true,
+        is_active: true
+      },
+      {
+        type_absence: 'Formation',
+        famille: 'Formation',
+        indemnise: true,
+        taux_indemnisation: 1.0,
+        comptabilise_absenteisme: false,
+        is_active: true
+      }
+    ]
+
+    // Add sheets with improved formatting
+    const employeeWs = XLSX.utils.json_to_sheet(employeeTemplate)
+    const remunerationWs = XLSX.utils.json_to_sheet(remunerationTemplate)
+    const absenceWs = XLSX.utils.json_to_sheet(absenceTemplate)
+    const organizationWs = XLSX.utils.json_to_sheet(organizationTemplate)
+    const absenceTypesWs = XLSX.utils.json_to_sheet(absenceTypesTemplate)
+
+    XLSX.utils.book_append_sheet(wb, employeeWs, 'EMPLOYES')
+    XLSX.utils.book_append_sheet(wb, remunerationWs, 'REMUNERATION')
+    XLSX.utils.book_append_sheet(wb, absenceWs, 'ABSENCES')
+    XLSX.utils.book_append_sheet(wb, organizationWs, 'REFERENTIEL_ORGANISATION')
+    XLSX.utils.book_append_sheet(wb, absenceTypesWs, 'REFERENTIEL_ABSENCES')
+
+    // Add instructions sheet
+    const instructionsData = [
+      { Section: 'GUIDE D\'UTILISATION', Description: 'Template optimisé pour HR Quantum Analytics' },
+      { Section: '', Description: '' },
+      { Section: 'EMPLOYES', Description: 'Données des salariés par période' },
+      { Section: '- matricule', Description: 'Identifiant unique employé (requis)' },
+      { Section: '- periode', Description: 'Format: YYYY-MM-01 (requis)' },
+      { Section: '- sexe', Description: 'M, F ou H' },
+      { Section: '- type_contrat', Description: 'CDI, CDD, Stage, Alternance, Interim' },
+      { Section: '- temps_travail', Description: '1.0 = temps plein, 0.8 = 80%, etc.' },
+      { Section: '', Description: '' },
+      { Section: 'REMUNERATION', Description: 'Données salariales mensuelles' },
+      { Section: '- Tous les montants en euros', Description: 'Utiliser le point pour les décimales' },
+      { Section: '- cotisations_sociales', Description: 'Charges sociales employeur' },
+      { Section: '', Description: '' },
+      { Section: 'PERFORMANCE', Description: 'Optimisations pour snapshots split' },
+      { Section: '- Tables workforce/financials/absences', Description: 'Calcul automatique' },
+      { Section: '- Matérialized views', Description: 'Performance améliorée' },
+      { Section: '- Partitioning par période', Description: 'Scalabilité optimale' }
+    ]
+
+    const instructionsWs = XLSX.utils.json_to_sheet(instructionsData)
+    XLSX.utils.book_append_sheet(wb, instructionsWs, 'INSTRUCTIONS')
+
+    // Download with timestamp
+    const timestamp = new Date().toISOString().split('T')[0]
+    XLSX.writeFile(wb, `hr_quantum_template_optimized_${timestamp}.xlsx`)
+  }
+
+  const onFixError = (errorId: string): void => {
+    console.log('Fix error:', errorId)
+    // Implementation for auto-fixing common errors could go here
+  }
+
+  const onIgnoreError = (errorId: string): void => {
+    if (!validationResult) return
+
+    const updatedErrors = validationResult.errors.filter(error => error.id !== errorId)
+    const criticalErrors = updatedErrors.filter(e => e.severity === 'critical').length
+    const warningCount = updatedErrors.filter(e => e.severity === 'warning').length
+    
+    setValidationResult({
+      ...validationResult,
+      errors: updatedErrors,
+      summary: {
+        ...validationResult.summary,
+        criticalErrors,
+        warningCount,
+        totalErrors: updatedErrors.length,
+        canProceed: criticalErrors === 0
+      }
+    })
+  }
+
+  const resetAll = () => {
+    setFile(null)
+    setProcessedData(null)
+    setValidationResult(null)
+    setFileAnalysis(null)
+    setImportStats(null)
+    resetImport()
   }
 
   return (
@@ -1750,169 +1786,686 @@ export default function CyberpunkImportPage() {
           onToggle={() => setSidebarOpen(!sidebarOpen)}
           onDownloadTemplate={downloadTemplate}
           logs={importLogs}
+          fileAnalysis={fileAnalysis}
+          importStats={importStats}
         />
 
-        <div className="flex-1 container max-w-6xl mx-auto px-8 py-8">
-          <div className="text-center mb-10">
+<div className={`flex-1 container max-w-6xl mx-auto px-8 py-8 transition-all duration-300 ${
+  sidebarOpen ? 'ml-96' : 'ml-16'
+}`}>
+          {/* Header */}
+          <motion.div 
+            className="text-center mb-10"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
             <div className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-slate-900/70 to-slate-800/70 border border-cyan-500/30 rounded-2xl backdrop-blur-sm mb-6">
               <Database size={20} className="text-cyan-400" />
-              <span className="text-cyan-400 font-mono text-sm">CYBER-HR SYSTEM v4.2</span>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              <span className="text-cyan-400 font-mono text-sm">CYBER-HR SYSTEM v5.0 OPTIMIZED</span>
+              <motion.div 
+                className="w-2 h-2 bg-green-400 rounded-full"
+                animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              />
             </div>
             
-            <h1 className="text-6xl font-bold text-white mb-4 bg-gradient-to-r from-cyan-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent font-mono">
-              DATA INJECTION PORTAL
-            </h1>
+            <motion.h1 
+              className="text-6xl font-bold text-white mb-4 bg-gradient-to-r from-cyan-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent font-mono"
+              animate={{ 
+                backgroundPosition: ['0% 50%', '100% 50%', '0% 50%']
+              }}
+              transition={{ duration: 5, repeat: Infinity }}
+            >
+              OPTIMIZED DATA INJECTION
+            </motion.h1>
             
-            <p className="text-slate-400 text-lg font-mono">
-              Interface de chargement matriciel pour génération automatique de KPIs
+            <p className="text-slate-400 text-lg font-mono max-w-3xl mx-auto">
+              Interface de chargement optimisée pour snapshots split, tables partitionnées et performance maximale. 
+              Architecture nouvelle génération compatible avec le Dashboard Cyberpunk.
             </p>
 
             {company && selectedEstablishment && (
-              <div className="flex items-center justify-center gap-4 mt-6">
+              <motion.div 
+                className="flex items-center justify-center gap-4 mt-6"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.3 }}
+              >
                 <NeoBorder>
                   <div className="px-4 py-2">
-                    <span className="text-cyan-400 text-sm font-mono">{company.nom}</span>
+                    <span className="text-cyan-400 text-sm font-mono flex items-center gap-2">
+                      <Building2 size={14} />
+                      {company.nom}
+                    </span>
                   </div>
                 </NeoBorder>
                 <NeoBorder>
                   <div className="px-4 py-2">
-                    <span className="text-purple-400 text-sm font-mono">{selectedEstablishment.nom}</span>
+                    <span className="text-purple-400 text-sm font-mono flex items-center gap-2">
+                      <Factory size={14} />
+                      {selectedEstablishment.nom}
+                    </span>
                   </div>
                 </NeoBorder>
-              </div>
+              </motion.div>
             )}
-          </div>
+          </motion.div>
 
+          {/* Error Display */}
           {error && (
-            <NeoBorder className="mb-8">
-              <div className="p-6 bg-red-900/20">
-                <div className="flex items-center gap-3">
-                  <XCircle size={24} className="text-red-400" />
-                  <div className="flex-1">
-                    <p className="text-red-400 font-bold font-mono">ERREUR SYSTÈME</p>
-                    <p className="text-red-300 text-sm mt-1 font-mono">{error}</p>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+            >
+              <NeoBorder className="mb-8">
+                <div className="p-6 bg-red-900/20">
+                  <div className="flex items-center gap-3">
+                    <ShieldAlert size={24} className="text-red-400" />
+                    <div className="flex-1">
+                      <p className="text-red-400 font-bold font-mono">ERREUR SYSTÈME OPTIMISÉ</p>
+                      <p className="text-red-300 text-sm mt-1 font-mono">{error}</p>
+                    </div>
+                    <button 
+                      onClick={resetAll} 
+                      className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                    >
+                      <X size={16} className="text-red-400" />
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => setError(null)} 
-                    className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
-                  >
-                    <X size={16} className="text-red-400" />
-                  </button>
                 </div>
-              </div>
-            </NeoBorder>
+              </NeoBorder>
+            </motion.div>
           )}
 
-          <NeoBorder className={`${isDragActive ? 'scale-[1.02]' : ''} transition-transform duration-300`} glowing={isDragActive || !!file}>
-            <div
-              {...getRootProps()}
-              className={`p-16 text-center cursor-pointer transition-all duration-500 ${
-                isDragActive 
-                  ? 'bg-cyan-500/10' 
-                  : file
-                  ? 'bg-green-500/5'
-                  : 'bg-slate-900/30'
-              }`}
+          {/* File Upload */}
+          {!file && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
             >
-              <input {...getInputProps()} />
-              
-              {file ? (
-                <div className="space-y-6">
-                  <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl flex items-center justify-center mx-auto relative">
-                    <FileCheck size={40} className="text-white" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse rounded-2xl" />
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-white font-bold text-2xl mb-2 font-mono">{file.name}</h3>
-                    <p className="text-slate-400 font-mono">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                  </div>
-
-                  <DataMatrix data={processedData} />
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="relative">
-                    <Upload size={64} className="text-cyan-400 mx-auto" />
-                    <div className="absolute inset-0 bg-cyan-400/20 rounded-full filter blur-xl animate-pulse" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-bold text-2xl mb-2 font-mono">
-                      {isDragActive ? 'INITIALISATION DU TRANSFERT' : 'INTERFACE DE CHARGEMENT'}
-                    </h3>
+              <NeoBorder className="mb-8">
+                <div 
+                  {...getRootProps()} 
+                  className={`p-12 text-center cursor-pointer transition-all duration-300 ${
+                    isDragActive ? 'bg-purple-500/10' : 'hover:bg-slate-800/20'
+                  }`}
+                >
+                  <input {...getInputProps()} />
+                  <div className="mb-6">
+                    <motion.div 
+                      className="w-24 h-24 mx-auto mb-4 rounded-full bg-gradient-to-r from-purple-500/20 to-cyan-500/20 flex items-center justify-center"
+                      animate={isDragActive ? { scale: [1, 1.1, 1] } : {}}
+                      transition={{ duration: 0.5, repeat: isDragActive ? Infinity : 0 }}
+                    >
+                      {isDragActive ? (
+                        <Upload size={40} className="text-cyan-400 animate-bounce" />
+                      ) : (
+                        <FileSpreadsheet size={40} className="text-purple-400" />
+                      )}
+                    </motion.div>
+                    <h2 className="text-2xl font-bold text-white mb-2 font-mono">
+                      {isDragActive ? 'Déposez votre fichier Excel' : 'Sélectionnez votre fichier Excel'}
+                    </h2>
                     <p className="text-slate-400 font-mono">
-                      {isDragActive ? 'Relâchez pour commencer l\'analyse' : 'Glissez votre fichier Excel ou cliquez pour sélectionner'}
+                      Formats supportés: .xlsx, .xls (max {Math.round(MAX_FILE_SIZE / 1024 / 1024)}MB)
+                    </p>
+                    <p className="text-slate-500 text-sm mt-2 font-mono">
+                      Compatible avec la nouvelle architecture split tables et snapshots optimisés
                     </p>
                   </div>
-                  <div className="flex items-center justify-center gap-6 text-sm text-slate-500 font-mono">
-                    <span>XLSX/XLS</span>
-                    <span>•</span>
-                    <span>Max 50MB</span>
-                    <span>•</span>
-                    <span>5 modules requis</span>
+
+                  <HolographicButton>
+                    <Upload size={20} className="mr-2" />
+                    Parcourir les fichiers
+                  </HolographicButton>
+                </div>
+              </NeoBorder>
+            </motion.div>
+          )}
+
+          {/* File Analysis */}
+          {file && fileAnalysis && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <NeoBorder className="mb-8">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <FileCheck size={24} className="text-green-400" />
+                      <div>
+                        <h3 className="text-white font-bold text-xl font-mono">{file.name}</h3>
+                        <p className="text-slate-400 text-sm font-mono">
+                          {formatFileSize(file.size)} • {fileAnalysis.totalRows.toLocaleString()} lignes • 
+                          Modifié le {fileAnalysis.lastModified.toLocaleDateString('fr-FR')}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={resetAll}
+                        className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                      >
+                        <X size={16} className="text-red-400" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <CyberMetrics
+                      title="Onglets Détectés"
+                      value={fileAnalysis.sheets.length}
+                      icon={Layers}
+                      gradient="bg-gradient-to-r from-cyan-500 to-blue-500"
+                      subtitle={`Requis: ${REQUIRED_SHEETS.length}`}
+                    />
+                    <CyberMetrics
+                      title="Total Lignes"
+                      value={fileAnalysis.totalRows.toLocaleString()}
+                      icon={Hash}
+                      gradient="bg-gradient-to-r from-purple-500 to-pink-500"
+                      subtitle="Données à traiter"
+                    />
+                    <CyberMetrics
+                      title="Taille Fichier"
+                      value={formatFileSize(fileAnalysis.fileSize)}
+                      icon={HardDrive}
+                      gradient="bg-gradient-to-r from-green-500 to-emerald-500"
+                      subtitle={`${((fileAnalysis.fileSize / MAX_FILE_SIZE) * 100).toFixed(1)}% limite`}
+                    />
+                    <CyberMetrics
+                      title="Temps Estimé"
+                      value={`${fileAnalysis.estimatedProcessingTime}s`}
+                      icon={Clock}
+                      gradient="bg-gradient-to-r from-orange-500 to-red-500"
+                      subtitle="Traitement optimisé"
+                    />
+                  </div>
+
+                  {fileAnalysis.missingSheets.length > 0 && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="p-4 bg-red-900/20 border border-red-500/30 rounded-xl mb-4"
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <AlertTriangle size={20} className="text-red-400" />
+                        <h4 className="text-red-300 font-bold font-mono">ONGLETS MANQUANTS DÉTECTÉS</h4>
+                      </div>
+                      <p className="text-red-400 text-sm font-mono mb-3">
+                        Les onglets suivants sont requis pour le traitement optimisé:
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {fileAnalysis.missingSheets.map(sheet => (
+                          <div key={sheet} className="flex items-center gap-2 text-red-300 text-sm font-mono">
+                            <FileX size={14} />
+                            {sheet}
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {isAnalyzing && (
+                    <div className="flex items-center justify-center gap-3 py-8">
+                      <Loader2 size={20} className="text-purple-400 animate-spin" />
+                      <span className="text-purple-400 font-mono">Analyse avancée en cours...</span>
+                    </div>
+                  )}
+
+                  {fileAnalysis.sheets.length > 0 && !isAnalyzing && (
+                    <div className="mt-4">
+                      <h4 className="text-cyan-400 font-mono font-bold mb-2">ONGLETS DÉTECTÉS:</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                        {fileAnalysis.sheets.map(sheet => (
+                          <div 
+                            key={sheet}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono border ${
+                              REQUIRED_SHEETS.includes(sheet.toUpperCase())
+                                ? 'border-green-500/30 bg-green-500/10 text-green-300'
+                                : 'border-slate-600/30 bg-slate-700/20 text-slate-400'
+                            }`}
+                          >
+                            <CheckCircle2 size={12} className={
+                              REQUIRED_SHEETS.includes(sheet.toUpperCase()) ? 'text-green-400' : 'text-slate-500'
+                            } />
+                            {sheet}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </NeoBorder>
+            </motion.div>
+          )}
+
+          {/* Data Preview */}
+          {processedData && (
+            <DataPreview processedData={processedData} />
+          )}
+
+          {/* Validation Console */}
+          {validationResult && (
+            <ValidationConsole
+              validationResult={validationResult}
+              onFixError={onFixError}
+              onIgnoreError={onIgnoreError}
+            />
+          )}
+
+          {/* Success State */}
+          {importStatus === 'success' && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              <NeoBorder className="mt-8" glowing>
+                <div className="p-10 text-center">
+                  <div className="relative inline-block mb-6">
+                    <motion.div
+                      animate={{ 
+                        rotate: [0, 360],
+                        scale: [1, 1.1, 1]
+                      }}
+                      transition={{ 
+                        rotate: { duration: 2, repeat: Infinity, ease: "linear" },
+                        scale: { duration: 1, repeat: Infinity }
+                      }}
+                    >
+                      <CheckCircle size={64} className="text-green-400 mx-auto" />
+                    </motion.div>
+                    <div className="absolute inset-0 bg-green-400/20 rounded-full filter blur-xl animate-pulse" />
+                  </div>
+                  
+                  <h3 className="text-3xl font-bold text-white mb-2 font-mono bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                    INJECTION OPTIMISÉE RÉUSSIE
+                  </h3>
+                  <p className="text-green-400 mb-2 font-mono text-lg">{importProgress.message}</p>
+                  <p className="text-slate-400 text-sm font-mono mb-8">
+                    Snapshots split calculés • Tables partitionnées • Performance maximale
+                  </p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    <CyberMetrics
+                      title="Périodes Traitées"
+                      value={processedData?.metadata.periods.length || 0}
+                      icon={Calendar}
+                      gradient="bg-gradient-to-r from-green-500 to-emerald-500"
+                      trend="up"
+                    />
+                    <CyberMetrics
+                      title="Entités Injectées"
+                      value={processedData?.metadata.totalRecords.toLocaleString() || '0'}
+                      icon={Database}
+                      gradient="bg-gradient-to-r from-blue-500 to-cyan-500"
+                      trend="up"
+                    />
+                    <CyberMetrics
+                      title="Score Qualité"
+                      value={`${validationResult?.summary.qualityScore.toFixed(1) || '0'}%`}
+                      icon={Shield}
+                      gradient="bg-gradient-to-r from-purple-500 to-pink-500"
+                      trend="up"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-center gap-4">
+                    <HolographicButton 
+                      onClick={() => router.push('/dashboard')}
+                      variant="success"
+                      size="lg"
+                    >
+                      <BarChart3 size={24} className="mr-3" />
+                      Dashboard Cyberpunk
+                      <ArrowRight size={20} className="ml-2" />
+                    </HolographicButton>
+                    
+                    <HolographicButton 
+                      onClick={() => window.location.reload()} 
+                      variant="secondary"
+                      size="lg"
+                    >
+                      <RefreshCw size={20} className="mr-2" />
+                      Nouvelle Mission
+                    </HolographicButton>
+                  </div>
+                  
+                  <div className="mt-6 text-center">
+                    <p className="text-slate-500 text-xs font-mono">
+                      Redirection automatique vers le Dashboard dans 3 secondes...
+                    </p>
                   </div>
                 </div>
-              )}
-            </div>
-          </NeoBorder>
+              </NeoBorder>
+            </motion.div>
+          )}
 
-          {validationResult && <ValidationConsole validation={validationResult} />}
+          {/* Action Button */}
+          {file && processedData && validationResult && importStatus === 'idle' && (
+            <motion.div 
+              className="mt-8 text-center"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <div className="space-y-6">
+                {/* Pre-flight check */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className={`p-4 rounded-xl border ${
+                    validationResult.summary.canProceed 
+                      ? 'border-green-500/30 bg-green-500/10' 
+                      : 'border-red-500/30 bg-red-500/10'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield size={16} className={validationResult.summary.canProceed ? 'text-green-400' : 'text-red-400'} />
+                      <span className="font-mono text-sm">Validation</span>
+                    </div>
+                    <p className={`font-bold ${validationResult.summary.canProceed ? 'text-green-400' : 'text-red-400'}`}>
+                      {validationResult.summary.canProceed ? 'SYSTÈME VALIDÉ' : 'ERREURS CRITIQUES'}
+                    </p>
+                  </div>
 
-          {importStatus === 'processing' && <ProgressPortal progress={importProgress} onCancel={() => {
-            abortControllerRef.current?.abort()
-            setImportStatus('idle')
-          }} />}
+                  <div className={`p-4 rounded-xl border ${
+                    selectedEstablishment 
+                      ? 'border-green-500/30 bg-green-500/10' 
+                      : 'border-orange-500/30 bg-orange-500/10'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Building2 size={16} className={selectedEstablishment ? 'text-green-400' : 'text-orange-400'} />
+                      <span className="font-mono text-sm">Établissement</span>
+                    </div>
+                    <p className={`font-bold text-sm ${selectedEstablishment ? 'text-green-400' : 'text-orange-400'}`}>
+                      {selectedEstablishment ? selectedEstablishment.nom : 'NON SÉLECTIONNÉ'}
+                    </p>
+                  </div>
 
-          {importStatus === 'success' && (
-            <NeoBorder className="mt-8" glowing>
-              <div className="p-10 text-center">
-                <div className="relative inline-block">
-                  <CheckCircle size={64} className="text-green-400 mx-auto mb-4" />
-                  <div className="absolute inset-0 bg-green-400/20 rounded-full filter blur-xl animate-pulse" />
+                  <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Zap size={16} className="text-cyan-400" />
+                      <span className="font-mono text-sm">Processeur</span>
+                    </div>
+                    <p className="font-bold text-cyan-400">OPTIMISÉ v5.0</p>
+                  </div>
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2 font-mono">MISSION ACCOMPLIE</h3>
-                <p className="text-green-400 mb-6 font-mono">{importProgress.message}</p>
-                <div className="flex items-center justify-center gap-4">
-                  <HolographicButton onClick={() => router.push('/dashboard')}>
-                    <BarChart3 size={20} className="mr-2" />
-                    Dashboard Analytique
-                  </HolographicButton>
-                  <HolographicButton onClick={() => window.location.reload()} variant="secondary">
-                    <RefreshCw size={20} className="mr-2" />
-                    Nouvelle Mission
-                  </HolographicButton>
+
+                {/* Main action button */}
+                <HolographicButton
+                  onClick={handleProcessImport}
+                  disabled={!validationResult.summary.canProceed || !selectedEstablishment}
+                  size="lg"
+                  className="min-w-80"
+                >
+                  {validationResult.summary.canProceed && selectedEstablishment ? (
+                    <>
+                      <Zap size={24} className="mr-3" />
+                      LANCER L'INJECTION OPTIMISÉE
+                      <motion.div 
+                        className="ml-3"
+                        animate={{ x: [0, 5, 0] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                      >
+                        <ArrowRight size={20} />
+                      </motion.div>
+                    </>
+                  ) : !selectedEstablishment ? (
+                    <>
+                      <AlertTriangle size={20} className="mr-2" />
+                      SÉLECTIONNER UN ÉTABLISSEMENT
+                    </>
+                  ) : (
+                    <>
+                      <XCircle size={20} className="mr-2" />
+                      CORRECTIONS REQUISES
+                    </>
+                  )}
+                </HolographicButton>
+                
+                {validationResult.summary.canProceed && selectedEstablishment && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="max-w-2xl mx-auto"
+                  >
+                    <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/50">
+                      <p className="text-cyan-400 text-sm font-mono mb-2">
+                        🚀 Prêt pour l'injection optimisée
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                        <div>
+                          <span className="text-slate-500">Entités:</span>
+                          <span className="text-white ml-2 font-bold">
+                            {processedData.metadata.totalRecords.toLocaleString()}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Périodes:</span>
+                          <span className="text-white ml-2 font-bold">
+                            {processedData.metadata.periods.length}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Qualité:</span>
+                          <span className="text-green-400 ml-2 font-bold">
+                            {validationResult.summary.qualityScore.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">Durée:</span>
+                          <span className="text-purple-400 ml-2 font-bold">
+                            ~{fileAnalysis?.estimatedProcessingTime}s
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Quick Actions Panel */}
+          {!file && (
+            <motion.div 
+              className="mt-12"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
+            >
+              <NeoBorder>
+                <div className="p-6">
+                  <h3 className="text-white font-bold text-xl font-mono mb-6 flex items-center gap-3">
+                    <Sparkles size={24} className="text-purple-400" />
+                    Actions Rapides
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <motion.button
+                      onClick={downloadTemplate}
+                      className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-purple-500/50 transition-all group"
+                      whileHover={{ scale: 1.02, y: -2 }}
+                    >
+                      <Download size={24} className="text-purple-400 mb-2 group-hover:scale-110 transition-transform" />
+                      <p className="font-mono text-sm text-white font-bold">Template Excel</p>
+                      <p className="font-mono text-xs text-slate-400 mt-1">Optimisé v5.0</p>
+                    </motion.button>
+
+                    <motion.button
+                      onClick={() => window.open('/docs/import-guide', '_blank')}
+                      className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-cyan-500/50 transition-all group"
+                      whileHover={{ scale: 1.02, y: -2 }}
+                    >
+                      <BookOpen size={24} className="text-cyan-400 mb-2 group-hover:scale-110 transition-transform" />
+                      <p className="font-mono text-sm text-white font-bold">Guide d'Import</p>
+                      <p className="font-mono text-xs text-slate-400 mt-1">Documentation</p>
+                    </motion.button>
+
+                    <motion.button
+                      onClick={() => router.push('/dashboard')}
+                      className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-green-500/50 transition-all group"
+                      whileHover={{ scale: 1.02, y: -2 }}
+                    >
+                      <BarChart3 size={24} className="text-green-400 mb-2 group-hover:scale-110 transition-transform" />
+                      <p className="font-mono text-sm text-white font-bold">Dashboard</p>
+                      <p className="font-mono text-xs text-slate-400 mt-1">Analytics</p>
+                    </motion.button>
+
+                    <motion.button
+                      onClick={() => window.open('/support', '_blank')}
+                      className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-orange-500/50 transition-all group"
+                      whileHover={{ scale: 1.02, y: -2 }}
+                    >
+                      <Shield size={24} className="text-orange-400 mb-2 group-hover:scale-110 transition-transform" />
+                      <p className="font-mono text-sm text-white font-bold">Support</p>
+                      <p className="font-mono text-xs text-slate-400 mt-1">Assistance</p>
+                    </motion.button>
+                  </div>
+                </div>
+              </NeoBorder>
+            </motion.div>
+          )}
+
+          {/* System Info Footer */}
+          <motion.div 
+            className="mt-16 p-6 bg-gradient-to-r from-slate-900/30 to-slate-800/30 backdrop-blur-xl rounded-2xl border border-slate-700/30"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1 }}
+          >
+            <div className="flex items-center justify-between text-sm text-slate-400">
+              <div className="flex items-center gap-8">
+                <div className="flex items-center gap-2">
+                  <motion.div 
+                    className="w-2 h-2 bg-green-400 rounded-full"
+                    animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
+                  <span className="font-mono">Système Optimisé Opérationnel</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Database size={14} className="text-purple-400" />
+                  <span className="font-mono">Split Tables Architecture</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Layers size={14} className="text-cyan-400" />
+                  <span className="font-mono">Partitioned Snapshots</span>
                 </div>
               </div>
-            </NeoBorder>
-          )}
-
-          {file && processedData && validationResult && importStatus === 'idle' && (
-            <div className="mt-8 text-center">
-              <HolographicButton
-                onClick={processImport}
-                disabled={!validationResult.summary.canProceed || !selectedEstablishment}
-                size="lg"
-              >
-                {validationResult.summary.canProceed ? (
-                  <>
-                    <Zap size={24} className="mr-3" />
-                    LANCER L'INJECTION
-                  </>
-                ) : (
-                  'CORRECTIONS REQUISES'
-                )}
-              </HolographicButton>
               
-              {validationResult.summary.canProceed && (
-                <p className="text-cyan-400 text-sm mt-4 font-mono">
-                  Prêt pour l'injection de {processedData.metadata.totalRecords} entités
-                </p>
-              )}
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <Cpu size={14} className="text-purple-400" />
+                  <span className="font-mono">Processeur v5.0</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Zap size={14} className="text-cyan-400" />
+                  <span className="font-mono">HR Quantum Analytics</span>
+                </div>
+              </div>
             </div>
-          )}
+
+            {processedData && (
+              <div className="mt-4 pt-4 border-t border-slate-700/30">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
+                  <div>
+                    <span className="text-slate-500">Dernière analyse:</span>
+                    <div className="text-slate-300">{new Date().toLocaleTimeString('fr-FR')}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Fichier:</span>
+                    <div className="text-slate-300 truncate">{file?.name}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Établissement:</span>
+                    <div className="text-slate-300">{selectedEstablishment?.nom || 'Non sélectionné'}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">État:</span>
+                    <div className={`${
+                      validationResult?.summary.canProceed ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {validationResult?.summary.canProceed ? 'Prêt' : 'Corrections requises'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
         </div>
       </div>
+
+      {/* Progress Portal */}
+      <ProgressPortal
+        show={importStatus === 'processing'}
+        progress={importProgress}
+        onCancel={cancelImport}
+        logs={importLogs}
+      />
+
+      {/* Establishment Selector Modal */}
+      {establishments.length > 1 && (
+        <AnimatePresence>
+          {!selectedEstablishment && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                className="w-full max-w-md mx-4"
+              >
+                <NeoBorder>
+                  <div className="p-6">
+                    <h3 className="text-white font-bold text-lg font-mono mb-4 flex items-center gap-2">
+                      <Building2 size={20} className="text-purple-400" />
+                      Sélectionner un Établissement
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      {establishments.map(establishment => (
+                        <motion.button
+                          key={establishment.id}
+                          onClick={() => setSelectedEstablishment(establishment)}
+                          className="w-full p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-purple-500/50 transition-all text-left group"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-white font-mono font-bold group-hover:text-purple-300 transition-colors">
+                                {establishment.nom}
+                              </p>
+                              <p className="text-slate-400 text-sm font-mono">
+                                {establishment.code_etablissement || 'Code non défini'}
+                                {establishment.is_headquarters && (
+                                  <span className="ml-2 px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs">
+                                    SIÈGE
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <ArrowRight size={16} className="text-slate-500 group-hover:text-purple-400 transition-colors" />
+                          </div>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+                </NeoBorder>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
     </div>
   )
 }

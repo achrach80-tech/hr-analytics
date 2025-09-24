@@ -1,273 +1,115 @@
-// ==========================================
-// IMPORT HOOK
-// ==========================================
+'use client'
 
-import { useState, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { ImportOrchestrator } from '../orchestrator/importOrchestrator'
-import { validateFile } from '../processors/dataProcessors'
-import { 
+import { useState, useCallback, useRef } from 'react'
+import { OptimizedProcessor } from '../optimized/optimizedProcessor'
+import type { 
+  ProcessedData, 
   ImportProgress, 
-  ImportResult, 
-  ValidationResult,
-  ProcessedData 
+  ValidationResult, 
+  Establishment,
+  LogType 
 } from '../types'
 
-interface UseImportState {
-  // File state
-  file: File | null
-  processedData: ProcessedData | null
-  validationResult: ValidationResult | null
-  
-  // Status
-  status: 'idle' | 'validating' | 'processing' | 'success' | 'error'
-  progress: ImportProgress | null
-  error: string | null
-  
-  // Logs
-  logs: Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'warning' | 'error' }>
-  
-  // Results
-  importResult: ImportResult | null
-}
-
-interface UseImportActions {
-  // File handling
-  handleFileSelect: (file: File) => Promise<void>
-  clearFile: () => void
-  
-  // Import process
-  startImport: (establishmentId: string) => Promise<void>
-  cancelImport: () => void
-  
-  // Utilities
-  clearError: () => void
-  downloadTemplate: () => void
-}
-
-export function useImport(): UseImportState & UseImportActions {
-  const [state, setState] = useState<UseImportState>({
-    file: null,
-    processedData: null,
-    validationResult: null,
-    status: 'idle',
-    progress: null,
-    error: null,
-    logs: [],
-    importResult: null
+export const useImport = () => {
+  const [importStatus, setImportStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle')
+  const [importProgress, setImportProgress] = useState<ImportProgress>({
+    phase: 'validation',
+    step: '',
+    current: 0,
+    total: 0,
+    percentage: 0,
+    message: ''
   })
-  
-  const orchestratorRef = useRef<ImportOrchestrator | null>(null)
-  const supabase = createClient()
-  const router = useRouter()
+  const [importLogs, setImportLogs] = useState<string[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  /**
-   * Add log entry
-   */
-  const addLog = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
-    const timestamp = new Date().toLocaleTimeString()
-    setState(prev => ({
-      ...prev,
-      logs: [...prev.logs, { timestamp, message, type }]
-    }))
-  }, [])
+  const processorRef = useRef<OptimizedProcessor | null>(null)
 
-  /**
-   * Update progress
-   */
-  const updateProgress = useCallback((progress: ImportProgress) => {
-    setState(prev => ({ ...prev, progress }))
-  }, [])
-
-  /**
-   * Handle file selection and validation
-   */
-  const handleFileSelect = useCallback(async (file: File) => {
-    try {
-      setState(prev => ({
-        ...prev,
-        file: null,
-        processedData: null,
-        validationResult: null,
-        status: 'idle',
-        error: null,
-        logs: [],
-        importResult: null
-      }))
-
-      // Validate file
-      const validation = validateFile(file)
-      if (!validation.valid) {
-        throw new Error(validation.error)
-      }
-
-      setState(prev => ({ ...prev, file, status: 'validating' }))
-      addLog('Début de l\'analyse du fichier', 'info')
-
-      // Create orchestrator and analyze file
-      const orchestrator = new ImportOrchestrator(updateProgress, addLog)
-      orchestratorRef.current = orchestrator
-
-      // Since we can't expose the analyzeFile method, we'll create a simplified version
-      // In practice, you might want to refactor ImportOrchestrator to allow separate analysis
-      addLog('Fichier sélectionné avec succès', 'success')
-      setState(prev => ({ ...prev, status: 'idle' }))
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
-      setState(prev => ({ ...prev, error: errorMessage, status: 'error' }))
-      addLog(errorMessage, 'error')
+  const addLog = useCallback((message: string, type: LogType = 'info'): void => {
+    const timestamp = new Date().toLocaleTimeString('fr-FR')
+    const icons: Record<LogType, string> = { 
+      info: 'ℹ️', 
+      success: '✅', 
+      warning: '⚠️', 
+      error: '❌' 
     }
-  }, [addLog, updateProgress])
-
-  /**
-   * Clear selected file
-   */
-  const clearFile = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      file: null,
-      processedData: null,
-      validationResult: null,
-      status: 'idle',
-      error: null,
-      logs: [],
-      importResult: null
-    }))
-    orchestratorRef.current = null
+    const formattedMessage = `${timestamp} ${icons[type]} ${message}`
+    setImportLogs(prev => [...prev, formattedMessage])
   }, [])
 
-  /**
-   * Start the import process
-   */
-  const startImport = useCallback(async (establishmentId: string) => {
-    if (!state.file) {
-      throw new Error('Aucun fichier sélectionné')
+  const processImport = useCallback(async (
+    processedData: ProcessedData,
+    selectedEstablishment: Establishment,
+    fileName: string,
+    validationResult: ValidationResult
+  ): Promise<void> => {
+    if (!validationResult?.summary?.canProceed) {
+      setError('Validation échouée - corrections requises')
+      return
     }
 
     try {
-      setState(prev => ({ ...prev, status: 'processing', error: null }))
-      addLog('Début de l\'import', 'info')
+      setImportStatus('processing')
+      setError(null)
+      setImportLogs([])
+      
+      processorRef.current = new OptimizedProcessor()
+      
+      await processorRef.current.processImport(
+        processedData,
+        selectedEstablishment.id,
+        fileName,
+        setImportProgress,
+        addLog
+      )
 
-      const orchestrator = new ImportOrchestrator(updateProgress, addLog)
-      orchestratorRef.current = orchestrator
-
-      const result = await orchestrator.processImport(state.file, establishmentId)
-
-      setState(prev => ({
-        ...prev,
-        status: 'success',
-        importResult: result
-      }))
-
-      addLog('Import terminé avec succès!', 'success')
-
-      // Auto-redirect to dashboard after success
+      setImportStatus('success')
+      
+      // Auto-redirect after 3 seconds
       setTimeout(() => {
-        router.push('/dashboard')
+        window.location.href = '/dashboard'
       }, 3000)
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
-      setState(prev => ({
-        ...prev,
-        status: 'error',
-        error: errorMessage
-      }))
+      console.error('Import error:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Erreur système'
+      setError(errorMessage)
+      setImportStatus('error')
       addLog(errorMessage, 'error')
     }
-  }, [state.file, addLog, updateProgress, router])
+  }, [addLog])
 
-  /**
-   * Cancel ongoing import
-   */
   const cancelImport = useCallback(() => {
-    if (orchestratorRef.current) {
-      orchestratorRef.current.cancelImport()
-      setState(prev => ({ ...prev, status: 'idle' }))
-      addLog('Import annulé par l\'utilisateur', 'warning')
+    if (processorRef.current) {
+      processorRef.current.abort()
     }
+    setImportStatus('idle')
+    addLog('Import annulé par l\'utilisateur', 'warning')
   }, [addLog])
 
-  /**
-   * Clear error state
-   */
-  const clearError = useCallback(() => {
-    setState(prev => ({ ...prev, error: null }))
+  const resetImport = useCallback(() => {
+    setImportStatus('idle')
+    setImportProgress({
+      phase: 'validation',
+      step: '',
+      current: 0,
+      total: 0,
+      percentage: 0,
+      message: ''
+    })
+    setImportLogs([])
+    setError(null)
+    processorRef.current = null
   }, [])
 
-  /**
-   * Download Excel template
-   */
-  const downloadTemplate = useCallback(() => {
-    // This would be moved from the original component
-    // For now, we'll add a placeholder
-    addLog('Téléchargement du template...', 'info')
-    
-    // Import the template download logic here
-    // downloadTemplateLogic()
-    
-    addLog('Template téléchargé', 'success')
-  }, [addLog])
-
   return {
-    // State
-    ...state,
-    
-    // Actions
-    handleFileSelect,
-    clearFile,
-    startImport,
+    importStatus,
+    importProgress,
+    importLogs,
+    error,
+    processImport,
     cancelImport,
-    clearError,
-    downloadTemplate
-  }
-}
-
-/**
- * Hook for validation-only workflow
- */
-export function useValidation() {
-  const [validationState, setValidationState] = useState<{
-    isValidating: boolean
-    result: ValidationResult | null
-    error: string | null
-  }>({
-    isValidating: false,
-    result: null,
-    error: null
-  })
-
-  const validateData = useCallback(async (data: ProcessedData) => {
-    setValidationState(prev => ({ ...prev, isValidating: true, error: null }))
-    
-    try {
-      // Create validation engine and validate
-      const { ValidationEngine } = await import('../validators/validationEngine')
-      const engine = new ValidationEngine()
-      const result = engine.validate(data)
-      
-      setValidationState({
-        isValidating: false,
-        result,
-        error: null
-      })
-      
-      return result
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erreur de validation'
-      setValidationState({
-        isValidating: false,
-        result: null,
-        error: errorMessage
-      })
-      throw error
-    }
-  }, [])
-
-  return {
-    ...validationState,
-    validateData
+    resetImport,
+    addLog
   }
 }

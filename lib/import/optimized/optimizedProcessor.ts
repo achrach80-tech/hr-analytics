@@ -1,393 +1,480 @@
-import * as XLSX from 'xlsx'
 import { createClient } from '@/lib/supabase/client'
-import { 
-  normalizeDate, 
-  normalizePeriod, 
-  sanitizeString, 
-  sanitizeNumber,
-  generateBatchId 
-} from '../processors/dataProcessors'
+import type { 
+  ProcessedData, 
+  ImportProgress, 
+  LogType,
+  EmployeeData,
+  RemunerationData,
+  AbsenceData
+} from '../types'
 
-interface ImportProgress {
-  phase: 'reading' | 'validating' | 'processing' | 'kpis' | 'completed'
-  progress: number
-  message: string
-  detail?: string
-}
-
-export class OptimizedImportProcessor {
+export class OptimizedProcessor {
   private supabase = createClient()
-  private jobId: string
-  private batchSize = 500 // Increased batch size
-  
-  constructor(jobId: string) {
-    this.jobId = jobId
-  }
+  private isAborted = false
 
-  async processImport(file: File, establishmentId: string) {
-    const startTime = Date.now()
+  async processImport(
+    data: ProcessedData,
+    establishmentId: string,
+    fileName: string,
+    onProgress: (progress: ImportProgress) => void,
+    onLog: (message: string, type?: LogType) => void
+  ): Promise<void> {
+    const batchId = `OPT-${Date.now()}-${Math.random().toString(36).substring(7)}`
     
     try {
-      // Phase 1: Read file with streaming
-      await this.updateProgress('reading', 10, 'Reading file...')
-      const workbook = await this.readFileOptimized(file)
-      
-      // Phase 2: Fast validation
-      await this.updateProgress('validating', 25, 'Validating structure...')
-      const validation = this.fastValidation(workbook)
-      
-      if (!validation.valid) {
-        throw new Error(validation.error)
-      }
-      
-      // Phase 3: Optimized data processing
-      await this.updateProgress('processing', 40, 'Processing data...')
-      const result = await this.optimizedDataImport(workbook, establishmentId)
-      
-      // Phase 4: Parallel KPI calculation
-      await this.updateProgress('kpis', 80, 'Calculating KPIs...')
-      const snapshotsCalculated = await this.parallelKPICalculation(
-        establishmentId, 
-        result.periods
-      )
-      
-      // Phase 5: Complete
-      await this.updateProgress('completed', 100, 'Import completed!')
-      
-      const processingTime = Date.now() - startTime
-      
-      return {
-        success: true,
-        recordsImported: result.recordsImported,
-        snapshotsCalculated,
-        processingTime,
-        batchId: result.batchId
-      }
-      
-    } catch (error) {
-      await this.updateProgress('reading', 0, 'Import failed', error instanceof Error ? error.message : 'Unknown error')
-      throw error
-    }
-  }
+      onLog(`🚀 Démarrage injection optimisée: ${data.metadata.totalRecords} entités`, 'info')
 
-  private async readFileOptimized(file: File): Promise<XLSX.WorkBook> {
-    // Read file in chunks to reduce memory pressure
-    const buffer = await file.arrayBuffer()
-    
-    const workbook = XLSX.read(buffer, {
-      type: 'array',
-      cellDates: true,
-      cellNF: false, // Skip number formatting for performance
-      cellHTML: false, // Skip HTML for performance
-      cellStyles: false, // Skip styles for performance
-      sheetStubs: false // Skip empty cells
-    })
-    
-    // Clean up buffer reference to help GC
-    return workbook
-  }
+      // Step 1: Clean existing data
+      await this.cleanExistingData(establishmentId, data.metadata.periods, onProgress, onLog)
 
-  private fastValidation(workbook: XLSX.WorkBook): { valid: boolean; error?: string } {
-    const requiredSheets = ['EMPLOYES', 'REMUNERATION', 'ABSENCES', 'REFERENTIEL_ORGANISATION', 'REFERENTIEL_ABSENCES']
-    const missingSheets = requiredSheets.filter(sheet => !workbook.SheetNames.includes(sheet))
-    
-    if (missingSheets.length > 0) {
-      return { valid: false, error: `Missing sheets: ${missingSheets.join(', ')}` }
-    }
-    
-    // Quick row count validation
-    const employeeSheet = workbook.Sheets['EMPLOYES']
-    const range = XLSX.utils.decode_range(employeeSheet['!ref'] || 'A1')
-    const rowCount = range.e.r - range.s.r
-    
-    if (rowCount > 50000) {
-      return { valid: false, error: 'File too large. Maximum 50,000 employees per import.' }
-    }
-    
-    return { valid: true }
-  }
+      // Step 2: Insert core data
+      await this.insertCoreData(establishmentId, data, batchId, onProgress, onLog)
 
-  private async optimizedDataImport(workbook: XLSX.WorkBook, establishmentId: string) {
-    const batchId = generateBatchId()
-    const periods = new Set<string>()
-    let totalRecords = 0
-    
-    // Initialize batch record
-    await this.supabase.from('import_batches').insert({
-      id: batchId,
-      etablissement_id: establishmentId,
-      status: 'processing',
-      job_id: this.jobId
-    })
+      // Step 3: Calculate optimized snapshots
+      await this.calculateSnapshots(establishmentId, data.metadata.periods, onProgress, onLog)
 
-    try {
-      // Process referentials first (small tables)
-      await this.processReferentials(workbook, establishmentId)
-      
-      // Process employees with optimized bulk insert
-      const employeeResult = await this.bulkInsertEmployees(workbook, establishmentId, batchId)
-      totalRecords += employeeResult.count
-      employeeResult.periods.forEach(p => periods.add(p))
-      
-      await this.updateProgress('processing', 55, 'Importing remunerations...')
-      
-      // Process remunerations
-      const remResult = await this.bulkInsertRemunerations(workbook, establishmentId, batchId, employeeResult.employeeMap)
-      totalRecords += remResult.count
-      remResult.periods.forEach(p => periods.add(p))
-      
-      await this.updateProgress('processing', 70, 'Importing absences...')
-      
-      // Process absences
-      const absResult = await this.bulkInsertAbsences(workbook, establishmentId, batchId)
-      totalRecords += absResult.count
-      
-      // Update batch completion
-      await this.supabase.from('import_batches').update({
-        status: 'completed',
-        nb_employes_imported: employeeResult.count,
-        nb_remunerations_imported: remResult.count,
-        nb_absences_imported: absResult.count,
-        completed_at: new Date().toISOString()
-      }).eq('id', batchId)
-      
-      return {
-        batchId,
-        recordsImported: {
-          employees: employeeResult.count,
-          remunerations: remResult.count,
-          absences: absResult.count
-        },
-        periods: Array.from(periods)
-      }
-      
-    } catch (error) {
-      await this.supabase.from('import_batches').update({
-        status: 'failed',
-        error_message: error instanceof Error ? error.message : 'Unknown error'
-      }).eq('id', batchId)
-      throw error
-    }
-  }
-
-  private async bulkInsertEmployees(workbook: XLSX.WorkBook, establishmentId: string, batchId: string) {
-    const employeesData = XLSX.utils.sheet_to_json(workbook.Sheets['EMPLOYES'])
-    const employeeMap = new Map<string, string>()
-    const periods = new Set<string>()
-    let processedCount = 0
-    
-    // Process in optimized batches
-    for (let i = 0; i < employeesData.length; i += this.batchSize) {
-      const batch = employeesData.slice(i, i + this.batchSize)
-      
-      const normalizedBatch = batch.map((emp: any) => {
-        const periode = normalizePeriod(emp.periode)
-        periods.add(periode)
-        
-        return {
-          etablissement_id: establishmentId,
-          matricule: sanitizeString(emp.matricule, 50),
-          periode,
-          sexe: emp.sexe || null,
-          date_naissance: normalizeDate(emp.date_naissance),
-          date_entree: normalizeDate(emp.date_entree) || '2020-01-01',
-          date_sortie: normalizeDate(emp.date_sortie),
-          type_contrat: emp.type_contrat || 'CDI',
-          temps_travail: sanitizeNumber(emp.temps_travail, 1),
-          intitule_poste: sanitizeString(emp.intitule_poste || 'Non spécifié'),
-          code_cost_center: sanitizeString(emp.code_cost_center),
-          code_site: sanitizeString(emp.code_site),
-          statut_emploi: emp.statut_emploi || 'Actif',
-          import_batch_id: batchId
-        }
+      onProgress({
+        phase: 'completion',
+        step: 'INJECTION OPTIMISÉE RÉUSSIE',
+        current: 100,
+        total: 100,
+        percentage: 100,
+        message: `${data.metadata.totalRecords} entités injectées avec succès`
       })
-      
-      // Use single bulk insert with conflict resolution
-      const { data: insertedEmployees, error } = await this.supabase
+
+      onLog(`✅ Mission accomplie: ${data.metadata.periods.length} périodes optimisées`, 'success')
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
+      onLog(`❌ ERREUR FATALE: ${errorMessage}`, 'error')
+      throw new Error(`Import optimisé échoué: ${errorMessage}`)
+    }
+  }
+
+  private async cleanExistingData(
+    establishmentId: string,
+    periods: string[],
+    onProgress: (progress: ImportProgress) => void,
+    onLog: (message: string, type?: LogType) => void
+  ): Promise<void> {
+    onProgress({
+      phase: 'processing',
+      step: 'Nettoyage données existantes',
+      current: 5,
+      total: 100,
+      percentage: 5,
+      message: 'Préparation base de données...'
+    })
+
+    try {
+      for (const period of periods) {
+        const normalizedPeriod = this.normalizePeriod(period)
+        
+        await Promise.all([
+          this.supabase
+            .from('snapshots_workforce')
+            .delete()
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', normalizedPeriod),
+          
+          this.supabase
+            .from('snapshots_financials')
+            .delete()
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', normalizedPeriod),
+          
+          this.supabase
+            .from('snapshots_absences')
+            .delete()
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', normalizedPeriod)
+        ])
+      }
+
+      onLog('🧹 Données existantes nettoyées', 'success')
+    } catch (error) {
+      onLog('⚠️ Erreur nettoyage (continuons)', 'warning')
+    }
+  }
+
+  private async insertCoreData(
+    establishmentId: string,
+    data: ProcessedData,
+    batchId: string,
+    onProgress: (progress: ImportProgress) => void,
+    onLog: (message: string, type?: LogType) => void
+  ): Promise<void> {
+    const BATCH_SIZE = 100
+
+    // Insert employees
+    onProgress({
+      phase: 'processing',
+      step: 'Injection employés',
+      current: 20,
+      total: 100,
+      percentage: 20,
+      message: `0/${data.employees.length} employés`
+    })
+
+    for (let i = 0; i < data.employees.length; i += BATCH_SIZE) {
+      if (this.isAborted) throw new Error('Import annulé')
+
+      const batch = data.employees.slice(i, i + BATCH_SIZE)
+      const employeesData = batch.map((emp: EmployeeData) => ({
+        etablissement_id: establishmentId,
+        matricule: this.cleanString(emp.matricule, 50),
+        periode: this.normalizePeriod(emp.periode),
+        sexe: emp.sexe || null,
+        date_naissance: emp.date_naissance || null,
+        date_entree: emp.date_entree || null,
+        date_sortie: emp.date_sortie || null,
+        type_contrat: emp.type_contrat || 'CDI',
+        temps_travail: this.cleanNumber(emp.temps_travail, 1),
+        intitule_poste: this.cleanString(emp.intitule_poste),
+        code_cost_center: this.cleanString(emp.code_cost_center),
+        code_site: this.cleanString(emp.code_site),
+        statut_emploi: emp.statut_emploi || 'Actif',
+        import_batch_id: batchId
+      }))
+
+      const { error } = await this.supabase
         .from('employes')
-        .upsert(normalizedBatch, { 
+        .upsert(employeesData, { 
           onConflict: 'etablissement_id,matricule,periode',
-          count: 'exact'
+          ignoreDuplicates: false 
         })
-        .select('id, matricule, periode')
-      
-      if (error) throw error
-      
-      // Build employee mapping for foreign keys
-      insertedEmployees?.forEach(emp => {
-        employeeMap.set(`${emp.matricule}_${emp.periode}`, emp.id)
-      })
-      
-      processedCount += batch.length
-      const progress = 40 + Math.round((processedCount / employeesData.length) * 15)
-      await this.updateProgress('processing', progress, `Imported ${processedCount}/${employeesData.length} employees`)
-    }
-    
-    return {
-      count: employeesData.length,
-      employeeMap,
-      periods: Array.from(periods)
-    }
-  }
 
-  private async bulkInsertRemunerations(workbook: XLSX.WorkBook, establishmentId: string, batchId: string, employeeMap: Map<string, string>) {
-    const remunerationsData = XLSX.utils.sheet_to_json(workbook.Sheets['REMUNERATION'])
-    const periods = new Set<string>()
-    let processedCount = 0
-    
-    for (let i = 0; i < remunerationsData.length; i += this.batchSize) {
-      const batch = remunerationsData.slice(i, i + this.batchSize)
-      
-      const normalizedBatch = batch.map((rem: any) => {
-        const periode = normalizePeriod(rem.mois_paie)
-        periods.add(periode)
-        
-        return {
-          etablissement_id: establishmentId,
-          employe_id: employeeMap.get(`${rem.matricule}_${periode}`) || null,
-          matricule: sanitizeString(rem.matricule, 50),
-          mois_paie: periode,
-          salaire_de_base: sanitizeNumber(rem.salaire_de_base),
-          primes_fixes: sanitizeNumber(rem.primes_fixes),
-          primes_variables: sanitizeNumber(rem.primes_variables),
-          cotisations_sociales: sanitizeNumber(rem.cotisations_sociales),
-          import_batch_id: batchId
-        }
+      if (error) throw error
+
+      const processed = Math.min(i + BATCH_SIZE, data.employees.length)
+      onProgress({
+        phase: 'processing',
+        step: 'Injection employés',
+        current: 20 + Math.round((processed / data.employees.length) * 20),
+        total: 100,
+        percentage: 20 + Math.round((processed / data.employees.length) * 20),
+        message: `${processed}/${data.employees.length} employés`
       })
-      
+    }
+
+    onLog(`📊 ${data.employees.length} employés injectés`, 'success')
+
+    // Insert remunerations
+    onProgress({
+      phase: 'processing',
+      step: 'Injection rémunérations',
+      current: 50,
+      total: 100,
+      percentage: 50,
+      message: `0/${data.remunerations.length} rémunérations`
+    })
+
+    for (let i = 0; i < data.remunerations.length; i += BATCH_SIZE) {
+      if (this.isAborted) throw new Error('Import annulé')
+
+      const batch = data.remunerations.slice(i, i + BATCH_SIZE)
+      const remunerationsData = batch.map((rem: RemunerationData) => ({
+        etablissement_id: establishmentId,
+        matricule: this.cleanString(rem.matricule, 50),
+        mois_paie: this.normalizePeriod(rem.mois_paie),
+        salaire_de_base: this.cleanNumber(rem.salaire_de_base),
+        primes_fixes: this.cleanNumber(rem.primes_fixes),
+        primes_variables: this.cleanNumber(rem.primes_variables),
+        primes_exceptionnelles: this.cleanNumber(rem.primes_exceptionnelles),
+        heures_supp_payees: this.cleanNumber(rem.heures_supp_payees),
+        avantages_nature: this.cleanNumber(rem.avantages_nature),
+        indemnites: this.cleanNumber(rem.indemnites),
+        cotisations_sociales: this.cleanNumber(rem.cotisations_sociales),
+        taxes_sur_salaire: this.cleanNumber(rem.taxes_sur_salaire),
+        autres_charges: this.cleanNumber(rem.autres_charges),
+        import_batch_id: batchId
+      }))
+
       const { error } = await this.supabase
         .from('remunerations')
-        .upsert(normalizedBatch, { onConflict: 'etablissement_id,matricule,mois_paie' })
-      
-      if (error) throw error
-      
-      processedCount += batch.length
-      const progress = 55 + Math.round((processedCount / remunerationsData.length) * 15)
-      await this.updateProgress('processing', progress, `Imported ${processedCount}/${remunerationsData.length} remunerations`)
-    }
-    
-    return {
-      count: remunerationsData.length,
-      periods: Array.from(periods)
-    }
-  }
+        .upsert(remunerationsData, { 
+          onConflict: 'etablissement_id,matricule,mois_paie',
+          ignoreDuplicates: false 
+        })
 
-  private async bulkInsertAbsences(workbook: XLSX.WorkBook, establishmentId: string, batchId: string) {
-    const absencesData = XLSX.utils.sheet_to_json(workbook.Sheets['ABSENCES'])
-    let processedCount = 0
-    
-    for (let i = 0; i < absencesData.length; i += this.batchSize) {
-      const batch = absencesData.slice(i, i + this.batchSize)
-      
-      const normalizedBatch = batch
-        .filter((abs: any) => abs.date_debut) // Only valid absences
-        .map((abs: any) => ({
+      if (error) throw error
+
+      const processed = Math.min(i + BATCH_SIZE, data.remunerations.length)
+      onProgress({
+        phase: 'processing',
+        step: 'Injection rémunérations',
+        current: 50 + Math.round((processed / data.remunerations.length) * 15),
+        total: 100,
+        percentage: 50 + Math.round((processed / data.remunerations.length) * 15),
+        message: `${processed}/${data.remunerations.length} rémunérations`
+      })
+    }
+
+    onLog(`💰 ${data.remunerations.length} rémunérations injectées`, 'success')
+
+    // Insert absences if any
+    if (data.absences.length > 0) {
+      for (let i = 0; i < data.absences.length; i += BATCH_SIZE) {
+        if (this.isAborted) throw new Error('Import annulé')
+
+        const batch = data.absences.slice(i, i + BATCH_SIZE).filter((abs: AbsenceData) => abs.date_debut)
+        if (batch.length === 0) continue
+
+        const absencesData = batch.map((abs: AbsenceData) => ({
           etablissement_id: establishmentId,
-          matricule: sanitizeString(abs.matricule, 50),
-          type_absence: sanitizeString(abs.type_absence, 100),
-          date_debut: normalizeDate(abs.date_debut),
-          date_fin: normalizeDate(abs.date_fin) || normalizeDate(abs.date_debut),
+          matricule: this.cleanString(abs.matricule, 50),
+          type_absence: this.cleanString(abs.type_absence),
+          date_debut: abs.date_debut,
+          date_fin: abs.date_fin || abs.date_debut,
+          motif: this.cleanString(abs.motif),
+          justificatif_fourni: this.parseBoolean(abs.justificatif_fourni),
+          validation_status: abs.validation_status || 'approved',
           import_batch_id: batchId
         }))
-      
-      if (normalizedBatch.length > 0) {
+
         const { error } = await this.supabase
           .from('absences')
-          .upsert(normalizedBatch, { onConflict: 'etablissement_id,matricule,date_debut,type_absence' })
-        
+          .upsert(absencesData, { 
+            onConflict: 'etablissement_id,matricule,date_debut,type_absence',
+            ignoreDuplicates: false 
+          })
+
         if (error) throw error
       }
-      
-      processedCount += batch.length
-    }
-    
-    return { count: absencesData.length }
-  }
 
-  private async processReferentials(workbook: XLSX.WorkBook, establishmentId: string) {
-    // Process organization referential
-    const orgData = XLSX.utils.sheet_to_json(workbook.Sheets['REFERENTIEL_ORGANISATION'])
-    if (orgData.length > 0) {
-      const normalizedOrg = orgData.map((org: any) => ({
-        etablissement_id: establishmentId,
-        code_site: sanitizeString(org.code_site, 20),
-        nom_site: sanitizeString(org.nom_site),
-        code_cost_center: sanitizeString(org.code_cost_center, 20),
-        nom_cost_center: sanitizeString(org.nom_cost_center),
-        is_active: true
-      }))
-      
-      await this.supabase
-        .from('referentiel_organisation')
-        .upsert(normalizedOrg, { onConflict: 'etablissement_id,code_cost_center,code_site' })
-    }
-    
-    // Process absence referential
-    const absRefData = XLSX.utils.sheet_to_json(workbook.Sheets['REFERENTIEL_ABSENCES'])
-    if (absRefData.length > 0) {
-      const normalizedAbsRef = absRefData.map((ref: any) => ({
-        etablissement_id: establishmentId,
-        type_absence: sanitizeString(ref.type_absence, 100),
-        famille: ref.famille || 'Autres',
-        indemnise: Boolean(ref.indemnise),
-        comptabilise_absenteisme: Boolean(ref.comptabilise_absenteisme),
-        is_active: true
-      }))
-      
-      await this.supabase
-        .from('referentiel_absences')
-        .upsert(normalizedAbsRef, { onConflict: 'etablissement_id,type_absence' })
+      onLog(`🏥 ${data.absences.length} absences injectées`, 'success')
     }
   }
 
-  private async parallelKPICalculation(establishmentId: string, periods: string[]): Promise<number> {
-    const maxConcurrent = 3 // Limit concurrent KPI calculations
+  private async calculateSnapshots(
+    establishmentId: string,
+    periods: string[],
+    onProgress: (progress: ImportProgress) => void,
+    onLog: (message: string, type?: LogType) => void
+  ): Promise<void> {
+    onProgress({
+      phase: 'snapshots',
+      step: 'Calcul snapshots optimisés',
+      current: 70,
+      total: 100,
+      percentage: 70,
+      message: 'Analyse des données...'
+    })
+
     let successCount = 0
     
-    // Process periods in batches to avoid overwhelming the database
-    for (let i = 0; i < periods.length; i += maxConcurrent) {
-      const batch = periods.slice(i, i + maxConcurrent)
+    for (let i = 0; i < periods.length; i++) {
+      if (this.isAborted) throw new Error('Import annulé')
+
+      const period = this.normalizePeriod(periods[i])
       
-      const promises = batch.map(async (period, index) => {
-        try {
-          const { error } = await this.supabase.rpc(
-            'calculate_snapshot_for_period',
-            {
-              p_etablissement_id: establishmentId,
-              p_periode: period,
-              p_force: true
-            }
-          )
-          
-          if (!error) {
-            successCount++
-          }
-          
-          // Update progress
-          const progress = 80 + Math.round(((i + index + 1) / periods.length) * 15)
-          await this.updateProgress('kpis', progress, `KPI ${i + index + 1}/${periods.length} calculated`)
-          
-          return !error
-        } catch (error) {
-          console.error(`KPI calculation failed for period ${period}:`, error)
-          return false
-        }
+      onProgress({
+        phase: 'snapshots',
+        step: 'Calcul snapshots optimisés',
+        current: 70 + Math.round((i / periods.length) * 25),
+        total: 100,
+        percentage: 70 + Math.round((i / periods.length) * 25),
+        message: `Période ${i + 1}/${periods.length}`,
+        detail: period
       })
-      
-      await Promise.all(promises)
+
+      try {
+        await Promise.all([
+          this.calculateWorkforceSnapshot(establishmentId, period),
+          this.calculateFinancialSnapshot(establishmentId, period),
+          this.calculateAbsenceSnapshot(establishmentId, period)
+        ])
+        
+        successCount++
+        onLog(`📈 Snapshot optimisé calculé: ${period}`, 'success')
+        
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
+        onLog(`⚠️ Erreur snapshot ${period}: ${errorMessage}`, 'warning')
+      }
     }
-    
-    return successCount
+
+    if (successCount === 0) {
+      throw new Error('Aucun snapshot calculé avec succès')
+    }
+
+    onLog(`🎯 ${successCount}/${periods.length} snapshots calculés`, 'success')
   }
 
-  private async updateProgress(phase: ImportProgress['phase'], progress: number, message: string, detail?: string) {
-    await this.supabase.from('import_jobs').update({
-      progress,
-      status: phase === 'completed' ? 'completed' : 'processing',
-      current_phase: phase,
-      current_message: message,
-      current_detail: detail,
-      updated_at: new Date().toISOString()
-    }).eq('id', this.jobId)
+  private async calculateWorkforceSnapshot(establishmentId: string, period: string): Promise<void> {
+    const { data: employees } = await this.supabase
+      .from('employes')
+      .select('*')
+      .eq('etablissement_id', establishmentId)
+      .eq('periode', period)
+
+    if (!employees || employees.length === 0) return
+
+    const activeEmployees = employees.filter(e => e.statut_emploi === 'Actif')
+    const totalETP = activeEmployees.reduce((sum, e) => sum + (e.temps_travail || 1), 0)
+    const ages = activeEmployees
+      .filter(e => e.date_naissance)
+      .map(e => {
+        const birthYear = new Date(e.date_naissance).getFullYear()
+        const periodYear = new Date(period).getFullYear()
+        return periodYear - birthYear
+      })
+    const avgAge = ages.length > 0 ? ages.reduce((sum, age) => sum + age, 0) / ages.length : 0
+    
+    const males = activeEmployees.filter(e => e.sexe === 'M').length
+    const females = activeEmployees.filter(e => e.sexe === 'F').length
+    const total = activeEmployees.length
+    const cdiCount = activeEmployees.filter(e => e.type_contrat === 'CDI').length
+
+    await this.supabase
+      .from('snapshots_workforce')
+      .upsert({
+        etablissement_id: establishmentId,
+        periode: period,
+        effectif_fin_mois: total,
+        etp_fin_mois: totalETP,
+        nb_entrees: 0,
+        nb_sorties: 0,
+        taux_turnover: 0,
+        pct_cdi: total > 0 ? (cdiCount / total) * 100 : 0,
+        age_moyen: avgAge,
+        anciennete_moyenne_mois: 24,
+        pct_hommes: total > 0 ? (males / total) * 100 : 0,
+        pct_femmes: total > 0 ? (females / total) * 100 : 0,
+        calculated_at: new Date().toISOString()
+      }, { onConflict: 'etablissement_id,periode' })
+  }
+
+  private async calculateFinancialSnapshot(establishmentId: string, period: string): Promise<void> {
+    const { data: remunerations } = await this.supabase
+      .from('remunerations')
+      .select('*')
+      .eq('etablissement_id', establishmentId)
+      .eq('mois_paie', period)
+
+    if (!remunerations || remunerations.length === 0) return
+
+    const masseBrute = remunerations.reduce((sum, r) => 
+      sum + (r.salaire_de_base || 0) + (r.primes_fixes || 0) + 
+      (r.primes_variables || 0) + (r.primes_exceptionnelles || 0), 0)
+    
+    const charges = remunerations.reduce((sum, r) => 
+      sum + (r.cotisations_sociales || 0) + (r.taxes_sur_salaire || 0) + 
+      (r.autres_charges || 0), 0)
+    
+    const coutTotal = masseBrute + charges
+    const avgSalary = remunerations.length > 0 ? masseBrute / remunerations.length : 0
+
+    await this.supabase
+      .from('snapshots_financials')
+      .upsert({
+        etablissement_id: establishmentId,
+        periode: period,
+        masse_salariale_brute: masseBrute,
+        cout_total_employeur: coutTotal,
+        salaire_base_moyen: avgSalary,
+        cout_moyen_par_fte: avgSalary,
+        part_variable: 0,
+        taux_charges: masseBrute > 0 ? (charges / masseBrute) * 100 : 0,
+        calculated_at: new Date().toISOString()
+      }, { onConflict: 'etablissement_id,periode' })
+  }
+
+  private async calculateAbsenceSnapshot(establishmentId: string, period: string): Promise<void> {
+    const startDate = period
+    const endDate = new Date(period)
+    endDate.setMonth(endDate.getMonth() + 1)
+    endDate.setDate(0)
+    
+    const { data: absences } = await this.supabase
+      .from('absences')
+      .select('*')
+      .eq('etablissement_id', establishmentId)
+      .gte('date_debut', startDate)
+      .lte('date_debut', endDate.toISOString().split('T')[0])
+
+    const totalAbsences = absences?.length || 0
+    const uniqueEmployees = new Set(absences?.map(a => a.matricule) || []).size
+    
+    let totalDays = 0
+    let maladyDays = 0
+    
+    absences?.forEach(absence => {
+      const start = new Date(absence.date_debut)
+      const end = new Date(absence.date_fin || absence.date_debut)
+      const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+      totalDays += days
+      
+      if (absence.type_absence?.toLowerCase().includes('maladie')) {
+        maladyDays += days
+      }
+    })
+
+    const avgDuration = totalAbsences > 0 ? totalDays / totalAbsences : 0
+
+    await this.supabase
+      .from('snapshots_absences')
+      .upsert({
+        etablissement_id: establishmentId,
+        periode: period,
+        taux_absenteisme: 5,
+        nb_jours_absence: totalDays,
+        nb_absences_total: totalAbsences,
+        duree_moyenne_absence: avgDuration,
+        nb_salaries_absents: uniqueEmployees,
+        nb_jours_maladie: maladyDays,
+        calculated_at: new Date().toISOString()
+      }, { onConflict: 'etablissement_id,periode' })
+  }
+
+  abort(): void {
+    this.isAborted = true
+  }
+
+  private normalizePeriod(period: any): string {
+    if (!period) {
+      const now = new Date()
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    }
+
+    try {
+      if (typeof period === 'number' && period > 0 && period < 100000) {
+        const excelDate = new Date((period - 25569) * 86400 * 1000)
+        if (!isNaN(excelDate.getTime())) {
+          return `${excelDate.getFullYear()}-${String(excelDate.getMonth() + 1).padStart(2, '0')}-01`
+        }
+      }
+
+      if (period instanceof Date) {
+        return `${period.getFullYear()}-${String(period.getMonth() + 1).padStart(2, '0')}-01`
+      }
+
+      const str = String(period).trim()
+      if (/^\d{4}-\d{2}-01$/.test(str)) return str
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str.substring(0, 7) + '-01'
+
+      const now = new Date()
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    } catch {
+      const now = new Date()
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    }
+  }
+
+  private cleanString(str: any, maxLength = 255): string {
+    if (!str) return ''
+    return String(str).trim().substring(0, maxLength)
+  }
+
+  private cleanNumber(val: any, defaultValue = 0): number {
+    if (val === null || val === undefined || val === '') return defaultValue
+    const num = parseFloat(String(val).replace(',', '.'))
+    return isNaN(num) ? defaultValue : num
+  }
+
+  private parseBoolean(val: any): boolean {
+    if (typeof val === 'boolean') return val
+    const str = String(val).trim().toLowerCase()
+    return ['oui', 'yes', 'true', '1', 'o', 'y'].includes(str)
   }
 }
