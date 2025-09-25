@@ -1,98 +1,43 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { Shield, Loader2, AlertCircle, Building2, Mail, Lock, ChevronRight, Eye, EyeOff } from 'lucide-react'
+import { useAuth } from '@/lib/hooks/useAuth'
 
-export default function CompanyLoginPage() {
+export default function CleanLoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  const { login, loading, isAuthenticated } = useAuth()
   const router = useRouter()
-  const supabase = createClient()
+
+  // If user is already authenticated, redirect to dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/dashboard')
+    }
+  }, [isAuthenticated, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
     setError(null)
 
-    try {
-      // Authenticate with Supabase
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password
-      })
+    if (!email || !password) {
+      setError('Veuillez remplir tous les champs')
+      return
+    }
 
-      if (authError) {
-        if (authError.message.includes('Invalid login credentials')) {
-          throw new Error('Email ou mot de passe incorrect')
-        }
-        throw new Error(authError.message)
-      }
-
-      if (!authData.user) {
-        throw new Error('Erreur de connexion')
-      }
-
-      console.log('User authenticated:', authData.user.id)
-
-      // Load company data for this user
-      const { data: company, error: companyError } = await supabase
-        .from('entreprises')
-        .select(`
-          *,
-          etablissements (*)
-        `)
-        .eq('user_id', authData.user.id)
-        .single()
-
-      if (companyError || !company) {
-        // User exists but no company - might be admin created account not yet set up
-        throw new Error('Aucune entreprise associée à ce compte. Contactez le support.')
-      }
-
-      // Check subscription status
-      if (company.subscription_status !== 'active') {
-        if (company.trial_ends_at && new Date(company.trial_ends_at) < new Date()) {
-          throw new Error('Votre période d\'essai a expiré. Contactez le support.')
-        }
-      }
-
-      // Create session with company info
-      const sessionData = {
-        company_id: company.id,
-        company_name: company.nom,
-        user_id: authData.user.id,
-        subscription_plan: company.subscription_plan,
-        subscription_status: company.subscription_status,
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-      }
-
-      // Store session
-      localStorage.setItem('company_session', JSON.stringify(sessionData))
-
-      // Update last login tracking
-      await supabase
-        .from('entreprises')
-        .update({ 
-          last_login_at: new Date().toISOString(),
-          login_count: (company.login_count || 0) + 1,
-          last_activity_at: new Date().toISOString()
-        })
-        .eq('id', company.id)
-
-      console.log('Login successful, redirecting to dashboard')
+    const result = await login(email, password)
+    
+    if (result.success) {
+      // Redirect will happen automatically via useAuth
       router.push('/dashboard')
-
-    } catch (err: any) {
-      console.error('Login error:', err)
-      setError(err.message || 'Erreur de connexion')
-    } finally {
-      setIsLoading(false)
+    } else {
+      setError(result.error || 'Erreur de connexion')
     }
   }
 
@@ -133,7 +78,7 @@ export default function CompanyLoginPage() {
                 placeholder="votre-email@entreprise.com"
                 className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
                 required
-                disabled={isLoading}
+                disabled={loading}
                 autoComplete="email"
               />
             </div>
@@ -151,14 +96,14 @@ export default function CompanyLoginPage() {
                   placeholder="Votre mot de passe"
                   className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all pr-12"
                   required
-                  disabled={isLoading}
+                  disabled={loading}
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
-                  disabled={isLoading}
+                  disabled={loading}
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -174,10 +119,10 @@ export default function CompanyLoginPage() {
 
             <button
               type="submit"
-              disabled={isLoading || !email || !password}
+              disabled={loading || !email || !password}
               className="w-full px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-semibold transition-all transform hover:scale-105 flex items-center justify-center gap-2"
             >
-              {isLoading ? (
+              {loading ? (
                 <>
                   <Loader2 size={20} className="animate-spin" />
                   Connexion...

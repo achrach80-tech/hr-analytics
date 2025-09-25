@@ -72,19 +72,19 @@ export class OptimizedProcessor {
         
         await Promise.all([
           this.supabase
-            .from('snapshots_workforce')
+            .from('snapshots_effectifs')
             .delete()
             .eq('etablissement_id', establishmentId)
             .eq('periode', normalizedPeriod),
           
           this.supabase
-            .from('snapshots_financials')
+            .from('snapshots_masse_salariale')
             .delete()
             .eq('etablissement_id', establishmentId)
             .eq('periode', normalizedPeriod),
           
           this.supabase
-            .from('snapshots_absences')
+            .from('snapshots_absenteisme')
             .delete()
             .eq('etablissement_id', establishmentId)
             .eq('periode', normalizedPeriod)
@@ -327,7 +327,7 @@ export class OptimizedProcessor {
     const cdiCount = activeEmployees.filter(e => e.type_contrat === 'CDI').length
 
     await this.supabase
-      .from('snapshots_workforce')
+      .from('snapshots_effectifs')
       .upsert({
         etablissement_id: establishmentId,
         periode: period,
@@ -366,7 +366,7 @@ export class OptimizedProcessor {
     const avgSalary = remunerations.length > 0 ? masseBrute / remunerations.length : 0
 
     await this.supabase
-      .from('snapshots_financials')
+      .from('snapshots_masse_salariale')
       .upsert({
         etablissement_id: establishmentId,
         periode: period,
@@ -413,7 +413,7 @@ export class OptimizedProcessor {
     const avgDuration = totalAbsences > 0 ? totalDays / totalAbsences : 0
 
     await this.supabase
-      .from('snapshots_absences')
+      .from('snapshots_absenteisme')
       .upsert({
         etablissement_id: establishmentId,
         periode: period,

@@ -15,6 +15,7 @@ import {
   Check,
   AlertCircle
 } from 'lucide-react'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 export default function SettingsPage() {
   const [company, setCompany] = useState<any>(null)
@@ -38,7 +39,8 @@ export default function SettingsPage() {
 
   const loadCompanyData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { session } = useAuth()
+   const user = session?.user
       if (!user) return
 
       const { data: companyData } = await supabase

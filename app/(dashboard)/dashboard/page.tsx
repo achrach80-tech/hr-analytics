@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, Suspense } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Building2, Calendar, ChevronDown, Sparkles, Brain,
@@ -9,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import ReactDOM from 'react-dom'
+import { createClient } from '@/lib/supabase/client'
 
 // Import optimized components
 import { useOptimizedKPIData } from '@/lib/hooks/useOptimizedKPIData'
@@ -16,19 +16,20 @@ import { CyberWorkforceSection } from '@/components/dashboard/CyberWorkforceSect
 import { CyberPayrollSection } from '@/components/dashboard/CyberPayrollSection'
 import { CyberAbsenceSection } from '@/components/dashboard/CyberAbsenceSection'
 import { CyberDemographicsSection } from '@/components/dashboard/CyberDemographicsSection'
-import type { Company, Establishment } from '@/lib/types/dashboard'
+import { useAuth } from '@/lib/hooks/useAuth'
 
-export default function CyberDashboard() {
-  const [company, setCompany] = useState<Company | null>(null)
-  const [selectedEstablishment, setSelectedEstablishment] = useState<Establishment | null>(null)
+export default function CleanCyberDashboard() {
+  const [selectedEstablishment, setSelectedEstablishment] = useState<any>(null)
   const [periods, setPeriods] = useState<string[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState<string>('')
   const [showPeriodSelector, setShowPeriodSelector] = useState(false)
-  const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const supabase = createClient()
   const router = useRouter()
+  
+  // Use clean authentication
+  const { session, loading: authLoading } = useAuth()
 
   // Use optimized KPI hook
   const { data: kpiData, loading: kpiLoading, error: kpiError } = useOptimizedKPIData(
@@ -37,8 +38,11 @@ export default function CyberDashboard() {
   )
 
   useEffect(() => {
-    initializeData()
-  }, [])
+    if (session?.establishment) {
+      setSelectedEstablishment(session.establishment)
+      loadPeriodsForEstablishment(session.establishment.id)
+    }
+  }, [session])
 
   useEffect(() => {
     if (showPeriodSelector) {
@@ -48,40 +52,6 @@ export default function CyberDashboard() {
       }
     }
   }, [showPeriodSelector])
-
-  const initializeData = async () => {
-    try {
-      setInitialLoading(true)
-      setError(null)
-
-// Replace the localStorage session logic with:
-const { data: { user } } = await supabase.auth.getUser()
-if (!user) {
-  router.push('/login')
-  return
-}
-
-const { data: companyData, error } = await supabase
-  .from('entreprises')
-  .select(`*, etablissements (*)`)
-  .eq('user_id', user.id) // Use proper user relationship
-  .single()
-
-      setCompany(companyData)
-      const establishments = companyData.etablissements || []
-      
-      const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
-      if (defaultEst) {
-        setSelectedEstablishment(defaultEst)
-        await loadPeriodsForEstablishment(defaultEst.id)
-      }
-    } catch (err) {
-      console.error('Initialize error:', err)
-      setError('Erreur d\'initialisation')
-    } finally {
-      setInitialLoading(false)
-    }
-  }
 
   const loadPeriodsForEstablishment = async (establishmentId: string) => {
     try {
@@ -146,7 +116,7 @@ const { data: companyData, error } = await supabase
   }
 
   // Loading state
-  if (initialLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center">
         <motion.div 
@@ -276,9 +246,9 @@ const { data: companyData, error } = await supabase
                   transition={{ delay: 0.3 }}
                 >
                   <Building2 size={14} />
-                  <span>{company?.nom}</span>
+                  <span>{session?.company?.name}</span>
                   <span>•</span>
-                  <span>{selectedEstablishment?.nom}</span>
+                  <span>{selectedEstablishment?.name}</span>
                   <span>•</span>
                   <span className="text-green-400">Cyber Mode</span>
                 </motion.div>

@@ -23,6 +23,7 @@ import {
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import ReactDOM from 'react-dom'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 // Import optimized hooks and types
 import { useImport } from '@/lib/import/hooks/useImport'
@@ -1121,55 +1122,76 @@ export default function OptimizedImportPage() {
   const [fileAnalysis, setFileAnalysis] = useState<FileAnalysis | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [importStats, setImportStats] = useState<ImportStats | null>(null)
+  const [initialLoading, setInitialLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const supabase = createClient()
   const router = useRouter()
-
+  const { session } = useAuth()
   // Use optimized import hook
   const {
     importStatus,
     importProgress,
     importLogs,
-    error,
     processImport,
     cancelImport,
     resetImport
   } = useImport()
 
+  const loadPeriodsForEstablishment = async (establishmentId: string): Promise<void> => {
+  try {
+    // This function would typically load periods from your database
+    // For now, we'll just add a placeholder
+    console.log('Loading periods for establishment:', establishmentId)
+    // You can implement the actual period loading logic here later
+  } catch (error) {
+    console.error('Error loading periods:', error)
+  }
+}
+
   useEffect(() => {
     initializeCompany()
   }, [])
 
-  const initializeCompany = async (): Promise<void> => {
-    try {
-      const sessionStr = localStorage.getItem('company_session')
-      if (!sessionStr) {
-        router.push('/login')
-        return
-      }
+ const initializeCompany = async (): Promise<void> => {
+  try {
+    setInitialLoading(true)
+    setError(null)
 
-      const session = JSON.parse(sessionStr)
-      
-      const { data: companyData, error: companyError } = await supabase
-        .from('entreprises')
-        .select(`*, etablissements (*)`)
-        .eq('id', session.company_id)
-        .single()
-
-      if (companyError) throw companyError
-
-      setCompany(companyData as Company)
-      const establishmentsData = companyData.etablissements || []
-      setEstablishments(establishmentsData)
-      
-      const defaultEstablishment = establishmentsData.find((e: any) => e.is_headquarters) || establishmentsData[0]
-      if (defaultEstablishment) {
-        setSelectedEstablishment(defaultEstablishment as Establishment)
-      }
-    } catch (error) {
-      console.error('Initialization error:', error)
+    // Use session from useAuth instead of localStorage
+    if (!session) {
+      router.push('/login')
+      return
     }
+
+    const { data: companyData, error: companyError } = await supabase
+  .from('entreprises')
+  .select(`*, etablissements (*)`)
+  .eq('user_id', session.user.id)
+  .single()
+
+if (companyError) {
+  console.error('Company load error:', companyError)
+  router.push('/login?error=no-company')
+  return
+}
+
+    setCompany(companyData)
+    const establishments = companyData.etablissements || []
+    
+    const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
+    if (defaultEst) {
+      setSelectedEstablishment(defaultEst)
+      await loadPeriodsForEstablishment(defaultEst.id)
+    }
+  } catch (err) {
+    console.error('Initialize error:', err)
+    setError('Erreur d\'initialisation')
+  } finally {
+    setInitialLoading(false)
   }
+}
+
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const selectedFile = acceptedFiles[0]

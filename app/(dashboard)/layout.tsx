@@ -1,124 +1,28 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { 
   LayoutDashboard, Upload, Settings, LogOut,
   Menu, X, Building2, Shield, User, Loader2
 } from 'lucide-react'
+import { useState } from 'react'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const [company, setCompany] = useState<any>(null)
-  const [user, setUser] = useState<any>(null)
-  const [establishment, setEstablishment] = useState<any>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
-  const supabase = createClient()
+  
+  // Use our clean authentication hook
+  const { session, loading, logout, isAuthenticated, company, user } = useAuth()
 
-  useEffect(() => {
-    initializeAuth()
-  }, [])
-
-  const initializeAuth = async () => {
-    try {
-      setLoading(true)
-
-      // Get current Supabase user session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      if (sessionError) {
-        console.error('Session error:', sessionError)
-        router.push('/login')
-        return
-      }
-
-      if (!session?.user) {
-        console.log('No active session found')
-        router.push('/login')
-        return
-      }
-
-      setUser(session.user)
-
-      // Load company data for this user
-      const { data: companyData, error: companyError } = await supabase
-        .from('entreprises')
-        .select(`
-          *,
-          etablissements (*)
-        `)
-        .eq('user_id', session.user.id)
-        .single()
-
-      if (companyError || !companyData) {
-        console.error('Company load error:', companyError)
-        // User authenticated but no company - redirect to setup or contact support
-        router.push('/login?error=no-company')
-        return
-      }
-
-      setCompany(companyData)
-
-      // Set default establishment
-      const establishments = companyData.etablissements || []
-      const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
-      if (defaultEst) {
-        setEstablishment(defaultEst)
-      }
-
-      // Update company session in localStorage for compatibility
-      const sessionData = {
-        company_id: companyData.id,
-        company_name: companyData.nom,
-        user_id: session.user.id,
-        subscription_plan: companyData.subscription_plan,
-        subscription_status: companyData.subscription_status
-      }
-      localStorage.setItem('company_session', JSON.stringify(sessionData))
-
-    } catch (error) {
-      console.error('Auth initialization error:', error)
-      router.push('/login')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleLogout = async () => {
-    try {
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        console.error('Logout error:', error)
-      }
-
-      // Clear local storage
-      localStorage.removeItem('company_session')
-      
-      // Redirect to login
-      router.push('/login')
-    } catch (error) {
-      console.error('Logout error:', error)
-      // Force redirect even if logout fails
-      router.push('/login')
-    }
-  }
-
-  const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Import', href: '/import', icon: Upload },
-    { name: 'Paramètres', href: '/settings', icon: Settings },
-  ]
-
-  // Loading state
+  // If still loading, show loading screen
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900 flex items-center justify-center">
@@ -130,14 +34,25 @@ export default function DashboardLayout({
     )
   }
 
-  // Not authenticated or no company
-  if (!user || !company) {
-    return null // Will redirect in useEffect
+  // If not authenticated, the useAuth hook will redirect to login
+  // But we'll show nothing while that happens
+  if (!isAuthenticated || !session) {
+    return null
+  }
+
+  const navigation = [
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Import', href: '/import', icon: Upload },
+    { name: 'Paramètres', href: '/settings', icon: Settings },
+  ]
+
+  const handleLogout = async () => {
+    await logout()
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900">
-      {/* Main Navigation Sidebar - Always Visible */}
+      {/* Main Navigation Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900/50 backdrop-blur-xl border-r border-slate-800 transform transition-transform ${
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}>
@@ -147,8 +62,8 @@ export default function DashboardLayout({
               <Shield size={24} className="text-white" />
             </div>
             <div>
-              <h2 className="text-white font-bold truncate">{company.nom}</h2>
-              <p className="text-xs text-slate-400 capitalize">{company.subscription_plan}</p>
+              <h2 className="text-white font-bold truncate">{company?.name}</h2>
+              <p className="text-xs text-slate-400 capitalize">{company?.subscription_plan}</p>
             </div>
           </div>
         </div>
@@ -177,10 +92,10 @@ export default function DashboardLayout({
           {/* User info */}
           <div className="flex items-center gap-3 mb-4 px-4 py-2 bg-slate-800/30 rounded-lg">
             <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
-              {user.email?.charAt(0).toUpperCase() || 'U'}
+              {user?.email?.charAt(0).toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-medium truncate">{user.email}</p>
+              <p className="text-white text-sm font-medium truncate">{user?.email}</p>
               <p className="text-slate-400 text-xs">Connecté</p>
             </div>
           </div>
@@ -216,19 +131,19 @@ export default function DashboardLayout({
             
             <div className="flex items-center gap-4 ml-auto">
               {/* Trial warning */}
-              {company.subscription_plan === 'trial' && company.trial_ends_at && (
+              {company?.subscription_plan === 'trial' && (
                 <div className="px-3 py-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-lg text-sm">
-                  Trial ends: {new Date(company.trial_ends_at).toLocaleDateString()}
+                  Version d'essai
                 </div>
               )}
 
               {/* Subscription status */}
               <div className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                company.subscription_status === 'active' 
+                company?.subscription_status === 'active' 
                   ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                   : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
               }`}>
-                {company.subscription_status}
+                {company?.subscription_status}
               </div>
             </div>
           </div>
