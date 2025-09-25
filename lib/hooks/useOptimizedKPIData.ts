@@ -60,21 +60,21 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
 
         const [workforceRes, financialRes, absenceRes] = await Promise.all([
           supabase
-            .from('snapshots_workforce')
+            .from('snapshots_effectifs')
             .select('*')
             .eq('etablissement_id', establishmentId)
             .eq('periode', period)
             .maybeSingle(),
           
           supabase
-            .from('snapshots_financials')
+            .from('snapshots_masse_salariale')
             .select('*')
             .eq('etablissement_id', establishmentId)
             .eq('periode', period)
             .maybeSingle(),
           
           supabase
-            .from('snapshots_absences')
+            .from('snapshots_absenteisme')
             .select('*')
             .eq('etablissement_id', establishmentId)
             .eq('periode', period)

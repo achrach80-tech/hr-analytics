@@ -4,10 +4,12 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Shield, Loader2, AlertCircle, Building2, Key, ChevronRight } from 'lucide-react'
+import { Shield, Loader2, AlertCircle, Building2, Mail, Lock, ChevronRight, Eye, EyeOff } from 'lucide-react'
 
 export default function CompanyLoginPage() {
-  const [accessToken, setAccessToken] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -19,37 +21,61 @@ export default function CompanyLoginPage() {
     setError(null)
 
     try {
-      // Validate access token
+      // Authenticate with Supabase
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password
+      })
+
+      if (authError) {
+        if (authError.message.includes('Invalid login credentials')) {
+          throw new Error('Email ou mot de passe incorrect')
+        }
+        throw new Error(authError.message)
+      }
+
+      if (!authData.user) {
+        throw new Error('Erreur de connexion')
+      }
+
+      console.log('User authenticated:', authData.user.id)
+
+      // Load company data for this user
       const { data: company, error: companyError } = await supabase
         .from('entreprises')
-        .select('*')
-        .eq('access_token', accessToken.trim())
-        .eq('subscription_status', 'active')
+        .select(`
+          *,
+          etablissements (*)
+        `)
+        .eq('user_id', authData.user.id)
         .single()
 
       if (companyError || !company) {
-        throw new Error('Code d\'accès invalide ou expiré')
+        // User exists but no company - might be admin created account not yet set up
+        throw new Error('Aucune entreprise associée à ce compte. Contactez le support.')
       }
 
-      // Check if subscription is still valid
-      if (company.trial_ends_at && new Date(company.trial_ends_at) < new Date()) {
-        throw new Error('Votre période d\'essai a expiré')
+      // Check subscription status
+      if (company.subscription_status !== 'active') {
+        if (company.trial_ends_at && new Date(company.trial_ends_at) < new Date()) {
+          throw new Error('Votre période d\'essai a expiré. Contactez le support.')
+        }
       }
 
-      // Create session
+      // Create session with company info
       const sessionData = {
         company_id: company.id,
         company_name: company.nom,
+        user_id: authData.user.id,
         subscription_plan: company.subscription_plan,
-        features: company.features,
+        subscription_status: company.subscription_status,
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
       }
 
-      // Store in localStorage and cookie
+      // Store session
       localStorage.setItem('company_session', JSON.stringify(sessionData))
-      document.cookie = `company_session=${btoa(JSON.stringify(sessionData))}; path=/; max-age=86400`
 
-      // Update last login
+      // Update last login tracking
       await supabase
         .from('entreprises')
         .update({ 
@@ -59,32 +85,12 @@ export default function CompanyLoginPage() {
         })
         .eq('id', company.id)
 
-      // Log access
-      await supabase
-        .from('access_logs')
-        .insert({
-          entreprise_id: company.id,
-          access_token_used: accessToken.substring(0, 8) + '...',
-          access_method: 'token',
-          path_accessed: '/login',
-          action: 'login_success',
-          response_status: 200
-        })
-
+      console.log('Login successful, redirecting to dashboard')
       router.push('/dashboard')
+
     } catch (err: any) {
+      console.error('Login error:', err)
       setError(err.message || 'Erreur de connexion')
-      
-      // Log failed attempt
-      await supabase
-        .from('access_logs')
-        .insert({
-          access_token_used: accessToken.substring(0, 8) + '...',
-          access_method: 'token',
-          path_accessed: '/login',
-          action: 'login_failed',
-          response_status: 401
-        })
     } finally {
       setIsLoading(false)
     }
@@ -105,10 +111,10 @@ export default function CompanyLoginPage() {
             <Shield size={40} className="text-white" />
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">
-            Accès Entreprise
+            Espace Client
           </h1>
           <p className="text-slate-400">
-            Connectez-vous avec votre code d'accès sécurisé
+            Connectez-vous à votre tableau de bord RH
           </p>
         </div>
 
@@ -117,23 +123,46 @@ export default function CompanyLoginPage() {
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2">
-                <Key size={16} />
-                Code d'accès
+                <Mail size={16} />
+                Email
               </label>
               <input
-                type="password"
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-                placeholder="Entrez votre code d'accès"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="votre-email@entreprise.com"
                 className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
                 required
                 disabled={isLoading}
-                autoComplete="off"
-                minLength={32}
+                autoComplete="email"
               />
-              <p className="mt-2 text-xs text-slate-500">
-                Le code d'accès vous a été fourni par email lors de l'activation
-              </p>
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2">
+                <Lock size={16} />
+                Mot de passe
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Votre mot de passe"
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all pr-12"
+                  required
+                  disabled={isLoading}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
+                  disabled={isLoading}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
             </div>
 
             {error && (
@@ -145,7 +174,7 @@ export default function CompanyLoginPage() {
 
             <button
               type="submit"
-              disabled={isLoading || !accessToken}
+              disabled={isLoading || !email || !password}
               className="w-full px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-semibold transition-all transform hover:scale-105 flex items-center justify-center gap-2"
             >
               {isLoading ? (
@@ -168,13 +197,22 @@ export default function CompanyLoginPage() {
                 Pas encore client ?
               </p>
               
-               <Link
-  href="/demo"
-  className="inline-flex items-center gap-2 px-6 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-white font-medium transition-all"
->
-  <Building2 size={16} />
-  Demander une démo
-</Link>
+              <Link
+                href="/demo"
+                className="inline-flex items-center gap-2 px-6 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-white font-medium transition-all"
+              >
+                <Building2 size={16} />
+                Demander une démo
+              </Link>
+
+              <div className="pt-4">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-slate-400 hover:text-cyan-400 transition-colors"
+                >
+                  Mot de passe oublié ?
+                </Link>
+              </div>
             </div>
           </div>
         </div>

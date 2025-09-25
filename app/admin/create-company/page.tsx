@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import { 
   Building2, Mail, User, Calendar, Package, 
   Loader2, CheckCircle, Copy, Send, ArrowRight,
-  Sparkles, Key, Shield, Zap, Clock, CreditCard
+  Sparkles, Key, Shield, Zap, Clock, CreditCard,
+  Eye, EyeOff
 } from 'lucide-react'
 
 export default function CreateCompanyPage() {
@@ -23,15 +24,20 @@ export default function CreateCompanyPage() {
     employee_count: '1-50'
   })
   const [createdCompany, setCreatedCompany] = useState<any>(null)
-  const [generatedToken, setGeneratedToken] = useState('')
+  const [generatedPassword, setGeneratedPassword] = useState('')
+  const [createdUserId, setCreatedUserId] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
-  const generateAccessToken = () => {
-    const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-    return token
+  // Generate secure password
+  const generateSecurePassword = (): string => {
+    const length = 12
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    let password = ""
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length))
+    }
+    return password
   }
 
   const generateCompanyCode = () => {
@@ -43,60 +49,150 @@ export default function CreateCompanyPage() {
   const createCompany = async () => {
     setLoading(true)
     try {
-      const accessToken = generateAccessToken()
-      const companyCode = generateCompanyCode()
-      const urlSlug = companyData.nom
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '-')
-        .replace(/-+/g, '-')
-        .substring(0, 50)
+      console.log('🚀 Starting company creation process...')
 
-      // Create company
-      const { data: company, error } = await supabase
+      // Step 1: Generate secure credentials
+      const tempPassword = generateSecurePassword()
+      const companyCode = generateCompanyCode()
+      
+      setGeneratedPassword(tempPassword)
+
+      console.log('📧 Creating Supabase user account...')
+
+      // Step 2: Create Supabase user with admin privileges
+      // NOTE: This requires service_role key for admin.createUser
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: companyData.email,
+        password: tempPassword,
+        email_confirm: true, // Skip email verification for admin-created accounts
+        user_metadata: {
+          company_name: companyData.nom,
+          contact_name: companyData.contact_name,
+          created_by_admin: true,
+          created_at: new Date().toISOString()
+        }
+      })
+
+      if (authError) {
+        console.error('❌ User creation failed:', authError)
+        
+        // Handle common errors
+        if (authError.message.includes('already registered') || authError.message.includes('already exists')) {
+          throw new Error(`Email ${companyData.email} is already registered. Please use a different email.`)
+        }
+        
+        if (authError.message.includes('service_role')) {
+          throw new Error('Admin privileges required. Please contact support.')
+        }
+        
+        throw new Error(`User creation failed: ${authError.message}`)
+      }
+
+      if (!authData.user) {
+        throw new Error('User creation succeeded but no user data returned')
+      }
+
+      console.log('✅ User created successfully:', authData.user.id)
+      setCreatedUserId(authData.user.id)
+
+      // Step 3: Create company linked to this user
+      console.log('🏢 Creating company record...')
+      
+      const { data: company, error: companyError } = await supabase
         .from('entreprises')
         .insert({
+          user_id: authData.user.id, // Link to Supabase user - CRITICAL
           nom: companyData.nom,
           code_entreprise: companyCode,
-          access_token: accessToken,
-          access_url_slug: urlSlug,
           subscription_plan: companyData.subscription_plan,
           subscription_status: 'active',
           billing_email: companyData.email,
           trial_ends_at: companyData.subscription_plan === 'trial' 
             ? new Date(Date.now() + companyData.trial_days * 24 * 60 * 60 * 1000).toISOString()
             : null,
-          activation_date: new Date().toISOString(),
-          onboarding_status: 'trial_started',
           max_employees: companyData.max_employees,
-          features: {
-            export: true,
-            api: companyData.subscription_plan !== 'trial',
-            white_label: companyData.subscription_plan === 'enterprise',
-            ai_features: companyData.subscription_plan !== 'trial'
-          }
+          gdpr_consent_date: new Date().toISOString(),
+          created_at: new Date().toISOString()
+          // NOTE: Removed access_token - no longer needed
         })
         .select()
         .single()
 
-      if (error) throw error
+      if (companyError) {
+        console.error('❌ Company creation failed:', companyError)
+        
+        // Try to cleanup user if company creation fails
+        try {
+          await supabase.auth.admin.deleteUser(authData.user.id)
+          console.log('🧹 Cleaned up orphaned user account')
+        } catch (cleanupError) {
+          console.error('⚠️ Failed to cleanup user account:', cleanupError)
+        }
+        
+        throw new Error(`Company creation failed: ${companyError.message}`)
+      }
 
-      // Create default establishment
-      await supabase
+      console.log('✅ Company created successfully:', company.id)
+
+      // Step 4: Create default establishment
+      console.log('🏭 Creating default establishment...')
+      
+      const { data: establishment, error: estError } = await supabase
         .from('etablissements')
         .insert({
           entreprise_id: company.id,
           nom: `${companyData.nom} - Siège`,
           code_etablissement: 'SIEGE',
           is_headquarters: true,
-          statut: 'Actif'
+          is_active: true,
+          statut: 'Actif',
+          pays: 'France',
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+
+      if (estError) {
+        console.error('❌ Establishment creation failed:', estError)
+        throw new Error(`Establishment creation failed: ${estError.message}`)
+      }
+
+      console.log('✅ Default establishment created:', establishment.id)
+
+      // Step 5: Setup default referentials (optional)
+      try {
+        console.log('⚙️ Setting up default referentials...')
+        
+        const { error: refError } = await supabase.rpc('setup_default_referentials', {
+          p_etablissement_id: establishment.id
         })
 
-      setGeneratedToken(accessToken)
+        if (refError) {
+          console.warn('⚠️ Referentials setup failed (non-critical):', refError.message)
+        } else {
+          console.log('✅ Default referentials created')
+        }
+      } catch (refError) {
+        console.warn('⚠️ Referentials setup failed (continuing):', refError)
+      }
+
+      // Success!
       setCreatedCompany(company)
       setStep(3)
+      
+      console.log('🎉 Company creation completed successfully!')
+
     } catch (error) {
-      console.error('Error creating company:', error)
-      alert('Error creating company. Please try again.')
+      console.error('💥 Company creation failed:', error)
+      
+      let errorMessage = 'Unknown error occurred'
+      if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      
+      // Show user-friendly error
+      alert(`Failed to create company: ${errorMessage}`)
+      
     } finally {
       setLoading(false)
     }
@@ -112,10 +208,49 @@ export default function CreateCompanyPage() {
     setTimeout(() => toast.remove(), 2000)
   }
 
-  const sendCredentialsByEmail = () => {
-    // This would integrate with your email service
-    console.log('Sending credentials to:', companyData.email)
-    alert(`Credentials sent to ${companyData.email}`)
+  const sendCredentialsByEmail = async () => {
+    try {
+      // In a real implementation, you'd integrate with your email service
+      // For now, just show the credentials that need to be sent
+      
+      const emailContent = `
+Subject: Your RH Quantum Account is Ready!
+
+Hi ${companyData.contact_name},
+
+Your RH Quantum analytics platform is now active!
+
+🔗 Login URL: ${window.location.origin}/login
+📧 Email: ${companyData.email}
+🔑 Temporary Password: ${generatedPassword}
+
+Please change your password after your first login for security.
+
+Company Details:
+- Company Code: ${createdCompany?.code_entreprise}
+- Subscription: ${createdCompany?.subscription_plan}
+- Trial Ends: ${createdCompany?.trial_ends_at ? new Date(createdCompany.trial_ends_at).toLocaleDateString() : 'N/A'}
+
+Need help? Reply to this email.
+
+Best regards,
+The RH Quantum Team
+      `
+      
+      console.log('Email to send:', emailContent)
+      alert(`Credentials ready to send to ${companyData.email}!\n\nCheck console for email content.`)
+      
+      // TODO: Integrate with your email service here
+      // await emailService.send({
+      //   to: companyData.email,
+      //   subject: 'Your RH Quantum Account is Ready!',
+      //   body: emailContent
+      // })
+      
+    } catch (error) {
+      console.error('Email sending failed:', error)
+      alert('Failed to send email. Please copy the credentials manually.')
+    }
   }
 
   const plans = [
@@ -153,6 +288,7 @@ export default function CreateCompanyPage() {
     }
   ]
 
+  // Step 1: Company Information
   if (step === 1) {
     return (
       <div className="max-w-4xl mx-auto">
@@ -163,7 +299,7 @@ export default function CreateCompanyPage() {
             </div>
             Create New Company
           </h1>
-          <p className="text-gray-400">Set up a new client account with access credentials</p>
+          <p className="text-gray-400">Set up a new client account with Supabase authentication</p>
         </div>
 
         <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-3xl p-8">
@@ -197,12 +333,13 @@ export default function CreateCompanyPage() {
                 onChange={(e) => setCompanyData({...companyData, contact_name: e.target.value})}
                 className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
                 placeholder="John Doe"
+                required
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email *
+                Email * (Will be used for login)
               </label>
               <input
                 type="email"
@@ -212,6 +349,7 @@ export default function CreateCompanyPage() {
                 placeholder="contact@company.com"
                 required
               />
+              <p className="text-xs text-gray-500 mt-1">This will be their login email</p>
             </div>
 
             <div>
@@ -261,7 +399,7 @@ export default function CreateCompanyPage() {
           <div className="mt-8 flex justify-end">
             <button
               onClick={() => setStep(2)}
-              disabled={!companyData.nom || !companyData.email}
+              disabled={!companyData.nom || !companyData.email || !companyData.contact_name}
               className="px-8 py-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-400 hover:to-red-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-semibold transition-all flex items-center gap-2"
             >
               Continue
@@ -273,6 +411,7 @@ export default function CreateCompanyPage() {
     )
   }
 
+  // Step 2: Subscription Plan
   if (step === 2) {
     return (
       <div className="max-w-5xl mx-auto">
@@ -350,7 +489,7 @@ export default function CreateCompanyPage() {
             ) : (
               <>
                 <Zap size={20} />
-                Create Company & Generate Token
+                Create Company & User Account
               </>
             )}
           </button>
@@ -359,6 +498,7 @@ export default function CreateCompanyPage() {
     )
   }
 
+  // Step 3: Success with Login Credentials
   if (step === 3 && createdCompany) {
     return (
       <div className="max-w-4xl mx-auto">
@@ -368,8 +508,8 @@ export default function CreateCompanyPage() {
               <CheckCircle size={32} className="text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-white">Company Created Successfully!</h1>
-              <p className="text-gray-400">Access credentials have been generated</p>
+              <h1 className="text-3xl font-bold text-white">Company & Account Created!</h1>
+              <p className="text-gray-400">Supabase user account and company setup complete</p>
             </div>
           </div>
 
@@ -393,38 +533,55 @@ export default function CreateCompanyPage() {
                 <p className="text-white capitalize">{createdCompany.subscription_plan}</p>
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Status</p>
-                <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-lg text-sm">
-                  Active
-                </span>
+                <p className="text-gray-400 text-sm">User ID</p>
+                <p className="text-white font-mono text-xs">{createdUserId}</p>
               </div>
             </div>
           </div>
 
-          {/* Access Credentials */}
+          {/* Login Credentials - NEW FORMAT */}
           <div className="bg-gradient-to-br from-orange-500/10 to-red-500/10 border border-orange-500/30 rounded-2xl p-6 mb-6">
             <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-              <Key size={20} />
-              Access Credentials
+              <User size={20} />
+              Login Credentials
             </h3>
             
             <div className="space-y-4">
               <div>
-                <label className="text-gray-400 text-sm block mb-2">Access Token (Keep this secret!)</label>
+                <label className="text-gray-400 text-sm block mb-2">Login Email</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={generatedToken}
+                    value={companyData.email}
                     readOnly
                     className="flex-1 px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white font-mono text-sm"
                   />
                   <button
-                    onClick={() => copyToClipboard(generatedToken)}
+                    onClick={() => copyToClipboard(companyData.email)}
                     className="px-4 py-3 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 rounded-xl text-purple-400 transition-all"
                   >
                     <Copy size={20} />
                   </button>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-gray-400 text-sm block mb-2">Temporary Password</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={generatedPassword}
+                    readOnly
+                    className="flex-1 px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white font-mono text-sm"
+                  />
+                  <button
+                    onClick={() => copyToClipboard(generatedPassword)}
+                    className="px-4 py-3 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 rounded-xl text-purple-400 transition-all"
+                  >
+                    <Copy size={20} />
+                  </button>
+                </div>
+                <p className="text-xs text-orange-400 mt-2">User should change password after first login</p>
               </div>
 
               <div>
@@ -454,7 +611,7 @@ export default function CreateCompanyPage() {
               className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-400 hover:to-cyan-400 rounded-xl text-white font-semibold transition-all flex items-center justify-center gap-2"
             >
               <Send size={20} />
-              Send Credentials by Email
+              Send Login Credentials
             </button>
             <button
               onClick={() => router.push('/admin/companies')}
@@ -462,6 +619,17 @@ export default function CreateCompanyPage() {
             >
               View All Companies
             </button>
+          </div>
+
+          {/* Important Note */}
+          <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+            <h4 className="text-blue-400 font-semibold mb-2">Important:</h4>
+            <ul className="text-blue-300 text-sm space-y-1">
+              <li>• User account created in Supabase with email: {companyData.email}</li>
+              <li>• Company linked to user_id: {createdUserId}</li>
+              <li>• User can login immediately with email/password</li>
+              <li>• Password reset functionality available if needed</li>
+            </ul>
           </div>
         </div>
       </div>

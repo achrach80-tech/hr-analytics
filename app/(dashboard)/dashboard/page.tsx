@@ -54,21 +54,18 @@ export default function CyberDashboard() {
       setInitialLoading(true)
       setError(null)
 
-      const sessionStr = localStorage.getItem('company_session')
-      if (!sessionStr) {
-        router.push('/login')
-        return
-      }
+// Replace the localStorage session logic with:
+const { data: { user } } = await supabase.auth.getUser()
+if (!user) {
+  router.push('/login')
+  return
+}
 
-      const session = JSON.parse(sessionStr)
-
-      const { data: companyData, error: companyError } = await supabase
-        .from('entreprises')
-        .select(`*, etablissements (*)`)
-        .eq('id', session.company_id)
-        .single()
-
-      if (companyError) throw companyError
+const { data: companyData, error } = await supabase
+  .from('entreprises')
+  .select(`*, etablissements (*)`)
+  .eq('user_id', user.id) // Use proper user relationship
+  .single()
 
       setCompany(companyData)
       const establishments = companyData.etablissements || []

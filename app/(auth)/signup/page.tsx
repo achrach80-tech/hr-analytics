@@ -104,62 +104,60 @@ export default function SignupPage() {
         return
       }
 
-      // Create company (main account with unique code)
-      // Replace this entire section in your signup page:
-// Create company (main account with unique code)
-const { data: company, error: companyError } = await supabase
-  .from('entreprises') // Changed from 'etablissements' to 'entreprises'
-  .insert({
-    nom: formData.companyName,
-    code_entreprise: uniqueCode, // This stays here - it's the unique company code
-    siret: formData.siret || null,
-    user_id: authData.user.id,
-    subscription_plan: 'starter',
-    subscription_status: 'active',
-    ai_features_enabled: false,
-    max_establishments: 5,
-    max_employees: 100
-  })
-  .select()
-  .single()
+      // Create company (main account with unique code) - UPDATED VERSION
+      const { data: company, error: companyError } = await supabase
+        .from('entreprises')
+        .insert({
+          nom: formData.companyName,
+          code_entreprise: uniqueCode,
+          user_id: authData.user.id, // Proper foreign key
+          siret: formData.siret || null,
+          subscription_plan: 'starter',
+          subscription_status: 'active',
+          billing_email: formData.email,
+          max_establishments: 5,
+          max_employees: 100
+        })
+        .select()
+        .single()
 
-if (companyError) {
-  console.error('Company creation error:', companyError)
-  throw new Error('Erreur lors de la création de l\'entreprise')
-}
+      if (companyError) {
+        console.error('Company creation error:', companyError)
+        throw new Error('Erreur lors de la création de l\'entreprise')
+      }
 
-console.log('Company created:', company)
+      console.log('Company created:', company)
 
-// Create default establishment
-const { data: establishment, error: establishmentError } = await supabase
-  .from('etablissements')
-  .insert({
-    entreprise_id: company.id,
-    nom: formData.companyName + ' - Siège',
-    code_etablissement: 'SIEGE',
-    is_default: true,
-    is_headquarters: true,
-    statut: 'Actif'
-  })
-  .select()
-  .single()
+      // Create default establishment
+      const { data: establishment, error: establishmentError } = await supabase
+        .from('etablissements')
+        .insert({
+          entreprise_id: company.id,
+          nom: formData.companyName + ' - Siège',
+          code_etablissement: 'SIEGE',
+          is_default: true,
+          is_headquarters: true,
+          statut: 'Actif'
+        })
+        .select()
+        .single()
 
-if (establishmentError) {
-  console.error('Establishment creation error:', establishmentError)
-  throw new Error('Erreur lors de la création de l\'établissement')
-}
+      if (establishmentError) {
+        console.error('Establishment creation error:', establishmentError)
+        throw new Error('Erreur lors de la création de l\'établissement')
+      }
 
-console.log('Default establishment created:', establishment)
+      console.log('Default establishment created:', establishment)
 
-// Setup referentials automatically
-const { error: refError } = await supabase.rpc('setup_establishment_referentials', {
-  p_etablissement_id: establishment.id
-})
+      // Setup referentials automatically
+      const { error: refError } = await supabase.rpc('setup_establishment_referentials', {
+        p_etablissement_id: establishment.id
+      })
 
-if (refError) {
-  console.log('Referentials setup warning:', refError)
-  // Don't throw error - this is not critical
-}
+      if (refError) {
+        console.log('Referentials setup warning:', refError)
+        // Don't throw error - this is not critical
+      }
 
       // Success - redirect to import
       setSuccess(true)
