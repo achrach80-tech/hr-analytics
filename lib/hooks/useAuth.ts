@@ -28,6 +28,24 @@ export const useAuth = () => {
         return false
       }
       
+      // Add this after line 28 (after setting session)
+if (currentSession) {
+  // Check if user needs to change password (first login)
+  const user = currentSession.user
+  const needsPasswordChange = user.user_metadata?.created_by_admin && !user.user_metadata?.password_changed
+  
+  if (needsPasswordChange && window.location.pathname !== '/change-password') {
+    router.push('/change-password')
+    return false
+  }
+  
+  // If on change-password page but don't need to change, redirect to dashboard
+  if (!needsPasswordChange && window.location.pathname === '/change-password') {
+    router.push('/dashboard')
+    return false
+  }
+}
+
       return true
     } catch (err) {
       console.error('Auth check error:', err)

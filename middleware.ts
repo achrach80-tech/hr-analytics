@@ -4,8 +4,20 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
 
-  // Public paths
-  const isPublicPath = path === '/' || path === '/login' || path === '/demo'
+  // Block removed routes - redirect to appropriate alternatives
+  if (path === '/signup') {
+    return NextResponse.redirect(new URL('/demo', request.url))
+  }
+  
+  if (path === '/forgot-password') {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  // Public paths (add change-password to public paths)
+  const isPublicPath = path === '/' || 
+                      path === '/login' || 
+                      path === '/demo' || 
+                      path === '/change-password'
   
   // Admin paths
   const isAdminPath = path.startsWith('/admin')

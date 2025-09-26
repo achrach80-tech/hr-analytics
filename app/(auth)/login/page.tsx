@@ -151,12 +151,9 @@ export default function CleanLoginPage() {
               </Link>
 
               <div className="pt-4">
-                <Link
-                  href="/forgot-password"
-                  className="text-sm text-slate-400 hover:text-cyan-400 transition-colors"
-                >
-                  Mot de passe oublié ?
-                </Link>
+                <p className="text-xs text-slate-500 pt-2">
+      Mot de passe oublié ? Contactez votre administrateur
+    </p>
               </div>
             </div>
           </div>

@@ -62,16 +62,17 @@ export default function CreateCompanyPage() {
       // Step 2: Create Supabase user with admin privileges
       // NOTE: This requires service_role key for admin.createUser
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: companyData.email,
-        password: tempPassword,
-        email_confirm: true, // Skip email verification for admin-created accounts
-        user_metadata: {
-          company_name: companyData.nom,
-          contact_name: companyData.contact_name,
-          created_by_admin: true,
-          created_at: new Date().toISOString()
-        }
-      })
+  email: companyData.email,
+  password: tempPassword,
+  email_confirm: true, // Skip email confirmation for admin-created accounts
+  user_metadata: {
+    company_name: companyData.nom,
+    contact_name: companyData.contact_name,
+    created_by_admin: true,
+    password_changed: false, // Force password change on first login
+    created_at: new Date().toISOString()
+  }
+})
 
       if (authError) {
         console.error('❌ User creation failed:', authError)
@@ -224,18 +225,19 @@ Your RH Quantum analytics platform is now active!
 📧 Email: ${companyData.email}
 🔑 Temporary Password: ${generatedPassword}
 
-Please change your password after your first login for security.
+IMPORTANT SECURITY NOTICE:
+For your security, you will be required to change this temporary password on your first login.
 
 Company Details:
 - Company Code: ${createdCompany?.code_entreprise}
 - Subscription: ${createdCompany?.subscription_plan}
 - Trial Ends: ${createdCompany?.trial_ends_at ? new Date(createdCompany.trial_ends_at).toLocaleDateString() : 'N/A'}
 
-Need help? Reply to this email.
+Need help? Reply to this email or contact support.
 
 Best regards,
 The RH Quantum Team
-      `
+`
       
       console.log('Email to send:', emailContent)
       alert(`Credentials ready to send to ${companyData.email}!\n\nCheck console for email content.`)

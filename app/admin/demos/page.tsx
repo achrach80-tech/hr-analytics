@@ -87,16 +87,17 @@ const createCompanyFromDemo = async (demo: any) => {
 
     // Step 1: Create Supabase user account (requires admin privileges)
     const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-      email: demo.email,
-      password: tempPassword,
-      email_confirm: true, // Skip email confirmation for admin-created accounts
-      user_metadata: {
-        company_name: demo.company_name,
-        contact_name: demo.contact_name,
-        created_by_admin: true,
-        created_from_demo: demo.id
-      }
-    })
+  email: demo.email,
+  password: tempPassword,
+  email_confirm: true, // Skip email confirmation for admin-created accounts
+  user_metadata: {
+    company_name: demo.company_name,
+    contact_name: demo.contact_name,
+    created_by_admin: true,
+    password_changed: false, // Force password change on first login
+    created_from_demo: demo.id
+  }
+})
 
     if (authError) {
       console.error('Auth user creation error:', authError)
