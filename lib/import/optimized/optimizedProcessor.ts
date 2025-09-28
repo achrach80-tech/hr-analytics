@@ -246,7 +246,7 @@ export class OptimizedProcessor {
     }
   }
 
-  private async calculateSnapshots(
+ private async calculateSnapshots(
     establishmentId: string,
     periods: string[],
     onProgress: (progress: ImportProgress) => void,
@@ -279,14 +279,17 @@ export class OptimizedProcessor {
       })
 
       try {
-        await Promise.all([
-          this.calculateWorkforceSnapshot(establishmentId, period),
-          this.calculateFinancialSnapshot(establishmentId, period),
-          this.calculateAbsenceSnapshot(establishmentId, period)
-        ])
+        // Use the function from your schema
+        const { error } = await this.supabase.rpc('calculate_snapshot_for_period', {
+          p_etablissement_id: establishmentId,
+          p_periode: period,
+          p_force: true
+        })
+        
+        if (error) throw error
         
         successCount++
-        onLog(`📈 Snapshot optimisé calculé: ${period}`, 'success')
+        onLog(`📈 Snapshot calculé: ${period}`, 'success')
         
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
@@ -301,130 +304,20 @@ export class OptimizedProcessor {
     onLog(`🎯 ${successCount}/${periods.length} snapshots calculés`, 'success')
   }
 
+  // Remove the individual snapshot methods and replace with this unified approach
   private async calculateWorkforceSnapshot(establishmentId: string, period: string): Promise<void> {
-    const { data: employees } = await this.supabase
-      .from('employes')
-      .select('*')
-      .eq('etablissement_id', establishmentId)
-      .eq('periode', period)
-
-    if (!employees || employees.length === 0) return
-
-    const activeEmployees = employees.filter(e => e.statut_emploi === 'Actif')
-    const totalETP = activeEmployees.reduce((sum, e) => sum + (e.temps_travail || 1), 0)
-    const ages = activeEmployees
-      .filter(e => e.date_naissance)
-      .map(e => {
-        const birthYear = new Date(e.date_naissance).getFullYear()
-        const periodYear = new Date(period).getFullYear()
-        return periodYear - birthYear
-      })
-    const avgAge = ages.length > 0 ? ages.reduce((sum, age) => sum + age, 0) / ages.length : 0
-    
-    const males = activeEmployees.filter(e => e.sexe === 'M').length
-    const females = activeEmployees.filter(e => e.sexe === 'F').length
-    const total = activeEmployees.length
-    const cdiCount = activeEmployees.filter(e => e.type_contrat === 'CDI').length
-
-    await this.supabase
-      .from('snapshots_workforce')
-      .upsert({
-        etablissement_id: establishmentId,
-        periode: period,
-        effectif_fin_mois: total,
-        etp_fin_mois: totalETP,
-        nb_entrees: 0,
-        nb_sorties: 0,
-        taux_turnover: 0,
-        pct_cdi: total > 0 ? (cdiCount / total) * 100 : 0,
-        age_moyen: avgAge,
-        anciennete_moyenne_mois: 24,
-        pct_hommes: total > 0 ? (males / total) * 100 : 0,
-        pct_femmes: total > 0 ? (females / total) * 100 : 0,
-        calculated_at: new Date().toISOString()
-      }, { onConflict: 'etablissement_id,periode' })
+    // This is now handled by the PostgreSQL function
+    return
   }
 
   private async calculateFinancialSnapshot(establishmentId: string, period: string): Promise<void> {
-    const { data: remunerations } = await this.supabase
-      .from('remunerations')
-      .select('*')
-      .eq('etablissement_id', establishmentId)
-      .eq('mois_paie', period)
-
-    if (!remunerations || remunerations.length === 0) return
-
-    const masseBrute = remunerations.reduce((sum, r) => 
-      sum + (r.salaire_de_base || 0) + (r.primes_fixes || 0) + 
-      (r.primes_variables || 0) + (r.primes_exceptionnelles || 0), 0)
-    
-    const charges = remunerations.reduce((sum, r) => 
-      sum + (r.cotisations_sociales || 0) + (r.taxes_sur_salaire || 0) + 
-      (r.autres_charges || 0), 0)
-    
-    const coutTotal = masseBrute + charges
-    const avgSalary = remunerations.length > 0 ? masseBrute / remunerations.length : 0
-
-    await this.supabase
-      .from('snapshots_financials')
-      .upsert({
-        etablissement_id: establishmentId,
-        periode: period,
-        masse_salariale_brute: masseBrute,
-        cout_total_employeur: coutTotal,
-        salaire_base_moyen: avgSalary,
-        cout_moyen_par_fte: avgSalary,
-        part_variable: 0,
-        taux_charges: masseBrute > 0 ? (charges / masseBrute) * 100 : 0,
-        calculated_at: new Date().toISOString()
-      }, { onConflict: 'etablissement_id,periode' })
+    // This is now handled by the PostgreSQL function
+    return
   }
 
   private async calculateAbsenceSnapshot(establishmentId: string, period: string): Promise<void> {
-    const startDate = period
-    const endDate = new Date(period)
-    endDate.setMonth(endDate.getMonth() + 1)
-    endDate.setDate(0)
-    
-    const { data: absences } = await this.supabase
-      .from('absences')
-      .select('*')
-      .eq('etablissement_id', establishmentId)
-      .gte('date_debut', startDate)
-      .lte('date_debut', endDate.toISOString().split('T')[0])
-
-    const totalAbsences = absences?.length || 0
-    const uniqueEmployees = new Set(absences?.map(a => a.matricule) || []).size
-    
-    let totalDays = 0
-    let maladyDays = 0
-    
-    absences?.forEach(absence => {
-      const start = new Date(absence.date_debut)
-      const end = new Date(absence.date_fin || absence.date_debut)
-      const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-      totalDays += days
-      
-      if (absence.type_absence?.toLowerCase().includes('maladie')) {
-        maladyDays += days
-      }
-    })
-
-    const avgDuration = totalAbsences > 0 ? totalDays / totalAbsences : 0
-
-    await this.supabase
-      .from('snapshots_absences')
-      .upsert({
-        etablissement_id: establishmentId,
-        periode: period,
-        taux_absenteisme: 5,
-        nb_jours_absence: totalDays,
-        nb_absences_total: totalAbsences,
-        duree_moyenne_absence: avgDuration,
-        nb_salaries_absents: uniqueEmployees,
-        nb_jours_maladie: maladyDays,
-        calculated_at: new Date().toISOString()
-      }, { onConflict: 'etablissement_id,periode' })
+    // This is now handled by the PostgreSQL function
+    return
   }
 
   abort(): void {

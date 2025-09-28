@@ -58,59 +58,50 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
         setLoading(true)
         setError(null)
 
-        const [workforceRes, financialRes, absenceRes] = await Promise.all([
-          supabase
-            .from('snapshots_workforce')
-            .select('*')
-            .eq('etablissement_id', establishmentId)
-            .eq('periode', period)
-            .maybeSingle(),
-          
-          supabase
-            .from('snapshots_financials')
-            .select('*')
-            .eq('etablissement_id', establishmentId)
-            .eq('periode', period)
-            .maybeSingle(),
-          
-          supabase
-            .from('snapshots_absences')
-            .select('*')
-            .eq('etablissement_id', establishmentId)
-            .eq('periode', period)
-            .maybeSingle()
-        ])
+        // Use the unified snapshots_mensuels table
+        const { data: snapshot, error } = await supabase
+          .from('snapshots_mensuels')
+          .select('*')
+          .eq('etablissement_id', establishmentId)
+          .eq('periode', period)
+          .maybeSingle()
 
-        setData({
-          workforce: workforceRes.data ? {
-            etpTotal: workforceRes.data.etp_fin_mois || 0,
-            headcountActif: workforceRes.data.effectif_fin_mois || 0,
-            nbEntrees: workforceRes.data.nb_entrees || 0,
-            nbSorties: workforceRes.data.nb_sorties || 0,
-            tauxTurnover: workforceRes.data.taux_turnover || 0,
-            pctCDI: workforceRes.data.pct_cdi || 0,
-            ageMoyen: workforceRes.data.age_moyen || 0,
-            ancienneteMoyenne: workforceRes.data.anciennete_moyenne_mois || 0,
-            pctHommes: workforceRes.data.pct_hommes || 0,
-            pctFemmes: workforceRes.data.pct_femmes || 0
-          } : null,
-          financials: financialRes.data ? {
-            masseBrute: financialRes.data.masse_salariale_brute || 0,
-            coutTotal: financialRes.data.cout_total_employeur || 0,
-            salaireMoyen: financialRes.data.salaire_base_moyen || 0,
-            coutMoyenFTE: financialRes.data.cout_moyen_par_fte || 0,
-            partVariable: financialRes.data.part_variable || 0,
-            tauxCharges: financialRes.data.taux_charges || 0
-          } : null,
-          absences: absenceRes.data ? {
-            tauxAbsenteisme: absenceRes.data.taux_absenteisme || 0,
-            nbJoursAbsence: absenceRes.data.nb_jours_absence || 0,
-            nbAbsencesTotal: absenceRes.data.nb_absences_total || 0,
-            dureeMoyenne: absenceRes.data.duree_moyenne_absence || 0,
-            nbSalariesAbsents: absenceRes.data.nb_salaries_absents || 0,
-            nbJoursMaladie: absenceRes.data.nb_jours_maladie || 0
-          } : null
-        })
+        if (error) throw error
+
+        if (snapshot) {
+          setData({
+            workforce: {
+              etpTotal: snapshot.etp_fin_mois || 0,
+              headcountActif: snapshot.effectif_fin_mois || 0,
+              nbEntrees: snapshot.nb_entrees || 0,
+              nbSorties: snapshot.nb_sorties || 0,
+              tauxTurnover: snapshot.taux_turnover || 0,
+              pctCDI: snapshot.pct_cdi || 0,
+              ageMoyen: snapshot.age_moyen || 0,
+              ancienneteMoyenne: snapshot.anciennete_moyenne_mois || 0,
+              pctHommes: snapshot.pct_hommes || 0,
+              pctFemmes: snapshot.pct_femmes || 0
+            },
+            financials: {
+              masseBrute: snapshot.masse_salariale_brute || 0,
+              coutTotal: snapshot.cout_total_employeur || 0,
+              salaireMoyen: snapshot.salaire_base_moyen || 0,
+              coutMoyenFTE: snapshot.cout_moyen_par_fte || 0,
+              partVariable: snapshot.part_variable || 0,
+              tauxCharges: snapshot.taux_charges || 0
+            },
+            absences: {
+              tauxAbsenteisme: snapshot.taux_absenteisme || 0,
+              nbJoursAbsence: snapshot.nb_jours_absence || 0,
+              nbAbsencesTotal: snapshot.nb_absences_total || 0,
+              dureeMoyenne: snapshot.duree_moyenne_absence || 0,
+              nbSalariesAbsents: snapshot.nb_salaries_absents || 0,
+              nbJoursMaladie: snapshot.nb_jours_maladie || 0
+            }
+          })
+        } else {
+          setData({ workforce: null, financials: null, absences: null })
+        }
 
       } catch (err) {
         console.error('KPI fetch error:', err)

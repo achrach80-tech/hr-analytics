@@ -86,17 +86,18 @@ export default function CyberDashboard() {
     }
   }
 
-  const loadPeriodsForEstablishment = async (establishmentId: string) => {
+const loadPeriodsForEstablishment = async (establishmentId: string) => {
     try {
-      // Try optimized tables first, fallback to original
+      // Use the unified snapshots table
       const { data: periodData, error } = await supabase
-        .from('snapshots_workforce')
+        .from('snapshots_mensuels')
         .select('periode')
         .eq('etablissement_id', establishmentId)
         .order('periode', { ascending: false })
 
-      if (error || !periodData?.length) {
-        // Fallback to original table
+      if (error) {
+        console.error('Period load error:', error)
+        // Fallback to employes table
         const { data: fallbackData, error: fallbackError } = await supabase
           .from('employes')
           .select('periode')

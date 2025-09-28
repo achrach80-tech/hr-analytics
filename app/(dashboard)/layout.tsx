@@ -25,7 +25,7 @@ export default function DashboardLayout({
     loadCompanyData()
   }, [])
 
-  const loadCompanyData = async () => {
+const loadCompanyData = async () => {
     const sessionStr = localStorage.getItem('company_session')
     if (!sessionStr) {
       router.push('/login')
@@ -34,16 +34,23 @@ export default function DashboardLayout({
 
     const session = JSON.parse(sessionStr)
     
-    // Load company and establishments
+    // Fixed query to match new schema
     const { data: companyData } = await supabase
       .from('entreprises')
-      .select('*, etablissements(*)')
+      .select(`
+        *,
+        etablissements (*)
+      `)
       .eq('id', session.company_id)
       .single()
 
     if (companyData) {
       setCompany(companyData)
-      setEstablishment(companyData.etablissements?.[0])
+      // Get the first establishment or headquarters
+      const defaultEst = companyData.etablissements?.find((e: any) => e.is_headquarters) || companyData.etablissements?.[0]
+      if (defaultEst) {
+        setEstablishment(defaultEst)
+      }
     }
   }
 
