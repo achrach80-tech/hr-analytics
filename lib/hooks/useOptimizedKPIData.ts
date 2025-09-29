@@ -129,5 +129,7 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
     fetchData()
   }, [establishmentId, period, supabase])
 
-  return { data, loading, error }
+  return { data, loading, error,  historicalData: [], // TODO: implement
+  previousMonthData: null, // TODO: implement
+  previousYearData: null  }
 }
