@@ -347,170 +347,146 @@ const CyberSidebar: React.FC<{
   fileAnalysis?: FileAnalysis | null
   importStats?: ImportStats | null
 }> = ({ isOpen, onToggle, onDownloadTemplate, logs, fileAnalysis, importStats }) => (
-<div className={`fixed left-16 top-0 h-full z-50 transition-transform duration-300 ${
-  isOpen ? 'translate-x-0' : '-translate-x-full'
-}`}>
-    <NeoBorder className="h-full w-80 m-4">
-      <div className="p-6 h-full flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Terminal size={20} className="text-cyan-400" />
-            <h2 className="text-cyan-400 font-mono font-bold">CYBER CONSOLE</h2>
-          </div>
-          <button
-            onClick={onToggle}
-            className="p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
-          >
-            <ChevronLeft size={16} className="text-slate-400" />
-          </button>
+  <div className="h-full w-full bg-slate-900/95 backdrop-blur-xl border-l border-slate-700/50">
+    <div className="p-6 h-full flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-700/50">
+        <div className="flex items-center gap-3">
+          <Terminal size={20} className="text-cyan-400" />
+          <h2 className="text-cyan-400 font-mono font-bold">CYBER CONSOLE</h2>
         </div>
-
-        {/* Quick Actions */}
-        <div className="mb-6 space-y-3">
-          <HolographicButton
-            onClick={onDownloadTemplate}
-            variant="secondary"
-            size="sm"
-            className="w-full"
-          >
-            <Download size={16} className="mr-2" />
-            Template Excel Optimisé
-          </HolographicButton>
-          
-          <HolographicButton
-            onClick={() => window.open('/docs/import-guide', '_blank')}
-            variant="secondary"
-            size="sm"
-            className="w-full"
-          >
-            <BookOpen size={16} className="mr-2" />
-            Guide d'Import
-          </HolographicButton>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+          <span className="text-green-400 text-xs font-mono">LIVE</span>
         </div>
+      </div>
 
-        {/* File Analysis Metrics */}
-        {fileAnalysis && (
-          <div className="mb-6">
-            <h3 className="text-purple-400 font-mono text-sm font-bold mb-3">ANALYSE FICHIER</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <CyberMetrics
-                title="Onglets"
-                value={fileAnalysis.sheets.length}
-                icon={Layers}
-                gradient="bg-gradient-to-r from-cyan-500 to-blue-500"
-              />
-              <CyberMetrics
-                title="Lignes"
-                value={fileAnalysis.totalRows.toLocaleString()}
-                icon={Hash}
-                gradient="bg-gradient-to-r from-purple-500 to-pink-500"
-              />
-              <CyberMetrics
-                title="Taille"
-                value={formatFileSize(fileAnalysis.fileSize)}
-                icon={HardDrive}
-                gradient="bg-gradient-to-r from-green-500 to-emerald-500"
-              />
-              <CyberMetrics
-                title="Temps"
-                value={`${fileAnalysis.estimatedProcessingTime}s`}
-                icon={Clock}
-                gradient="bg-gradient-to-r from-orange-500 to-red-500"
-              />
-            </div>
-          </div>
-        )}
+      {/* Quick Actions */}
+      <div className="mb-6 space-y-3">
+        <HolographicButton
+          onClick={onDownloadTemplate}
+          variant="secondary"
+          size="sm"
+          className="w-full"
+        >
+          <Download size={16} className="mr-2" />
+          Template Excel
+        </HolographicButton>
+        
+        <HolographicButton
+          onClick={() => window.open('/docs/import-guide', '_blank')}
+          variant="secondary"
+          size="sm"
+          className="w-full"
+        >
+          <BookOpen size={16} className="mr-2" />
+          Guide d'Import
+        </HolographicButton>
+      </div>
 
-        {/* Import Stats */}
-        {importStats && (
-          <div className="mb-6">
-            <h3 className="text-purple-400 font-mono text-sm font-bold mb-3">STATS IMPORT</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Progression</span>
-                <span className="text-cyan-400">{importStats.processedRows}/{importStats.totalRows}</span>
-              </div>
-              <div className="w-full bg-slate-800 rounded-full h-2">
-                <div 
-                  className="h-2 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-full transition-all duration-300"
-                  style={{ width: `${(importStats.processedRows / importStats.totalRows) * 100}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-xs text-slate-500">
-                <span>Erreurs: {importStats.errorsFound}</span>
-                <span>Alertes: {importStats.warningsFound}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* System Logs */}
-        <div className="flex-1 overflow-hidden">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-purple-400 font-mono text-sm font-bold">LOGS SYSTÈME</h3>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-green-400 text-xs font-mono">LIVE</span>
-            </div>
-          </div>
-          
-          <div className="bg-slate-950/50 rounded-lg p-3 h-full overflow-y-auto font-mono text-xs border border-slate-800/50">
-            {logs.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-slate-500">
-                <div className="text-center">
-                  <Terminal size={32} className="mx-auto mb-2 opacity-30" />
-                  <p>Aucun log système...</p>
-                  <p className="text-xs mt-1">En attente d'activité</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {logs.slice(-50).map((log, index) => (
-                  <motion.div 
-                    key={index} 
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="text-green-400 break-words border-l-2 border-green-500/30 pl-2 hover:bg-green-500/10 rounded-r transition-colors"
-                  >
-                    {log}
-                  </motion.div>
-                ))}
-              </div>
-            )}
-            {logs.length > 0 && (
-              <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
-            )}
+      {/* File Analysis Metrics */}
+      {fileAnalysis && (
+        <div className="mb-6">
+          <h3 className="text-purple-400 font-mono text-sm font-bold mb-3">ANALYSE FICHIER</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <CyberMetrics
+              title="Onglets"
+              value={fileAnalysis.sheets.length}
+              icon={Layers}
+              gradient="bg-gradient-to-r from-cyan-500 to-blue-500"
+            />
+            <CyberMetrics
+              title="Lignes"
+              value={fileAnalysis.totalRows.toLocaleString()}
+              icon={Hash}
+              gradient="bg-gradient-to-r from-purple-500 to-pink-500"
+            />
+            <CyberMetrics
+              title="Taille"
+              value={formatFileSize(fileAnalysis.fileSize)}
+              icon={HardDrive}
+              gradient="bg-gradient-to-r from-green-500 to-emerald-500"
+            />
+            <CyberMetrics
+              title="Temps"
+              value={`${fileAnalysis.estimatedProcessingTime}s`}
+              icon={Clock}
+              gradient="bg-gradient-to-r from-orange-500 to-red-500"
+            />
           </div>
         </div>
+      )}
 
-        {/* System Status */}
-        <div className="mt-4 pt-4 border-t border-slate-700/50">
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <div className="flex items-center gap-2">
-              <Cpu size={12} className="text-purple-400" />
-              <span>Processeur Optimisé</span>
+      {/* Import Stats */}
+      {importStats && (
+        <div className="mb-6">
+          <h3 className="text-purple-400 font-mono text-sm font-bold mb-3">STATS IMPORT</h3>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Progression</span>
+              <span className="text-cyan-400">{importStats.processedRows}/{importStats.totalRows}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Database size={12} className="text-cyan-400" />
-              <span>Split Tables</span>
+            <div className="w-full bg-slate-800 rounded-full h-2">
+              <div 
+                className="h-2 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-full transition-all duration-300"
+                style={{ width: `${(importStats.processedRows / importStats.totalRows) * 100}%` }}
+              />
             </div>
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>Erreurs: {importStats.errorsFound}</span>
+              <span>Alertes: {importStats.warningsFound}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* System Logs */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <h3 className="text-purple-400 font-mono text-sm font-bold mb-3">LOGS SYSTÈME</h3>
+        
+        <div className="flex-1 bg-slate-950/50 rounded-lg p-3 overflow-y-auto font-mono text-xs border border-slate-800/50">
+          {logs.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-slate-500">
+              <div className="text-center">
+                <Terminal size={32} className="mx-auto mb-2 opacity-30" />
+                <p>Aucun log système...</p>
+                <p className="text-xs mt-1">En attente d'activité</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {logs.slice(-50).map((log, index) => (
+                <motion.div 
+                  key={index} 
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="text-green-400 break-words border-l-2 border-green-500/30 pl-2 hover:bg-green-500/10 rounded-r transition-colors"
+                >
+                  {log}
+                </motion.div>
+              ))}
+            </div>
+          )}
+          {logs.length > 0 && (
+            <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
+          )}
+        </div>
+      </div>
+
+      {/* System Status */}
+      <div className="mt-4 pt-4 border-t border-slate-700/50">
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <Cpu size={12} className="text-purple-400" />
+            <span>Processeur Optimisé</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Database size={12} className="text-cyan-400" />
+            <span>Split Tables</span>
           </div>
         </div>
       </div>
-    </NeoBorder>
-
-    {/* Sidebar Toggle */}
-    {!isOpen && (
-      <motion.button
-        onClick={onToggle}
-        className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-slate-900/90 backdrop-blur-xl rounded-r-xl border border-l-0 border-slate-700/50 hover:bg-slate-800/90 transition-colors shadow-lg"
-        whileHover={{ scale: 1.1, x: 2 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        <ChevronRight size={20} className="text-cyan-400" />
-      </motion.button>
-    )}
+    </div>
   </div>
 )
 
@@ -1777,695 +1753,698 @@ export default function OptimizedImportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
-      <StaticCyberpunkBackground />
-      
-      <div className="relative z-10 flex min-h-screen">
-        <CyberSidebar 
-          isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen(!sidebarOpen)}
-          onDownloadTemplate={downloadTemplate}
-          logs={importLogs}
-          fileAnalysis={fileAnalysis}
-          importStats={importStats}
-        />
+  <div className="min-h-screen bg-slate-950 relative overflow-hidden">
+    <StaticCyberpunkBackground />
+    
+    {/* Fixed Sidebar - Always visible on the right */}
+    <div className="fixed right-0 top-0 h-full w-80 z-50">
+      <CyberSidebar 
+        isOpen={true}
+        onToggle={() => {}} // Always open, no toggle
+        onDownloadTemplate={downloadTemplate}
+        logs={importLogs}
+        fileAnalysis={fileAnalysis}
+        importStats={importStats}
+      />
+    </div>
 
-<div className={`flex-1 container max-w-6xl mx-auto px-8 py-8 transition-all duration-300 ${
-  sidebarOpen ? 'ml-96' : 'ml-16'
-}`}>
-          {/* Header */}
-          <motion.div 
-            className="text-center mb-10"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-slate-900/70 to-slate-800/70 border border-cyan-500/30 rounded-2xl backdrop-blur-sm mb-6">
-              <Database size={20} className="text-cyan-400" />
-              <span className="text-cyan-400 font-mono text-sm">CYBER-HR SYSTEM v5.0 OPTIMIZED</span>
-              <motion.div 
-                className="w-2 h-2 bg-green-400 rounded-full"
-                animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              />
-            </div>
-            
-            <motion.h1 
-              className="text-6xl font-bold text-white mb-4 bg-gradient-to-r from-cyan-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent font-mono"
-              animate={{ 
-                backgroundPosition: ['0% 50%', '100% 50%', '0% 50%']
-              }}
-              transition={{ duration: 5, repeat: Infinity }}
-            >
-              OPTIMIZED DATA INJECTION
-            </motion.h1>
-            
-            <p className="text-slate-400 text-lg font-mono max-w-3xl mx-auto">
-              Interface de chargement optimisée pour snapshots split, tables partitionnées et performance maximale. 
-              Architecture nouvelle génération compatible avec le Dashboard Cyberpunk.
-            </p>
-
-            {company && selectedEstablishment && (
-              <motion.div 
-                className="flex items-center justify-center gap-4 mt-6"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3 }}
-              >
-                <NeoBorder>
-                  <div className="px-4 py-2">
-                    <span className="text-cyan-400 text-sm font-mono flex items-center gap-2">
-                      <Building2 size={14} />
-                      {company.nom}
-                    </span>
-                  </div>
-                </NeoBorder>
-                <NeoBorder>
-                  <div className="px-4 py-2">
-                    <span className="text-purple-400 text-sm font-mono flex items-center gap-2">
-                      <Factory size={14} />
-                      {selectedEstablishment.nom}
-                    </span>
-                  </div>
-                </NeoBorder>
-              </motion.div>
-            )}
-          </motion.div>
-
-          {/* Error Display */}
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-            >
-              <NeoBorder className="mb-8">
-                <div className="p-6 bg-red-900/20">
-                  <div className="flex items-center gap-3">
-                    <ShieldAlert size={24} className="text-red-400" />
-                    <div className="flex-1">
-                      <p className="text-red-400 font-bold font-mono">ERREUR SYSTÈME OPTIMISÉ</p>
-                      <p className="text-red-300 text-sm mt-1 font-mono">{error}</p>
-                    </div>
-                    <button 
-                      onClick={resetAll} 
-                      className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
-                    >
-                      <X size={16} className="text-red-400" />
-                    </button>
-                  </div>
-                </div>
-              </NeoBorder>
-            </motion.div>
-          )}
-
-          {/* File Upload */}
-          {!file && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <NeoBorder className="mb-8">
-                <div 
-                  {...getRootProps()} 
-                  className={`p-12 text-center cursor-pointer transition-all duration-300 ${
-                    isDragActive ? 'bg-purple-500/10' : 'hover:bg-slate-800/20'
-                  }`}
-                >
-                  <input {...getInputProps()} />
-                  <div className="mb-6">
-                    <motion.div 
-                      className="w-24 h-24 mx-auto mb-4 rounded-full bg-gradient-to-r from-purple-500/20 to-cyan-500/20 flex items-center justify-center"
-                      animate={isDragActive ? { scale: [1, 1.1, 1] } : {}}
-                      transition={{ duration: 0.5, repeat: isDragActive ? Infinity : 0 }}
-                    >
-                      {isDragActive ? (
-                        <Upload size={40} className="text-cyan-400 animate-bounce" />
-                      ) : (
-                        <FileSpreadsheet size={40} className="text-purple-400" />
-                      )}
-                    </motion.div>
-                    <h2 className="text-2xl font-bold text-white mb-2 font-mono">
-                      {isDragActive ? 'Déposez votre fichier Excel' : 'Sélectionnez votre fichier Excel'}
-                    </h2>
-                    <p className="text-slate-400 font-mono">
-                      Formats supportés: .xlsx, .xls (max {Math.round(MAX_FILE_SIZE / 1024 / 1024)}MB)
-                    </p>
-                    <p className="text-slate-500 text-sm mt-2 font-mono">
-                      Compatible avec la nouvelle architecture split tables et snapshots optimisés
-                    </p>
-                  </div>
-
-                  <HolographicButton>
-                    <Upload size={20} className="mr-2" />
-                    Parcourir les fichiers
-                  </HolographicButton>
-                </div>
-              </NeoBorder>
-            </motion.div>
-          )}
-
-          {/* File Analysis */}
-          {file && fileAnalysis && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <NeoBorder className="mb-8">
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <FileCheck size={24} className="text-green-400" />
-                      <div>
-                        <h3 className="text-white font-bold text-xl font-mono">{file.name}</h3>
-                        <p className="text-slate-400 text-sm font-mono">
-                          {formatFileSize(file.size)} • {fileAnalysis.totalRows.toLocaleString()} lignes • 
-                          Modifié le {fileAnalysis.lastModified.toLocaleDateString('fr-FR')}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={resetAll}
-                        className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
-                      >
-                        <X size={16} className="text-red-400" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    <CyberMetrics
-                      title="Onglets Détectés"
-                      value={fileAnalysis.sheets.length}
-                      icon={Layers}
-                      gradient="bg-gradient-to-r from-cyan-500 to-blue-500"
-                      subtitle={`Requis: ${REQUIRED_SHEETS.length}`}
-                    />
-                    <CyberMetrics
-                      title="Total Lignes"
-                      value={fileAnalysis.totalRows.toLocaleString()}
-                      icon={Hash}
-                      gradient="bg-gradient-to-r from-purple-500 to-pink-500"
-                      subtitle="Données à traiter"
-                    />
-                    <CyberMetrics
-                      title="Taille Fichier"
-                      value={formatFileSize(fileAnalysis.fileSize)}
-                      icon={HardDrive}
-                      gradient="bg-gradient-to-r from-green-500 to-emerald-500"
-                      subtitle={`${((fileAnalysis.fileSize / MAX_FILE_SIZE) * 100).toFixed(1)}% limite`}
-                    />
-                    <CyberMetrics
-                      title="Temps Estimé"
-                      value={`${fileAnalysis.estimatedProcessingTime}s`}
-                      icon={Clock}
-                      gradient="bg-gradient-to-r from-orange-500 to-red-500"
-                      subtitle="Traitement optimisé"
-                    />
-                  </div>
-
-                  {fileAnalysis.missingSheets.length > 0 && (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="p-4 bg-red-900/20 border border-red-500/30 rounded-xl mb-4"
-                    >
-                      <div className="flex items-center gap-3 mb-2">
-                        <AlertTriangle size={20} className="text-red-400" />
-                        <h4 className="text-red-300 font-bold font-mono">ONGLETS MANQUANTS DÉTECTÉS</h4>
-                      </div>
-                      <p className="text-red-400 text-sm font-mono mb-3">
-                        Les onglets suivants sont requis pour le traitement optimisé:
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {fileAnalysis.missingSheets.map(sheet => (
-                          <div key={sheet} className="flex items-center gap-2 text-red-300 text-sm font-mono">
-                            <FileX size={14} />
-                            {sheet}
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {isAnalyzing && (
-                    <div className="flex items-center justify-center gap-3 py-8">
-                      <Loader2 size={20} className="text-purple-400 animate-spin" />
-                      <span className="text-purple-400 font-mono">Analyse avancée en cours...</span>
-                    </div>
-                  )}
-
-                  {fileAnalysis.sheets.length > 0 && !isAnalyzing && (
-                    <div className="mt-4">
-                      <h4 className="text-cyan-400 font-mono font-bold mb-2">ONGLETS DÉTECTÉS:</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-                        {fileAnalysis.sheets.map(sheet => (
-                          <div 
-                            key={sheet}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono border ${
-                              REQUIRED_SHEETS.includes(sheet.toUpperCase())
-                                ? 'border-green-500/30 bg-green-500/10 text-green-300'
-                                : 'border-slate-600/30 bg-slate-700/20 text-slate-400'
-                            }`}
-                          >
-                            <CheckCircle2 size={12} className={
-                              REQUIRED_SHEETS.includes(sheet.toUpperCase()) ? 'text-green-400' : 'text-slate-500'
-                            } />
-                            {sheet}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </NeoBorder>
-            </motion.div>
-          )}
-
-          {/* Data Preview */}
-          {processedData && (
-            <DataPreview processedData={processedData} />
-          )}
-
-          {/* Validation Console */}
-          {validationResult && (
-            <ValidationConsole
-              validationResult={validationResult}
-              onFixError={onFixError}
-              onIgnoreError={onIgnoreError}
+    {/* Main Content - Centered with proper margins */}
+    <div className="relative z-10 min-h-screen pr-80"> {/* Right padding for sidebar */}
+      <div className="max-w-4xl mx-auto px-8 py-12">
+        {/* Header */}
+        <motion.div 
+          className="text-center mb-12"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          <div className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-slate-900/70 to-slate-800/70 border border-cyan-500/30 rounded-2xl backdrop-blur-sm mb-6">
+            <Database size={20} className="text-cyan-400" />
+            <span className="text-cyan-400 font-mono text-sm">CYBER-HR SYSTEM v5.0 OPTIMIZED</span>
+            <motion.div 
+              className="w-2 h-2 bg-green-400 rounded-full"
+              animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
             />
-          )}
+          </div>
+          
+          <motion.h1 
+            className="text-5xl font-bold text-white mb-4 bg-gradient-to-r from-cyan-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent font-mono"
+            animate={{ 
+              backgroundPosition: ['0% 50%', '100% 50%', '0% 50%']
+            }}
+            transition={{ duration: 5, repeat: Infinity }}
+          >
+            INTÉGRATION DONNÉES
+          </motion.h1>
+          
+          <p className="text-slate-400 text-lg font-mono max-w-2xl mx-auto">
+            Interface de chargement optimisée pour snapshots split, tables partitionnées et performance maximale.
+          </p>
 
-          {/* Success State */}
-          {importStatus === 'success' && (
-            <motion.div
+          {company && selectedEstablishment && (
+            <motion.div 
+              className="flex items-center justify-center gap-4 mt-6"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.2 }}
+              transition={{ delay: 0.3 }}
             >
-              <NeoBorder className="mt-8" glowing>
-                <div className="p-10 text-center">
-                  <div className="relative inline-block mb-6">
-                    <motion.div
-                      animate={{ 
-                        rotate: [0, 360],
-                        scale: [1, 1.1, 1]
-                      }}
-                      transition={{ 
-                        rotate: { duration: 2, repeat: Infinity, ease: "linear" },
-                        scale: { duration: 1, repeat: Infinity }
-                      }}
-                    >
-                      <CheckCircle size={64} className="text-green-400 mx-auto" />
-                    </motion.div>
-                    <div className="absolute inset-0 bg-green-400/20 rounded-full filter blur-xl animate-pulse" />
-                  </div>
-                  
-                  <h3 className="text-3xl font-bold text-white mb-2 font-mono bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
-                    INJECTION OPTIMISÉE RÉUSSIE
-                  </h3>
-                  <p className="text-green-400 mb-2 font-mono text-lg">{importProgress.message}</p>
-                  <p className="text-slate-400 text-sm font-mono mb-8">
-                    Snapshots split calculés • Tables partitionnées • Performance maximale
-                  </p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                    <CyberMetrics
-                      title="Périodes Traitées"
-                      value={processedData?.metadata.periods.length || 0}
-                      icon={Calendar}
-                      gradient="bg-gradient-to-r from-green-500 to-emerald-500"
-                      trend="up"
-                    />
-                    <CyberMetrics
-                      title="Entités Injectées"
-                      value={processedData?.metadata.totalRecords.toLocaleString() || '0'}
-                      icon={Database}
-                      gradient="bg-gradient-to-r from-blue-500 to-cyan-500"
-                      trend="up"
-                    />
-                    <CyberMetrics
-                      title="Score Qualité"
-                      value={`${validationResult?.summary.qualityScore.toFixed(1) || '0'}%`}
-                      icon={Shield}
-                      gradient="bg-gradient-to-r from-purple-500 to-pink-500"
-                      trend="up"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-center gap-4">
-                    <HolographicButton 
-                      onClick={() => router.push('/dashboard')}
-                      variant="success"
-                      size="lg"
-                    >
-                      <BarChart3 size={24} className="mr-3" />
-                      Dashboard Cyberpunk
-                      <ArrowRight size={20} className="ml-2" />
-                    </HolographicButton>
-                    
-                    <HolographicButton 
-                      onClick={() => window.location.reload()} 
-                      variant="secondary"
-                      size="lg"
-                    >
-                      <RefreshCw size={20} className="mr-2" />
-                      Nouvelle Mission
-                    </HolographicButton>
-                  </div>
-                  
-                  <div className="mt-6 text-center">
-                    <p className="text-slate-500 text-xs font-mono">
-                      Redirection automatique vers le Dashboard dans 3 secondes...
-                    </p>
-                  </div>
+              <NeoBorder>
+                <div className="px-4 py-2">
+                  <span className="text-cyan-400 text-sm font-mono flex items-center gap-2">
+                    <Building2 size={14} />
+                    {company.nom}
+                  </span>
+                </div>
+              </NeoBorder>
+              <NeoBorder>
+                <div className="px-4 py-2">
+                  <span className="text-purple-400 text-sm font-mono flex items-center gap-2">
+                    <Factory size={14} />
+                    {selectedEstablishment.nom}
+                  </span>
                 </div>
               </NeoBorder>
             </motion.div>
           )}
+        </motion.div>
 
-          {/* Action Button */}
-          {file && processedData && validationResult && importStatus === 'idle' && (
-            <motion.div 
-              className="mt-8 text-center"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              <div className="space-y-6">
-                {/* Pre-flight check */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className={`p-4 rounded-xl border ${
-                    validationResult.summary.canProceed 
-                      ? 'border-green-500/30 bg-green-500/10' 
-                      : 'border-red-500/30 bg-red-500/10'
-                  }`}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Shield size={16} className={validationResult.summary.canProceed ? 'text-green-400' : 'text-red-400'} />
-                      <span className="font-mono text-sm">Validation</span>
-                    </div>
-                    <p className={`font-bold ${validationResult.summary.canProceed ? 'text-green-400' : 'text-red-400'}`}>
-                      {validationResult.summary.canProceed ? 'SYSTÈME VALIDÉ' : 'ERREURS CRITIQUES'}
-                    </p>
+        {/* Error Display */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mb-8"
+          >
+            <NeoBorder>
+              <div className="p-6 bg-red-900/20">
+                <div className="flex items-center gap-3">
+                  <ShieldAlert size={24} className="text-red-400" />
+                  <div className="flex-1">
+                    <p className="text-red-400 font-bold font-mono">ERREUR SYSTÈME OPTIMISÉ</p>
+                    <p className="text-red-300 text-sm mt-1 font-mono">{error}</p>
                   </div>
+                  <button 
+                    onClick={resetAll} 
+                    className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                  >
+                    <X size={16} className="text-red-400" />
+                  </button>
+                </div>
+              </div>
+            </NeoBorder>
+          </motion.div>
+        )}
 
-                  <div className={`p-4 rounded-xl border ${
-                    selectedEstablishment 
-                      ? 'border-green-500/30 bg-green-500/10' 
-                      : 'border-orange-500/30 bg-orange-500/10'
-                  }`}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Building2 size={16} className={selectedEstablishment ? 'text-green-400' : 'text-orange-400'} />
-                      <span className="font-mono text-sm">Établissement</span>
-                    </div>
-                    <p className={`font-bold text-sm ${selectedEstablishment ? 'text-green-400' : 'text-orange-400'}`}>
-                      {selectedEstablishment ? selectedEstablishment.nom : 'NON SÉLECTIONNÉ'}
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Zap size={16} className="text-cyan-400" />
-                      <span className="font-mono text-sm">Processeur</span>
-                    </div>
-                    <p className="font-bold text-cyan-400">OPTIMISÉ v5.0</p>
-                  </div>
+        {/* File Upload - Centered */}
+        {!file && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mb-8"
+          >
+            <NeoBorder>
+              <div 
+                {...getRootProps()} 
+                className={`p-16 text-center cursor-pointer transition-all duration-300 ${
+                  isDragActive ? 'bg-purple-500/10' : 'hover:bg-slate-800/20'
+                }`}
+              >
+                <input {...getInputProps()} />
+                <div className="mb-6">
+                  <motion.div 
+                    className="w-24 h-24 mx-auto mb-4 rounded-full bg-gradient-to-r from-purple-500/20 to-cyan-500/20 flex items-center justify-center"
+                    animate={isDragActive ? { scale: [1, 1.1, 1] } : {}}
+                    transition={{ duration: 0.5, repeat: isDragActive ? Infinity : 0 }}
+                  >
+                    {isDragActive ? (
+                      <Upload size={40} className="text-cyan-400 animate-bounce" />
+                    ) : (
+                      <FileSpreadsheet size={40} className="text-purple-400" />
+                    )}
+                  </motion.div>
+                  <h2 className="text-2xl font-bold text-white mb-2 font-mono">
+                    {isDragActive ? 'Déposez votre fichier Excel' : 'Sélectionnez votre fichier Excel'}
+                  </h2>
+                  <p className="text-slate-400 font-mono">
+                    Formats supportés: .xlsx, .xls (max {Math.round(MAX_FILE_SIZE / 1024 / 1024)}MB)
+                  </p>
+                  <p className="text-slate-500 text-sm mt-2 font-mono">
+                    Compatible avec la nouvelle architecture split tables et snapshots optimisés
+                  </p>
                 </div>
 
-                {/* Main action button */}
-                <HolographicButton
-                  onClick={handleProcessImport}
-                  disabled={!validationResult.summary.canProceed || !selectedEstablishment}
-                  size="lg"
-                  className="min-w-80"
-                >
-                  {validationResult.summary.canProceed && selectedEstablishment ? (
-                    <>
-                      <Zap size={24} className="mr-3" />
-                      LANCER L'INJECTION OPTIMISÉE
-                      <motion.div 
-                        className="ml-3"
-                        animate={{ x: [0, 5, 0] }}
-                        transition={{ duration: 1, repeat: Infinity }}
-                      >
-                        <ArrowRight size={20} />
-                      </motion.div>
-                    </>
-                  ) : !selectedEstablishment ? (
-                    <>
-                      <AlertTriangle size={20} className="mr-2" />
-                      SÉLECTIONNER UN ÉTABLISSEMENT
-                    </>
-                  ) : (
-                    <>
-                      <XCircle size={20} className="mr-2" />
-                      CORRECTIONS REQUISES
-                    </>
-                  )}
+                <HolographicButton>
+                  <Upload size={20} className="mr-2" />
+                  Parcourir les fichiers
                 </HolographicButton>
-                
-                {validationResult.summary.canProceed && selectedEstablishment && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                    className="max-w-2xl mx-auto"
-                  >
-                    <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/50">
-                      <p className="text-cyan-400 text-sm font-mono mb-2">
-                        🚀 Prêt pour l'injection optimisée
+              </div>
+            </NeoBorder>
+          </motion.div>
+        )}
+
+        {/* File Analysis */}
+        {file && fileAnalysis && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8"
+          >
+            <NeoBorder>
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <FileCheck size={24} className="text-green-400" />
+                    <div>
+                      <h3 className="text-white font-bold text-xl font-mono">{file.name}</h3>
+                      <p className="text-slate-400 text-sm font-mono">
+                        {formatFileSize(file.size)} • {fileAnalysis.totalRows.toLocaleString()} lignes • 
+                        Modifié le {fileAnalysis.lastModified.toLocaleDateString('fr-FR')}
                       </p>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                        <div>
-                          <span className="text-slate-500">Entités:</span>
-                          <span className="text-white ml-2 font-bold">
-                            {processedData.metadata.totalRecords.toLocaleString()}
-                          </span>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={resetAll}
+                    className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                  >
+                    <X size={16} className="text-red-400" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <CyberMetrics
+                    title="Onglets Détectés"
+                    value={fileAnalysis.sheets.length}
+                    icon={Layers}
+                    gradient="bg-gradient-to-r from-cyan-500 to-blue-500"
+                    subtitle={`Requis: ${REQUIRED_SHEETS.length}`}
+                  />
+                  <CyberMetrics
+                    title="Total Lignes"
+                    value={fileAnalysis.totalRows.toLocaleString()}
+                    icon={Hash}
+                    gradient="bg-gradient-to-r from-purple-500 to-pink-500"
+                    subtitle="Données à traiter"
+                  />
+                  <CyberMetrics
+                    title="Taille Fichier"
+                    value={formatFileSize(fileAnalysis.fileSize)}
+                    icon={HardDrive}
+                    gradient="bg-gradient-to-r from-green-500 to-emerald-500"
+                    subtitle={`${((fileAnalysis.fileSize / MAX_FILE_SIZE) * 100).toFixed(1)}% limite`}
+                  />
+                  <CyberMetrics
+                    title="Temps Estimé"
+                    value={`${fileAnalysis.estimatedProcessingTime}s`}
+                    icon={Clock}
+                    gradient="bg-gradient-to-r from-orange-500 to-red-500"
+                    subtitle="Traitement optimisé"
+                  />
+                </div>
+
+                {fileAnalysis.missingSheets.length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="p-4 bg-red-900/20 border border-red-500/30 rounded-xl mb-4"
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <AlertTriangle size={20} className="text-red-400" />
+                      <h4 className="text-red-300 font-bold font-mono">ONGLETS MANQUANTS DÉTECTÉS</h4>
+                    </div>
+                    <p className="text-red-400 text-sm font-mono mb-3">
+                      Les onglets suivants sont requis pour le traitement optimisé:
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {fileAnalysis.missingSheets.map(sheet => (
+                        <div key={sheet} className="flex items-center gap-2 text-red-300 text-sm font-mono">
+                          <FileX size={14} />
+                          {sheet}
                         </div>
-                        <div>
-                          <span className="text-slate-500">Périodes:</span>
-                          <span className="text-white ml-2 font-bold">
-                            {processedData.metadata.periods.length}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Qualité:</span>
-                          <span className="text-green-400 ml-2 font-bold">
-                            {validationResult.summary.qualityScore.toFixed(1)}%
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">Durée:</span>
-                          <span className="text-purple-400 ml-2 font-bold">
-                            ~{fileAnalysis?.estimatedProcessingTime}s
-                          </span>
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </motion.div>
                 )}
-              </div>
-            </motion.div>
-          )}
 
-          {/* Quick Actions Panel */}
-          {!file && (
-            <motion.div 
-              className="mt-12"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.8 }}
+                {isAnalyzing && (
+                  <div className="flex items-center justify-center gap-3 py-8">
+                    <Loader2 size={20} className="text-purple-400 animate-spin" />
+                    <span className="text-purple-400 font-mono">Analyse avancée en cours...</span>
+                  </div>
+                )}
+
+                {fileAnalysis.sheets.length > 0 && !isAnalyzing && (
+                  <div className="mt-4">
+                    <h4 className="text-cyan-400 font-mono font-bold mb-2">ONGLETS DÉTECTÉS:</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                      {fileAnalysis.sheets.map(sheet => (
+                        <div 
+                          key={sheet}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono border ${
+                            REQUIRED_SHEETS.includes(sheet.toUpperCase())
+                              ? 'border-green-500/30 bg-green-500/10 text-green-300'
+                              : 'border-slate-600/30 bg-slate-700/20 text-slate-400'
+                          }`}
+                        >
+                          <CheckCircle2 size={12} className={
+                            REQUIRED_SHEETS.includes(sheet.toUpperCase()) ? 'text-green-400' : 'text-slate-500'
+                          } />
+                          {sheet}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </NeoBorder>
+          </motion.div>
+        )}
+
+        {/* Data Preview */}
+        {processedData && (
+          <DataPreview processedData={processedData} />
+        )}
+
+        {/* Validation Console */}
+        {validationResult && (
+          <ValidationConsole
+            validationResult={validationResult}
+            onFixError={onFixError}
+            onIgnoreError={onIgnoreError}
+          />
+        )}
+
+        {/* Success State */}
+        {importStatus === 'success' && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.2 }}
+            className="mt-8"
+          >
+            <NeoBorder glowing>
+              <div className="p-10 text-center">
+                <div className="relative inline-block mb-6">
+                  <motion.div
+                    animate={{ 
+                      rotate: [0, 360],
+                      scale: [1, 1.1, 1]
+                    }}
+                    transition={{ 
+                      rotate: { duration: 2, repeat: Infinity, ease: "linear" },
+                      scale: { duration: 1, repeat: Infinity }
+                    }}
+                  >
+                    <CheckCircle size={64} className="text-green-400 mx-auto" />
+                  </motion.div>
+                  <div className="absolute inset-0 bg-green-400/20 rounded-full filter blur-xl animate-pulse" />
+                </div>
+                
+                <h3 className="text-3xl font-bold text-white mb-2 font-mono bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                  INJECTION OPTIMISÉE RÉUSSIE
+                </h3>
+                <p className="text-green-400 mb-2 font-mono text-lg">{importProgress.message}</p>
+                <p className="text-slate-400 text-sm font-mono mb-8">
+                  Snapshots split calculés • Tables partitionnées • Performance maximale
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                  <CyberMetrics
+                    title="Périodes Traitées"
+                    value={processedData?.metadata.periods.length || 0}
+                    icon={Calendar}
+                    gradient="bg-gradient-to-r from-green-500 to-emerald-500"
+                    trend="up"
+                  />
+                  <CyberMetrics
+                    title="Entités Injectées"
+                    value={processedData?.metadata.totalRecords.toLocaleString() || '0'}
+                    icon={Database}
+                    gradient="bg-gradient-to-r from-blue-500 to-cyan-500"
+                    trend="up"
+                  />
+                  <CyberMetrics
+                    title="Score Qualité"
+                    value={`${validationResult?.summary.qualityScore.toFixed(1) || '0'}%`}
+                    icon={Shield}
+                    gradient="bg-gradient-to-r from-purple-500 to-pink-500"
+                    trend="up"
+                  />
+                </div>
+
+                <div className="flex items-center justify-center gap-4">
+                  <HolographicButton 
+                    onClick={() => router.push('/dashboard')}
+                    variant="success"
+                    size="lg"
+                  >
+                    <BarChart3 size={24} className="mr-3" />
+                    Dashboard Cyberpunk
+                    <ArrowRight size={20} className="ml-2" />
+                  </HolographicButton>
+                  
+                  <HolographicButton 
+                    onClick={() => window.location.reload()} 
+                    variant="secondary"
+                    size="lg"
+                  >
+                    <RefreshCw size={20} className="mr-2" />
+                    Nouvelle Mission
+                  </HolographicButton>
+                </div>
+                
+                <div className="mt-6 text-center">
+                  <p className="text-slate-500 text-xs font-mono">
+                    Redirection automatique vers le Dashboard dans 3 secondes...
+                  </p>
+                </div>
+              </div>
+            </NeoBorder>
+          </motion.div>
+        )}
+
+        {/* Action Button */}
+        {file && processedData && validationResult && importStatus === 'idle' && (
+          <motion.div 
+            className="mt-8 text-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <div className="space-y-6">
+              {/* Pre-flight check */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className={`p-4 rounded-xl border ${
+                  validationResult.summary.canProceed 
+                    ? 'border-green-500/30 bg-green-500/10' 
+                    : 'border-red-500/30 bg-red-500/10'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield size={16} className={validationResult.summary.canProceed ? 'text-green-400' : 'text-red-400'} />
+                    <span className="font-mono text-sm">Validation</span>
+                  </div>
+                  <p className={`font-bold ${validationResult.summary.canProceed ? 'text-green-400' : 'text-red-400'}`}>
+                    {validationResult.summary.canProceed ? 'SYSTÈME VALIDÉ' : 'ERREURS CRITIQUES'}
+                  </p>
+                </div>
+
+                <div className={`p-4 rounded-xl border ${
+                  selectedEstablishment 
+                    ? 'border-green-500/30 bg-green-500/10' 
+                    : 'border-orange-500/30 bg-orange-500/10'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Building2 size={16} className={selectedEstablishment ? 'text-green-400' : 'text-orange-400'} />
+                    <span className="font-mono text-sm">Établissement</span>
+                  </div>
+                  <p className={`font-bold text-sm ${selectedEstablishment ? 'text-green-400' : 'text-orange-400'}`}>
+                    {selectedEstablishment ? selectedEstablishment.nom : 'NON SÉLECTIONNÉ'}
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap size={16} className="text-cyan-400" />
+                    <span className="font-mono text-sm">Processeur</span>
+                  </div>
+                  <p className="font-bold text-cyan-400">OPTIMISÉ v5.0</p>
+                </div>
+              </div>
+
+              {/* Main action button */}
+              <HolographicButton
+                onClick={handleProcessImport}
+                disabled={!validationResult.summary.canProceed || !selectedEstablishment}
+                size="lg"
+                className="min-w-80"
+              >
+                {validationResult.summary.canProceed && selectedEstablishment ? (
+                  <>
+                    <Zap size={24} className="mr-3" />
+                    LANCER L'INJECTION OPTIMISÉE
+                    <motion.div 
+                      className="ml-3"
+                      animate={{ x: [0, 5, 0] }}
+                      transition={{ duration: 1, repeat: Infinity }}
+                    >
+                      <ArrowRight size={20} />
+                    </motion.div>
+                  </>
+                ) : !selectedEstablishment ? (
+                  <>
+                    <AlertTriangle size={20} className="mr-2" />
+                    SÉLECTIONNER UN ÉTABLISSEMENT
+                  </>
+                ) : (
+                  <>
+                    <XCircle size={20} className="mr-2" />
+                    CORRECTIONS REQUISES
+                  </>
+                )}
+              </HolographicButton>
+              
+              {validationResult.summary.canProceed && selectedEstablishment && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="max-w-2xl mx-auto"
+                >
+                  <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/50">
+                    <p className="text-cyan-400 text-sm font-mono mb-2">
+                      Prêt pour l'injection optimisée
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                      <div>
+                        <span className="text-slate-500">Entités:</span>
+                        <span className="text-white ml-2 font-bold">
+                          {processedData.metadata.totalRecords.toLocaleString()}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Périodes:</span>
+                        <span className="text-white ml-2 font-bold">
+                          {processedData.metadata.periods.length}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Qualité:</span>
+                        <span className="text-green-400 ml-2 font-bold">
+                          {validationResult.summary.qualityScore.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Durée:</span>
+                        <span className="text-purple-400 ml-2 font-bold">
+                          ~{fileAnalysis?.estimatedProcessingTime}s
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Quick Actions Panel */}
+        {!file && (
+          <motion.div 
+            className="mt-12"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+          >
+            <NeoBorder>
+              <div className="p-6">
+                <h3 className="text-white font-bold text-xl font-mono mb-6 flex items-center gap-3">
+                  <Sparkles size={24} className="text-purple-400" />
+                  Actions Rapides
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <motion.button
+                    onClick={downloadTemplate}
+                    className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-purple-500/50 transition-all group"
+                    whileHover={{ scale: 1.02, y: -2 }}
+                  >
+                    <Download size={24} className="text-purple-400 mb-2 group-hover:scale-110 transition-transform" />
+                    <p className="font-mono text-sm text-white font-bold">Template Excel</p>
+                    <p className="font-mono text-xs text-slate-400 mt-1">Optimisé v5.0</p>
+                  </motion.button>
+
+                  <motion.button
+                    onClick={() => window.open('/docs/import-guide', '_blank')}
+                    className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-cyan-500/50 transition-all group"
+                    whileHover={{ scale: 1.02, y: -2 }}
+                  >
+                    <BookOpen size={24} className="text-cyan-400 mb-2 group-hover:scale-110 transition-transform" />
+                    <p className="font-mono text-sm text-white font-bold">Guide d'Import</p>
+                    <p className="font-mono text-xs text-slate-400 mt-1">Documentation</p>
+                  </motion.button>
+
+                  <motion.button
+                    onClick={() => router.push('/dashboard')}
+                    className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-green-500/50 transition-all group"
+                    whileHover={{ scale: 1.02, y: -2 }}
+                  >
+                    <BarChart3 size={24} className="text-green-400 mb-2 group-hover:scale-110 transition-transform" />
+                    <p className="font-mono text-sm text-white font-bold">Dashboard</p>
+                    <p className="font-mono text-xs text-slate-400 mt-1">Analytics</p>
+                  </motion.button>
+
+                  <motion.button
+                    onClick={() => window.open('/support', '_blank')}
+                    className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-orange-500/50 transition-all group"
+                    whileHover={{ scale: 1.02, y: -2 }}
+                  >
+                    <Shield size={24} className="text-orange-400 mb-2 group-hover:scale-110 transition-transform" />
+                    <p className="font-mono text-sm text-white font-bold">Support</p>
+                    <p className="font-mono text-xs text-slate-400 mt-1">Assistance</p>
+                  </motion.button>
+                </div>
+              </div>
+            </NeoBorder>
+          </motion.div>
+        )}
+
+        {/* System Info Footer */}
+        <motion.div 
+          className="mt-16 p-6 bg-gradient-to-r from-slate-900/30 to-slate-800/30 backdrop-blur-xl rounded-2xl border border-slate-700/30"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1 }}
+        >
+          <div className="flex items-center justify-between text-sm text-slate-400">
+            <div className="flex items-center gap-8">
+              <div className="flex items-center gap-2">
+                <motion.div 
+                  className="w-2 h-2 bg-green-400 rounded-full"
+                  animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                />
+                <span className="font-mono">Système Optimisé Opérationnel</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Database size={14} className="text-purple-400" />
+                <span className="font-mono">Split Tables Architecture</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Layers size={14} className="text-cyan-400" />
+                <span className="font-mono">Partitioned Snapshots</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Cpu size={14} className="text-purple-400" />
+                <span className="font-mono">Processeur v5.0</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Zap size={14} className="text-cyan-400" />
+                <span className="font-mono">HR Quantum Analytics</span>
+              </div>
+            </div>
+          </div>
+
+          {processedData && (
+            <div className="mt-4 pt-4 border-t border-slate-700/30">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
+                <div>
+                  <span className="text-slate-500">Dernière analyse:</span>
+                  <div className="text-slate-300">{new Date().toLocaleTimeString('fr-FR')}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Fichier:</span>
+                  <div className="text-slate-300 truncate">{file?.name}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Établissement:</span>
+                  <div className="text-slate-300">{selectedEstablishment?.nom || 'Non sélectionné'}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">État:</span>
+                  <div className={`${
+                    validationResult?.summary.canProceed ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {validationResult?.summary.canProceed ? 'Prêt' : 'Corrections requises'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </div>
+    </div>
+
+    {/* Progress Portal */}
+    <ProgressPortal
+      show={importStatus === 'processing'}
+      progress={importProgress}
+      onCancel={cancelImport}
+      logs={importLogs}
+    />
+
+    {/* Establishment Selector Modal */}
+    {establishments.length > 1 && (
+      <AnimatePresence>
+        {!selectedEstablishment && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="w-full max-w-md mx-4"
             >
               <NeoBorder>
                 <div className="p-6">
-                  <h3 className="text-white font-bold text-xl font-mono mb-6 flex items-center gap-3">
-                    <Sparkles size={24} className="text-purple-400" />
-                    Actions Rapides
+                  <h3 className="text-white font-bold text-lg font-mono mb-4 flex items-center gap-2">
+                    <Building2 size={20} className="text-purple-400" />
+                    Sélectionner un Établissement
                   </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <motion.button
-                      onClick={downloadTemplate}
-                      className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-purple-500/50 transition-all group"
-                      whileHover={{ scale: 1.02, y: -2 }}
-                    >
-                      <Download size={24} className="text-purple-400 mb-2 group-hover:scale-110 transition-transform" />
-                      <p className="font-mono text-sm text-white font-bold">Template Excel</p>
-                      <p className="font-mono text-xs text-slate-400 mt-1">Optimisé v5.0</p>
-                    </motion.button>
-
-                    <motion.button
-                      onClick={() => window.open('/docs/import-guide', '_blank')}
-                      className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-cyan-500/50 transition-all group"
-                      whileHover={{ scale: 1.02, y: -2 }}
-                    >
-                      <BookOpen size={24} className="text-cyan-400 mb-2 group-hover:scale-110 transition-transform" />
-                      <p className="font-mono text-sm text-white font-bold">Guide d'Import</p>
-                      <p className="font-mono text-xs text-slate-400 mt-1">Documentation</p>
-                    </motion.button>
-
-                    <motion.button
-                      onClick={() => router.push('/dashboard')}
-                      className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-green-500/50 transition-all group"
-                      whileHover={{ scale: 1.02, y: -2 }}
-                    >
-                      <BarChart3 size={24} className="text-green-400 mb-2 group-hover:scale-110 transition-transform" />
-                      <p className="font-mono text-sm text-white font-bold">Dashboard</p>
-                      <p className="font-mono text-xs text-slate-400 mt-1">Analytics</p>
-                    </motion.button>
-
-                    <motion.button
-                      onClick={() => window.open('/support', '_blank')}
-                      className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-orange-500/50 transition-all group"
-                      whileHover={{ scale: 1.02, y: -2 }}
-                    >
-                      <Shield size={24} className="text-orange-400 mb-2 group-hover:scale-110 transition-transform" />
-                      <p className="font-mono text-sm text-white font-bold">Support</p>
-                      <p className="font-mono text-xs text-slate-400 mt-1">Assistance</p>
-                    </motion.button>
+                  <div className="space-y-3">
+                    {establishments.map(establishment => (
+                      <motion.button
+                        key={establishment.id}
+                        onClick={() => setSelectedEstablishment(establishment)}
+                        className="w-full p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-purple-500/50 transition-all text-left group"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-white font-mono font-bold group-hover:text-purple-300 transition-colors">
+                              {establishment.nom}
+                            </p>
+                            <p className="text-slate-400 text-sm font-mono">
+                              {establishment.code_etablissement || 'Code non défini'}
+                              {establishment.is_headquarters && (
+                                <span className="ml-2 px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs">
+                                  SIÈGE
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <ArrowRight size={16} className="text-slate-500 group-hover:text-purple-400 transition-colors" />
+                        </div>
+                      </motion.button>
+                    ))}
                   </div>
                 </div>
               </NeoBorder>
             </motion.div>
-          )}
-
-          {/* System Info Footer */}
-          <motion.div 
-            className="mt-16 p-6 bg-gradient-to-r from-slate-900/30 to-slate-800/30 backdrop-blur-xl rounded-2xl border border-slate-700/30"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1 }}
-          >
-            <div className="flex items-center justify-between text-sm text-slate-400">
-              <div className="flex items-center gap-8">
-                <div className="flex items-center gap-2">
-                  <motion.div 
-                    className="w-2 h-2 bg-green-400 rounded-full"
-                    animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  />
-                  <span className="font-mono">Système Optimisé Opérationnel</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Database size={14} className="text-purple-400" />
-                  <span className="font-mono">Split Tables Architecture</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Layers size={14} className="text-cyan-400" />
-                  <span className="font-mono">Partitioned Snapshots</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <Cpu size={14} className="text-purple-400" />
-                  <span className="font-mono">Processeur v5.0</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Zap size={14} className="text-cyan-400" />
-                  <span className="font-mono">HR Quantum Analytics</span>
-                </div>
-              </div>
-            </div>
-
-            {processedData && (
-              <div className="mt-4 pt-4 border-t border-slate-700/30">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
-                  <div>
-                    <span className="text-slate-500">Dernière analyse:</span>
-                    <div className="text-slate-300">{new Date().toLocaleTimeString('fr-FR')}</div>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Fichier:</span>
-                    <div className="text-slate-300 truncate">{file?.name}</div>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Établissement:</span>
-                    <div className="text-slate-300">{selectedEstablishment?.nom || 'Non sélectionné'}</div>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">État:</span>
-                    <div className={`${
-                      validationResult?.summary.canProceed ? 'text-green-400' : 'text-red-400'
-                    }`}>
-                      {validationResult?.summary.canProceed ? 'Prêt' : 'Corrections requises'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </motion.div>
-        </div>
-      </div>
-
-      {/* Progress Portal */}
-      <ProgressPortal
-        show={importStatus === 'processing'}
-        progress={importProgress}
-        onCancel={cancelImport}
-        logs={importLogs}
-      />
-
-      {/* Establishment Selector Modal */}
-      {establishments.length > 1 && (
-        <AnimatePresence>
-          {!selectedEstablishment && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            >
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.8, opacity: 0 }}
-                className="w-full max-w-md mx-4"
-              >
-                <NeoBorder>
-                  <div className="p-6">
-                    <h3 className="text-white font-bold text-lg font-mono mb-4 flex items-center gap-2">
-                      <Building2 size={20} className="text-purple-400" />
-                      Sélectionner un Établissement
-                    </h3>
-                    
-                    <div className="space-y-3">
-                      {establishments.map(establishment => (
-                        <motion.button
-                          key={establishment.id}
-                          onClick={() => setSelectedEstablishment(establishment)}
-                          className="w-full p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 hover:border-purple-500/50 transition-all text-left group"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-white font-mono font-bold group-hover:text-purple-300 transition-colors">
-                                {establishment.nom}
-                              </p>
-                              <p className="text-slate-400 text-sm font-mono">
-                                {establishment.code_etablissement || 'Code non défini'}
-                                {establishment.is_headquarters && (
-                                  <span className="ml-2 px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs">
-                                    SIÈGE
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                            <ArrowRight size={16} className="text-slate-500 group-hover:text-purple-400 transition-colors" />
-                          </div>
-                        </motion.button>
-                      ))}
-                    </div>
-                  </div>
-                </NeoBorder>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      )}
-    </div>
-  )
+        )}
+      </AnimatePresence>
+    )}
+  </div>
+)
 }

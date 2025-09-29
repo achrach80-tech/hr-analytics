@@ -26,33 +26,65 @@ export default function DashboardLayout({
   }, [])
 
 const loadCompanyData = async () => {
-    const sessionStr = localStorage.getItem('company_session')
-    if (!sessionStr) {
+  const sessionStr = localStorage.getItem('company_session')
+  if (!sessionStr) {
+    router.push('/login')
+    return
+  }
+
+  try {
+    const session = JSON.parse(sessionStr)
+    
+    // Check session expiry
+    if (new Date(session.expires_at) < new Date()) {
+      localStorage.removeItem('company_session')
       router.push('/login')
       return
     }
-
-    const session = JSON.parse(sessionStr)
     
-    // Fixed query to match new schema
-    const { data: companyData } = await supabase
+    // Fixed query with proper relationship syntax
+    const { data: companyData, error } = await supabase
       .from('entreprises')
       .select(`
-        *,
-        etablissements (*)
+        id,
+        nom,
+        subscription_plan,
+        subscription_status,
+        trial_ends_at,
+        etablissements (
+          id,
+          nom,
+          code_etablissement,
+          is_headquarters,
+          statut
+        )
       `)
       .eq('id', session.company_id)
       .single()
 
+    if (error) {
+      console.error('Company load error:', error)
+      router.push('/login')
+      return
+    }
+
     if (companyData) {
       setCompany(companyData)
-      // Get the first establishment or headquarters
-      const defaultEst = companyData.etablissements?.find((e: any) => e.is_headquarters) || companyData.etablissements?.[0]
+      
+      // Get default establishment
+      const establishments = companyData.etablissements || []
+      const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
+      
       if (defaultEst) {
         setEstablishment(defaultEst)
       }
     }
+  } catch (error) {
+    console.error('Session error:', error)
+    localStorage.removeItem('company_session')
+    router.push('/login')
   }
+}
 
   const handleLogout = () => {
     localStorage.removeItem('company_session')

@@ -82,41 +82,59 @@ const createCompanyFromDemo = async (demo: any) => {
       .map(b => b.toString(16).padStart(2, '0'))
       .join('')
     
-    const companyCode = `RHQ-${Date.now().toString(36).toUpperCase()}`
+    const companyCode = `RHQ-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
     
-    console.log('Creating company with data:', { 
+    // Create URL slug
+    const urlSlug = demo.company_name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .substring(0, 50)
+
+    console.log('Creating company with:', { 
       nom: demo.company_name,
       code_entreprise: companyCode,
-      access_token: accessToken,
       billing_email: demo.email
     })
 
-    // Create company (matching clean schema exactly)
+    // Create company with ALL required fields from schema
     const { data: company, error: companyError } = await supabase
       .from('entreprises')
       .insert({
         nom: demo.company_name,
         code_entreprise: companyCode,
         access_token: accessToken,
+        access_url_slug: urlSlug,
         subscription_plan: 'trial',
         subscription_status: 'active',
         billing_email: demo.email,
         trial_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        activation_date: new Date().toISOString(),
+        onboarding_status: 'trial_started',
         max_employees: demo.employee_count === '1-50' ? 100 : 
                        demo.employee_count === '51-200' ? 300 :
-                       demo.employee_count === '201-500' ? 600 : 1000
+                       demo.employee_count === '201-500' ? 600 : 1000,
+        features: {
+          export: true,
+          api: false,
+          white_label: false
+        },
+        ai_features_enabled: false,
+        login_count: 0
       })
       .select()
       .single()
 
     if (companyError) {
       console.error('Company creation error:', companyError)
-      throw new Error(`Company creation failed: ${companyError.message}`)
+      throw new Error(`Failed to create company: ${companyError.message}`)
     }
 
-    console.log('Company created:', company)
+    console.log('Company created:', company.id)
 
-    // Create default establishment (matching clean schema)
+    // Create default establishment
     const { data: establishment, error: estError } = await supabase
       .from('etablissements')
       .insert({
@@ -124,31 +142,33 @@ const createCompanyFromDemo = async (demo: any) => {
         nom: `${demo.company_name} - Siège`,
         code_etablissement: 'SIEGE',
         is_headquarters: true,
-        statut: 'Actif'
+        statut: 'Actif',
+        pays: demo.country || 'France',
+        timezone: 'Europe/Paris',
+        employee_count: 0
       })
       .select()
       .single()
 
     if (estError) {
       console.error('Establishment creation error:', estError)
-      throw new Error(`Establishment creation failed: ${estError.message}`)
+      throw new Error(`Failed to create establishment: ${estError.message}`)
     }
 
-    console.log('Establishment created:', establishment)
+    console.log('Establishment created:', establishment.id)
 
-    // Setup default referentials using the function from clean schema
-    const { data: refData, error: refError } = await supabase.rpc(
+    // Setup default referentials
+    const { error: refError } = await supabase.rpc(
       'setup_default_referentials', 
       { p_etablissement_id: establishment.id }
     )
 
     if (refError) {
-      console.error('Referentials setup error:', refError)
-      // Don't throw here - this is not critical for company creation
-      console.warn('Referentials setup failed, but company was created successfully')
+      console.warn('Referentials setup warning:', refError.message)
+      // Don't throw - this is not critical
     }
 
-    // Update demo status to converted
+    // Update demo status
     const { error: updateError } = await supabase
       .from('demo_requests')
       .update({
@@ -160,33 +180,20 @@ const createCompanyFromDemo = async (demo: any) => {
 
     if (updateError) {
       console.error('Demo update error:', updateError)
-      // Don't throw - company was created successfully
     }
 
-    // Show success modal with credentials
-  // Show success modal with credentials
+    // Show success modal
     showSuccessModal(demo, accessToken, company)
     
-    // Reset filter to 'all' and reload with delay
-    console.log('Resetting filter and reloading demos...')
-    setFilter('all')
+    // Reload after short delay
     setTimeout(() => {
-      console.log('Executing delayed reload...')
+      setFilter('all')
       loadDemos()
     }, 1000)
     
   } catch (error) {
-    console.error('Error creating company:', error)
-    
-    // Better error handling
-    let errorMessage = 'Unknown error occurred'
-    if (error instanceof Error) {
-      errorMessage = error.message
-    } else if (typeof error === 'object' && error !== null) {
-      errorMessage = JSON.stringify(error)
-    }
-    
-    alert(`Error creating company: ${errorMessage}`)
+    console.error('Company creation failed:', error)
+    alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
   } finally {
     setCreatingCompany(null)
   }

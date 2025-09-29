@@ -13,82 +13,92 @@ export default function CompanyLoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError(null)
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setIsLoading(true)
+  setError(null)
 
-    try {
-      // Validate access token
-      const { data: company, error: companyError } = await supabase
-        .from('entreprises')
-        .select('*')
-        .eq('access_token', accessToken.trim())
-        .eq('subscription_status', 'active')
-        .single()
+  try {
+    // Validate access token against schema - get ALL fields we need
+    const { data: company, error: companyError } = await supabase
+      .from('entreprises')
+      .select('id, nom, access_token, subscription_plan, subscription_status, trial_ends_at, features, login_count')
+      .eq('access_token', accessToken.trim())
+      .single()
 
-      if (companyError || !company) {
-        throw new Error('Code d\'accès invalide ou expiré')
-      }
+    if (companyError || !company) {
+      throw new Error('Code d\'accès invalide')
+    }
 
-      // Check if subscription is still valid
-      if (company.trial_ends_at && new Date(company.trial_ends_at) < new Date()) {
+    // Check subscription status
+    if (company.subscription_status !== 'active') {
+      throw new Error('Votre abonnement n\'est pas actif')
+    }
+
+    // Check trial expiration
+    if (company.trial_ends_at) {
+      const trialEnd = new Date(company.trial_ends_at)
+      if (trialEnd < new Date()) {
         throw new Error('Votre période d\'essai a expiré')
       }
-
-      // Create session
-      const sessionData = {
-        company_id: company.id,
-        company_name: company.nom,
-        subscription_plan: company.subscription_plan,
-        features: company.features,
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-      }
-
-      // Store in localStorage and cookie
-      localStorage.setItem('company_session', JSON.stringify(sessionData))
-      document.cookie = `company_session=${btoa(JSON.stringify(sessionData))}; path=/; max-age=86400`
-
-      // Update last login
-      await supabase
-        .from('entreprises')
-        .update({ 
-          last_login_at: new Date().toISOString(),
-          login_count: (company.login_count || 0) + 1,
-          last_activity_at: new Date().toISOString()
-        })
-        .eq('id', company.id)
-
-      // Log access
-      await supabase
-        .from('access_logs')
-        .insert({
-          entreprise_id: company.id,
-          access_token_used: accessToken.substring(0, 8) + '...',
-          access_method: 'token',
-          path_accessed: '/login',
-          action: 'login_success',
-          response_status: 200
-        })
-
-      router.push('/dashboard')
-    } catch (err: any) {
-      setError(err.message || 'Erreur de connexion')
-      
-      // Log failed attempt
-      await supabase
-        .from('access_logs')
-        .insert({
-          access_token_used: accessToken.substring(0, 8) + '...',
-          access_method: 'token',
-          path_accessed: '/login',
-          action: 'login_failed',
-          response_status: 401
-        })
-    } finally {
-      setIsLoading(false)
     }
+
+    // Create session (24 hours)
+    const sessionData = {
+      company_id: company.id,
+      company_name: company.nom,
+      subscription_plan: company.subscription_plan,
+      features: company.features || {},
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    }
+
+    // Store session
+    localStorage.setItem('company_session', JSON.stringify(sessionData))
+    document.cookie = `company_session=${btoa(JSON.stringify(sessionData))}; path=/; max-age=86400; SameSite=Strict`
+
+    // Update last login - now login_count is properly typed
+    await supabase
+      .from('entreprises')
+      .update({ 
+        last_login_at: new Date().toISOString(),
+        login_count: (company.login_count || 0) + 1,
+        last_activity_at: new Date().toISOString()
+      })
+      .eq('id', company.id)
+
+    // Log access
+    await supabase
+      .from('access_logs')
+      .insert({
+        entreprise_id: company.id,
+        access_token_used: accessToken.substring(0, 8) + '...',
+        access_method: 'token',
+        path_accessed: '/login',
+        action: 'login_success',
+        response_status: 200,
+        accessed_at: new Date().toISOString()
+      })
+
+    // Redirect to dashboard
+    router.push('/dashboard')
+  } catch (err: any) {
+    setError(err.message || 'Erreur de connexion')
+    
+    // Log failed attempt
+    await supabase
+      .from('access_logs')
+      .insert({
+        access_token_used: accessToken.substring(0, 8) + '...',
+        access_method: 'token',
+        path_accessed: '/login',
+        action: 'login_failed',
+        response_status: 401,
+        accessed_at: new Date().toISOString()
+      })
+  } finally {
+    setIsLoading(false)
   }
+}
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">

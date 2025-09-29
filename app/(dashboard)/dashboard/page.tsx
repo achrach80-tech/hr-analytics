@@ -87,50 +87,56 @@ export default function CyberDashboard() {
   }
 
 const loadPeriodsForEstablishment = async (establishmentId: string) => {
-    try {
-      // Use the unified snapshots table
-      const { data: periodData, error } = await supabase
-        .from('snapshots_mensuels')
+  try {
+    // Query the unified snapshots table
+    const { data: periodData, error } = await supabase
+      .from('snapshots_mensuels')
+      .select('periode')
+      .eq('etablissement_id', establishmentId)
+      .not('periode', 'is', null)
+      .order('periode', { ascending: false })
+
+    if (error) {
+      console.error('Period query error:', error)
+      
+      // Fallback: try to get periods from employes table
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('employes')
         .select('periode')
         .eq('etablissement_id', establishmentId)
+        .not('periode', 'is', null)
         .order('periode', { ascending: false })
 
-      if (error) {
-        console.error('Period load error:', error)
-        // Fallback to employes table
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('employes')
-          .select('periode')
-          .eq('etablissement_id', establishmentId)
-          .order('periode', { ascending: false })
-
-        if (fallbackError) throw fallbackError
-        
-        const uniquePeriods = [...new Set(fallbackData?.map(p => p.periode) || [])]
-        setPeriods(uniquePeriods)
-        
-        if (uniquePeriods.length > 0) {
-          setSelectedPeriod(uniquePeriods[0])
-        } else {
-          setError('Aucune donnée disponible. Veuillez importer des données.')
-        }
+      if (fallbackError) {
+        console.error('Fallback period query error:', fallbackError)
+        setError('Aucune période trouvée. Importez vos données.')
         return
       }
-
-      const uniquePeriods = [...new Set(periodData?.map(p => p.periode) || [])]
+      
+      const uniquePeriods = [...new Set(fallbackData?.map(p => p.periode) || [])]
       setPeriods(uniquePeriods)
-
+      
       if (uniquePeriods.length > 0) {
         setSelectedPeriod(uniquePeriods[0])
       } else {
         setError('Aucune donnée disponible. Veuillez importer des données.')
       }
-    } catch (err) {
-      console.error('Load periods error:', err)
-      setError('Erreur lors du chargement des périodes')
+      return
     }
-  }
 
+    const uniquePeriods = [...new Set(periodData?.map(p => p.periode) || [])]
+    setPeriods(uniquePeriods)
+
+    if (uniquePeriods.length > 0) {
+      setSelectedPeriod(uniquePeriods[0])
+    } else {
+      setError('Aucune période disponible. Importez vos premières données.')
+    }
+  } catch (err) {
+    console.error('Unexpected error loading periods:', err)
+    setError('Erreur système lors du chargement des périodes')
+  }
+}
   const formatPeriodDisplay = (periode: string): string => {
     if (!periode) return ''
     try {
