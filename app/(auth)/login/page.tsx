@@ -57,14 +57,22 @@ const handleLogin = async (e: React.FormEvent) => {
     document.cookie = `company_session=${btoa(JSON.stringify(sessionData))}; path=/; max-age=86400; SameSite=Strict`
 
     // Update last login - now login_count is properly typed
-    await supabase
-      .from('entreprises')
-      .update({ 
-        last_login_at: new Date().toISOString(),
-        login_count: (company.login_count || 0) + 1,
-        last_activity_at: new Date().toISOString()
-      })
-      .eq('id', company.id)
+   // First, get current login_count
+const { data: currentCompany } = await supabase
+  .from('entreprises')
+  .select('login_count')
+  .eq('id', company.id)
+  .single()
+
+// Then update with incremented value
+await supabase
+  .from('entreprises')
+  .update({ 
+    last_login_at: new Date().toISOString(),
+    login_count: (currentCompany?.login_count || 0) + 1,
+    last_activity_at: new Date().toISOString()
+  })
+  .eq('id', company.id)
 
     // Log access
     await supabase

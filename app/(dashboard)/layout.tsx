@@ -44,23 +44,25 @@ const loadCompanyData = async () => {
     
     // Fixed query with proper relationship syntax
     const { data: companyData, error } = await supabase
-      .from('entreprises')
-      .select(`
-        id,
-        nom,
-        subscription_plan,
-        subscription_status,
-        trial_ends_at,
-        etablissements (
-          id,
-          nom,
-          code_etablissement,
-          is_headquarters,
-          statut
-        )
-      `)
-      .eq('id', session.company_id)
-      .single()
+  .from('entreprises')
+  .select(`
+    id,
+    nom,
+    subscription_plan,
+    subscription_status,
+    trial_ends_at,
+    login_count,
+    features,
+    etablissements (
+      id,
+      nom,
+      code_etablissement,
+      is_headquarters,
+      statut
+    )
+  `)
+  .eq('id', session.company_id)
+  .single()
 
     if (error) {
       console.error('Company load error:', error)
