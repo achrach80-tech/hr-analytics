@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 interface WorkforceKPIs {
@@ -44,29 +44,43 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
   const [data, setData] = useState<KPIData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
+  
   const supabase = createClient()
+  
+  // OPTIMISATION: Éviter fetch multiples avec même params
+  const prevParamsRef = useRef({ establishmentId: '', period: '' })
 
   useEffect(() => {
+    // Skip si pas de params ou params identiques
     if (!establishmentId || !period) {
       setLoading(false)
       return
     }
+
+    if (prevParamsRef.current.establishmentId === establishmentId && 
+        prevParamsRef.current.period === period) {
+      return
+    }
+
+    prevParamsRef.current = { establishmentId, period }
 
     const fetchData = async () => {
       try {
         setLoading(true)
         setError(null)
 
-        // Use the unified snapshots_mensuels table
-        const { data: snapshot, error } = await supabase
+        // Une seule requête optimisée
+        const { data: snapshot, error: snapError } = await supabase
           .from('snapshots_mensuels')
           .select('*')
           .eq('etablissement_id', establishmentId)
           .eq('periode', period)
           .maybeSingle()
 
-        if (error) throw error
+        if (snapError) {
+          console.error('Snapshot error:', snapError)
+          throw snapError
+        }
 
         if (snapshot) {
           setData({
@@ -106,6 +120,7 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
       } catch (err) {
         console.error('KPI fetch error:', err)
         setError(err instanceof Error ? err.message : 'Erreur de chargement')
+        setData({ workforce: null, financials: null, absences: null })
       } finally {
         setLoading(false)
       }

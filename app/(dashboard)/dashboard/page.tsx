@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useState, useEffect, Suspense } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Building2, Calendar, ChevronDown, Sparkles, Brain,
-  AlertTriangle, RefreshCw, Zap, BarChart3, X
+  AlertTriangle, Zap, BarChart3, X
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import ReactDOM from 'react-dom'
@@ -29,115 +29,160 @@ export default function CyberDashboard() {
 
   const supabase = createClient()
   const router = useRouter()
+  const mountedRef = useRef(true)
+  const initializedRef = useRef(false)
 
-  // Use optimized KPI hook
+  // OPTIMIZATION: Memoize establishment ID to prevent unnecessary re-renders
+  const establishmentId = useMemo(() => 
+    selectedEstablishment?.id || '', 
+    [selectedEstablishment?.id]
+  )
+
+  // OPTIMIZATION: Use optimized KPI hook - only triggers when deps change
   const { data: kpiData, loading: kpiLoading, error: kpiError } = useOptimizedKPIData(
-    selectedEstablishment?.id || '',
+    establishmentId,
     selectedPeriod
   )
 
-  useEffect(() => {
-    initializeData()
-  }, [])
+  // OPTIMIZATION: Memoized period loading function
+  const loadPeriodsForEstablishment = useCallback(async (estId: string) => {
+    if (!estId || !mountedRef.current) return
+    
+    try {
+      // Try snapshots first
+      const { data: periodData, error: snapError } = await supabase
+        .from('snapshots_mensuels')
+        .select('periode')
+        .eq('etablissement_id', estId)
+        .not('periode', 'is', null)
+        .order('periode', { ascending: false })
 
+      if (!mountedRef.current) return
+
+      if (snapError) {
+        console.error('Snapshot query error:', snapError)
+        
+        // Fallback to employes table
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('employes')
+          .select('periode')
+          .eq('etablissement_id', estId)
+          .not('periode', 'is', null)
+          .order('periode', { ascending: false })
+
+        if (!mountedRef.current) return
+
+        if (fallbackError) {
+          console.error('Fallback error:', fallbackError)
+          setError('Aucune période trouvée. Importez vos données.')
+          return
+        }
+        
+        const uniquePeriods = [...new Set(fallbackData?.map(p => p.periode) || [])]
+        setPeriods(uniquePeriods)
+        
+        if (uniquePeriods.length > 0) {
+          setSelectedPeriod(uniquePeriods[0])
+        } else {
+          setError('Aucune donnée disponible.')
+        }
+        return
+      }
+
+      // Success path
+      const uniquePeriods = [...new Set(periodData?.map(p => p.periode) || [])]
+      setPeriods(uniquePeriods)
+
+      if (uniquePeriods.length > 0) {
+        setSelectedPeriod(uniquePeriods[0])
+      } else {
+        setError('Aucune période disponible. Importez vos données.')
+      }
+    } catch (err) {
+      if (!mountedRef.current) return
+      console.error('Unexpected error loading periods:', err)
+      setError('Erreur système')
+    }
+  }, [supabase])
+
+  // OPTIMIZATION: Single useEffect for initialization - only runs once
   useEffect(() => {
-    if (showPeriodSelector) {
-      document.body.style.overflow = 'hidden'
-      return () => {
+    // Prevent double initialization
+    if (initializedRef.current) return
+    initializedRef.current = true
+
+    const initializeData = async () => {
+      try {
+        setInitialLoading(true)
+        setError(null)
+
+        const sessionStr = localStorage.getItem('company_session')
+        if (!sessionStr) {
+          router.push('/login')
+          return
+        }
+
+        const session = JSON.parse(sessionStr)
+
+        const { data: companyData, error: companyError } = await supabase
+          .from('entreprises')
+          .select(`
+            id,
+            nom,
+            subscription_plan,
+            etablissements (
+              id,
+              nom,
+              is_headquarters
+            )
+          `)
+          .eq('id', session.company_id)
+          .single()
+
+        if (companyError) throw companyError
+
+        if (!mountedRef.current) return
+
+        setCompany(companyData as Company)
+        const establishments = companyData.etablissements || []
+        
+        const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
+        if (defaultEst) {
+          setSelectedEstablishment(defaultEst as Establishment)
+          await loadPeriodsForEstablishment(defaultEst.id)
+        }
+      } catch (err) {
+        if (!mountedRef.current) return
+        console.error('Initialize error:', err)
+        setError('Erreur d\'initialisation')
+      } finally {
+        if (mountedRef.current) {
+          setInitialLoading(false)
+        }
+      }
+    }
+
+    initializeData()
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [router, supabase, loadPeriodsForEstablishment])
+
+  // OPTIMIZATION: Separate useEffect for modal overflow management
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = showPeriodSelector ? 'hidden' : 'unset'
+    }
+    return () => {
+      if (typeof document !== 'undefined') {
         document.body.style.overflow = 'unset'
       }
     }
   }, [showPeriodSelector])
 
-  const initializeData = async () => {
-    try {
-      setInitialLoading(true)
-      setError(null)
-
-      const sessionStr = localStorage.getItem('company_session')
-      if (!sessionStr) {
-        router.push('/login')
-        return
-      }
-
-      const session = JSON.parse(sessionStr)
-
-      const { data: companyData, error: companyError } = await supabase
-        .from('entreprises')
-        .select(`*, etablissements (*)`)
-        .eq('id', session.company_id)
-        .single()
-
-      if (companyError) throw companyError
-
-      setCompany(companyData)
-      const establishments = companyData.etablissements || []
-      
-      const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
-      if (defaultEst) {
-        setSelectedEstablishment(defaultEst)
-        await loadPeriodsForEstablishment(defaultEst.id)
-      }
-    } catch (err) {
-      console.error('Initialize error:', err)
-      setError('Erreur d\'initialisation')
-    } finally {
-      setInitialLoading(false)
-    }
-  }
-
-const loadPeriodsForEstablishment = async (establishmentId: string) => {
-  try {
-    // Query the unified snapshots table
-    const { data: periodData, error } = await supabase
-      .from('snapshots_mensuels')
-      .select('periode')
-      .eq('etablissement_id', establishmentId)
-      .not('periode', 'is', null)
-      .order('periode', { ascending: false })
-
-    if (error) {
-      console.error('Period query error:', error)
-      
-      // Fallback: try to get periods from employes table
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from('employes')
-        .select('periode')
-        .eq('etablissement_id', establishmentId)
-        .not('periode', 'is', null)
-        .order('periode', { ascending: false })
-
-      if (fallbackError) {
-        console.error('Fallback period query error:', fallbackError)
-        setError('Aucune période trouvée. Importez vos données.')
-        return
-      }
-      
-      const uniquePeriods = [...new Set(fallbackData?.map(p => p.periode) || [])]
-      setPeriods(uniquePeriods)
-      
-      if (uniquePeriods.length > 0) {
-        setSelectedPeriod(uniquePeriods[0])
-      } else {
-        setError('Aucune donnée disponible. Veuillez importer des données.')
-      }
-      return
-    }
-
-    const uniquePeriods = [...new Set(periodData?.map(p => p.periode) || [])]
-    setPeriods(uniquePeriods)
-
-    if (uniquePeriods.length > 0) {
-      setSelectedPeriod(uniquePeriods[0])
-    } else {
-      setError('Aucune période disponible. Importez vos premières données.')
-    }
-  } catch (err) {
-    console.error('Unexpected error loading periods:', err)
-    setError('Erreur système lors du chargement des périodes')
-  }
-}
-  const formatPeriodDisplay = (periode: string): string => {
+  // OPTIMIZATION: Memoized format function
+  const formatPeriodDisplay = useCallback((periode: string): string => {
     if (!periode) return ''
     try {
       const date = new Date(periode)
@@ -148,12 +193,13 @@ const loadPeriodsForEstablishment = async (establishmentId: string) => {
     } catch {
       return periode
     }
-  }
+  }, [])
 
-  const handlePeriodChange = async (period: string) => {
+  // OPTIMIZATION: Memoized period change handler
+  const handlePeriodChange = useCallback((period: string) => {
     setSelectedPeriod(period)
     setShowPeriodSelector(false)
-  }
+  }, [])
 
   // Loading state
   if (initialLoading) {
@@ -165,11 +211,11 @@ const loadPeriodsForEstablishment = async (establishmentId: string) => {
           animate={{ opacity: 1 }}
         >
           <motion.div 
-            className="w-20 h-20 border-4 border-purple-500/30 rounded-full mb-6 mx-auto"
+            className="w-20 h-20 border-4 border-purple-500/30 rounded-full mb-6 mx-auto relative"
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
           >
-            <div className="w-20 h-20 border-4 border-t-purple-500 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 border-4 border-t-purple-500 rounded-full"></div>
           </motion.div>
           <motion.p 
             className="text-white text-xl"
@@ -420,76 +466,68 @@ const loadPeriodsForEstablishment = async (establishmentId: string) => {
 
       {/* Main content */}
       <div className="relative z-10 p-8 space-y-12">
-        <Suspense fallback={
-          <div className="animate-pulse space-y-12">
-            <div className="h-64 bg-slate-800 rounded-2xl"></div>
-            <div className="h-64 bg-slate-800 rounded-2xl"></div>
-            <div className="h-64 bg-slate-800 rounded-2xl"></div>
-          </div>
-        }>
-          {kpiData ? (
-            <>
-              <CyberWorkforceSection 
-                data={kpiData.workforce} 
-                loading={kpiLoading} 
-              />
-              
-              <CyberPayrollSection 
-                data={kpiData.financials} 
-                loading={kpiLoading} 
-              />
-              
-              <CyberAbsenceSection 
-                data={kpiData.absences} 
-                loading={kpiLoading} 
-              />
-              
-              <CyberDemographicsSection 
-                data={kpiData.workforce} 
-                loading={kpiLoading} 
-              />
-            </>
-          ) : (
+        {kpiData ? (
+          <>
+            <CyberWorkforceSection 
+              data={kpiData.workforce} 
+              loading={kpiLoading} 
+            />
+            
+            <CyberPayrollSection 
+              data={kpiData.financials} 
+              loading={kpiLoading} 
+            />
+            
+            <CyberAbsenceSection 
+              data={kpiData.absences} 
+              loading={kpiLoading} 
+            />
+            
+            <CyberDemographicsSection 
+              data={kpiData.workforce} 
+              loading={kpiLoading} 
+            />
+          </>
+        ) : (
+          <motion.div 
+            className="text-center py-20"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+          >
             <motion.div 
-              className="text-center py-20"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
+              className="w-32 h-32 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl"
+              animate={{ 
+                rotate: [0, 10, -10, 0],
+                scale: [1, 1.05, 1]
+              }}
+              transition={{ 
+                duration: 4,
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
             >
-              <motion.div 
-                className="w-32 h-32 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl"
-                animate={{ 
-                  rotate: [0, 10, -10, 0],
-                  scale: [1, 1.05, 1]
-                }}
-                transition={{ 
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-              >
-                <BarChart3 size={64} className="text-white drop-shadow-lg" />
-              </motion.div>
-              <h2 className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent mb-6">
-                Aucune donnée disponible
-              </h2>
-              <p className="text-slate-400 text-lg mb-8 max-w-md mx-auto">
-                Importez vos fichiers Excel RH pour générer automatiquement vos KPIs cyberpunk
-              </p>
-              <motion.button
-                onClick={() => router.push('/import')}
-                className="px-12 py-4 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-2xl font-bold text-lg hover:opacity-90 transition-opacity shadow-xl"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <div className="flex items-center gap-3">
-                  <Sparkles size={24} />
-                  Commencer l'import
-                  <Zap size={24} />
-                </div>
-              </motion.button>
+              <BarChart3 size={64} className="text-white drop-shadow-lg" />
             </motion.div>
-          )}
-        </Suspense>
+            <h2 className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent mb-6">
+              Aucune donnée disponible
+            </h2>
+            <p className="text-slate-400 text-lg mb-8 max-w-md mx-auto">
+              Importez vos fichiers Excel RH pour générer automatiquement vos KPIs cyberpunk
+            </p>
+            <motion.button
+              onClick={() => router.push('/import')}
+              className="px-12 py-4 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-2xl font-bold text-lg hover:opacity-90 transition-opacity shadow-xl"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <div className="flex items-center gap-3">
+                <Sparkles size={24} />
+                Commencer l'import
+                <Zap size={24} />
+              </div>
+            </motion.button>
+          </motion.div>
+        )}
         
         {/* Footer */}
         <motion.div 
