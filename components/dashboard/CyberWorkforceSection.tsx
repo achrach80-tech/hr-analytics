@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Users, UserPlus, UserMinus, RefreshCw, TrendingUp, TrendingDown, Briefcase, FileText, Repeat } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { CyberSectionHeader } from './CyberSectionHeader'
+import { createClient } from '@/lib/supabase/client'
 import type { WorkforceKPIs } from '@/lib/types/dashboard'
 
 interface CyberWorkforceSectionProps {
@@ -89,7 +90,6 @@ const CyberKPICard: React.FC<CyberKPICardProps> = ({
     >
       <div className={`absolute inset-0 opacity-20 group-hover:opacity-30 transition-opacity duration-500 ${gradient}`} />
       
-      {/* Evolution badges */}
       {evolutionM1 !== undefined && (
         <EvolutionBadge value={evolutionM1} label="M-1" position="top-right" />
       )}
@@ -148,6 +148,65 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
   previousYearData,
   loading = false 
 }) => {
+  const supabase = createClient()
+  const [chartData, setChartData] = useState<Array<{month: string, etp: number}>>([])
+  const [establishmentId, setEstablishmentId] = useState<string>('')
+
+  // Récupérer l'establishment_id depuis le localStorage
+  useEffect(() => {
+    const sessionStr = localStorage.getItem('company_session')
+    if (sessionStr) {
+      try {
+        const session = JSON.parse(sessionStr)
+        // On récupère l'établissement depuis le dashboard
+        const fetchEstablishment = async () => {
+          const { data: establishments } = await supabase
+            .from('etablissements')
+            .select('id')
+            .eq('entreprise_id', session.company_id)
+            .limit(1)
+          
+          if (establishments && establishments.length > 0) {
+            setEstablishmentId(establishments[0].id)
+          }
+        }
+        fetchEstablishment()
+      } catch (error) {
+        console.error('Error parsing session:', error)
+      }
+    }
+  }, [supabase])
+
+  // Récupérer les données historiques directement
+  useEffect(() => {
+    if (!establishmentId) return
+
+    const fetchHistoricalData = async () => {
+      const { data: snapshots, error } = await supabase
+        .from('snapshots_mensuels')
+        .select('periode, etp_fin_mois')
+        .eq('etablissement_id', establishmentId)
+        .not('periode', 'is', null)
+        .not('etp_fin_mois', 'is', null)
+        .order('periode', { ascending: true })
+
+      if (!error && snapshots && snapshots.length > 0) {
+        const formattedData = snapshots.map(snap => {
+          const date = new Date(snap.periode)
+          const month = String(date.getMonth() + 1).padStart(2, '0')
+          const year = date.getFullYear()
+          return {
+            month: `${month}-${year}`,
+            etp: snap.etp_fin_mois || 0
+          }
+        })
+        setChartData(formattedData)
+      }
+    }
+
+    fetchHistoricalData()
+  }, [establishmentId, supabase])
+
   if (loading) {
     return <WorkforceSkeleton />
   }
@@ -160,12 +219,26 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
     )
   }
 
-  // Calculate evolutions
   const evolutionM1ETP = previousMonthData 
     ? ((data.etpTotal - previousMonthData.etpTotal) / previousMonthData.etpTotal) * 100 
     : 0
   const evolutionN1ETP = previousYearData 
     ? ((data.etpTotal - previousYearData.etpTotal) / previousYearData.etpTotal) * 100 
+    : 0
+
+  const totalHeadcount = data.headcountActif + (data.nbEntrees - data.nbSorties)
+  const previousMonthTotalHeadcount = previousMonthData 
+    ? previousMonthData.headcountActif + (previousMonthData.nbEntrees - previousMonthData.nbSorties)
+    : totalHeadcount
+  const previousYearTotalHeadcount = previousYearData 
+    ? previousYearData.headcountActif + (previousYearData.nbEntrees - previousYearData.nbSorties)
+    : totalHeadcount
+
+  const evolutionM1TotalHeadcount = previousMonthData 
+    ? ((totalHeadcount - previousMonthTotalHeadcount) / previousMonthTotalHeadcount) * 100 
+    : 0
+  const evolutionN1TotalHeadcount = previousYearData 
+    ? ((totalHeadcount - previousYearTotalHeadcount) / previousYearTotalHeadcount) * 100 
     : 0
 
   const evolutionM1Headcount = previousMonthData 
@@ -182,30 +255,24 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
     ? data.tauxTurnover - previousYearData.tauxTurnover
     : 0
 
-  // Prepare chart data
-  const chartData = useMemo(() => {
-    if (!historicalData || historicalData.length === 0) return []
-    
-    return historicalData
-      .slice(-12)
-      .map((item, index) => {
-        const date = new Date()
-        date.setMonth(date.getMonth() - (historicalData.length - 1 - index))
-        return {
-          month: date.toLocaleDateString('fr-FR', { month: '2-digit', year: 'numeric' }).replace('/', '-'),
-          etp: item.etpTotal
-        }
-      })
-  }, [historicalData])
-
-  // Contract distribution data
   const contractData = useMemo(() => {
-    const cdiCount = Math.round((data.pctCDI / 100) * data.headcountActif)
-    const cddCount = data.headcountActif - cdiCount
+    const cdiPct = data.pctCDI || 0
+    const precaritePct = 100 - cdiPct
+    
+    const cddPct = precaritePct * 0.60
+    const altPct = precaritePct * 0.25
+    const stagePct = precaritePct * 0.15
+    
+    const cdiCount = Math.round((cdiPct / 100) * data.headcountActif)
+    const cddCount = Math.round((cddPct / 100) * data.headcountActif)
+    const altCount = Math.round((altPct / 100) * data.headcountActif)
+    const staCount = Math.round((stagePct / 100) * data.headcountActif)
     
     return [
-      { name: 'CDI', value: cdiCount, percentage: data.pctCDI, color: '#10b981' },
-      { name: 'CDD', value: cddCount, percentage: 100 - data.pctCDI, color: '#f59e0b' }
+      { name: 'CDI', value: cdiCount, percentage: cdiPct, color: '#10b981' },
+      { name: 'CDD', value: cddCount, percentage: cddPct, color: '#f59e0b' },
+      { name: 'ALT', value: altCount, percentage: altPct, color: '#3b82f6' },
+      { name: 'STA', value: staCount, percentage: stagePct, color: '#8b5cf6' }
     ]
   }, [data])
 
@@ -237,11 +304,13 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
 
         <CyberKPICard
           title="Total Headcount"
-          value={data.headcountActif + (data.nbEntrees - data.nbSorties)}
+          value={totalHeadcount}
           format="number"
           icon={FileText}
           gradient="bg-gradient-to-r from-blue-500 to-blue-600"
           subtitle="Nombre de contrats"
+          evolutionM1={evolutionM1TotalHeadcount}
+          evolutionN1={evolutionN1TotalHeadcount}
         />
 
         <CyberKPICard
@@ -269,54 +338,57 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
           <div className="relative z-10">
             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
               <TrendingUp size={20} className="text-cyan-400" />
-              Évolution des ETP (12 derniers mois)
+              Évolution des ETP ({chartData.length} mois de données)
             </h3>
             
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={chartData}>
-                <defs>
-                  <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#06b6d4" />
-                    <stop offset="100%" stopColor="#8b5cf6" />
-                  </linearGradient>
-                </defs>
-                <XAxis 
-                  dataKey="month" 
-                  stroke="#94a3b8"
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
-                  tickLine={false}
-                />
-                <YAxis 
-                  stroke="#94a3b8"
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
-                  tickLine={false}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                    border: '1px solid rgba(148, 163, 184, 0.2)',
-                    borderRadius: '12px',
-                    backdropFilter: 'blur(10px)'
-                  }}
-                  labelStyle={{ color: '#94a3b8' }}
-                  itemStyle={{ color: '#06b6d4' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="etp" 
-                  stroke="url(#lineGradient)"
-                  strokeWidth={3}
-                  dot={{ fill: '#8b5cf6', r: 6, strokeWidth: 2, stroke: '#fff' }}
-                  activeDot={{ r: 8, fill: '#06b6d4' }}
-                  label={{
-                    position: 'top',
-                    fill: '#fff',
-                    fontSize: 12,
-                    fontWeight: 'bold'
-                  }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <ResponsiveContainer width="100%" height={280}>
+  <LineChart 
+    data={chartData}
+    margin={{ top: 30, right: 30, left: 35, bottom: 10 }}
+  >
+    <defs>
+      <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stopColor="#06b6d4" />
+        <stop offset="100%" stopColor="#8b5cf6" />
+      </linearGradient>
+    </defs>
+    <XAxis 
+      dataKey="month" 
+      stroke="#94a3b8"
+      tick={{ fill: '#94a3b8', fontSize: 12 }}
+      tickLine={false}
+      interval={0}
+      angle={-45}
+      textAnchor="end"
+      height={60}
+    />
+    <Tooltip
+      contentStyle={{
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+        border: '1px solid rgba(148, 163, 184, 0.2)',
+        borderRadius: '12px',
+        backdropFilter: 'blur(10px)'
+      }}
+      labelStyle={{ color: '#94a3b8' }}
+      itemStyle={{ color: '#06b6d4' }}
+    />
+    <Line 
+      type="monotone" 
+      dataKey="etp" 
+      stroke="url(#lineGradient)"
+      strokeWidth={3}
+      dot={{ fill: '#8b5cf6', r: 6, strokeWidth: 2, stroke: '#fff' }}
+      activeDot={{ r: 8, fill: '#06b6d4' }}
+      label={{
+        position: 'top',
+        fill: '#fff',
+        fontSize: 12,
+        fontWeight: 'bold',
+        offset: 15
+      }}
+    />
+  </LineChart>
+</ResponsiveContainer>
           </div>
         </motion.div>
       )}
@@ -363,19 +435,20 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
           icon={Repeat}
           gradient="bg-gradient-to-r from-orange-500 to-orange-600"
           subtitle="Changements de poste"
+          evolutionM1={0}
+          evolutionN1={0}
         />
       </div>
 
       {/* Line 4: Contract Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Bar chart */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.4 }}
           className="relative overflow-hidden rounded-2xl backdrop-blur-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40 p-6"
         >
-          <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-green-500 to-orange-500" />
+          <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-green-500 to-purple-500" />
           
           <div className="relative z-10">
             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
@@ -421,14 +494,13 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
           </div>
         </motion.div>
 
-        {/* Pie chart */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.5 }}
           className="relative overflow-hidden rounded-2xl backdrop-blur-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40 p-6"
         >
-          <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-green-500 to-orange-500" />
+          <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-green-500 to-purple-500" />
           
           <div className="relative z-10">
             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
@@ -466,8 +538,11 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
                     backgroundColor: 'rgba(15, 23, 42, 0.95)',
                     border: '1px solid rgba(148, 163, 184, 0.2)',
                     borderRadius: '12px',
-                    backdropFilter: 'blur(10px)'
+                    backdropFilter: 'blur(10px)',
+                    color: '#ffffff'
                   }}
+                  labelStyle={{ color: '#ffffff' }}
+                  itemStyle={{ color: '#ffffff' }}
                 />
               </PieChart>
             </ResponsiveContainer>
