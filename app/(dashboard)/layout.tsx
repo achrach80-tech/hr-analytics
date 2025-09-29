@@ -95,7 +95,6 @@ const loadCompanyData = async () => {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Import', href: '/import', icon: Upload },
-    { name: 'Employés', href: '/employees', icon: Users },
     { name: 'Paramètres', href: '/settings', icon: Settings },
   ]
 
