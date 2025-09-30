@@ -2,299 +2,338 @@
 
 import React, { useMemo } from 'react'
 import { motion } from 'framer-motion'
+import { TrendingUp, TrendingDown, Activity, CheckCircle2 } from 'lucide-react'
 
-interface WaterfallDataPoint {
-  label: string
-  value: number
-  isTotal?: boolean
+interface WaterfallData {
+  masseSalarialeM1: number
+  effetPrix: number
+  effetVolume: number
+  effetMix: number
+  masseSalarialeM: number
 }
 
 interface WaterfallChartProps {
-  data: WaterfallDataPoint[]
-  height?: number
+  data: WaterfallData
+  loading?: boolean
 }
 
-export const WaterfallChart: React.FC<WaterfallChartProps> = ({ 
-  data, 
-  height = 350
-}) => {
-  const formatValue = (value: number) => {
+interface ColorConfig {
+  color: string
+  border: string
+  text: string
+  bg: string
+}
+
+interface WaterfallStep {
+  label: string
+  value: number
+  cumulative: number
+  color: string
+  borderColor: string
+  textColor: string
+  bgColor: string
+  isBase: boolean
+  isTarget: boolean
+}
+
+// Palette corporate froide et sobre
+const COLORS: Record<'base' | 'positive' | 'negative' | 'target', ColorConfig> = {
+  base: {
+    color: 'from-slate-500 to-slate-600',
+    border: 'border-slate-400',
+    text: 'text-slate-300',
+    bg: 'bg-slate-600/15'
+  },
+  positive: {
+    color: 'from-emerald-500 to-emerald-600',
+    border: 'border-emerald-400',
+    text: 'text-emerald-400',
+    bg: 'bg-emerald-500/15'
+  },
+  negative: {
+    color: 'from-red-400 to-red-500',
+    border: 'border-red-400',
+    text: 'text-red-400',
+    bg: 'bg-red-500/15'
+  },
+  target: {
+    color: 'from-sky-500 to-blue-600',
+    border: 'border-sky-400',
+    text: 'text-sky-400',
+    bg: 'bg-sky-500/15'
+  }
+}
+
+export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = false }) => {
+  
+  const steps = useMemo((): WaterfallStep[] => {
+    let cumulative = 0
+    
+    const getColors = (value: number): ColorConfig => {
+      return value >= 0 ? COLORS.negative : COLORS.positive
+    }
+    
+    const baseColors = COLORS.base
+    const targetColors = COLORS.target
+    const prixColors = getColors(data.effetPrix)
+    const volumeColors = getColors(data.effetVolume)
+    const mixColors = getColors(data.effetMix)
+    
+    return [
+      {
+        label: 'Base M-1',
+        value: data.masseSalarialeM1,
+        cumulative: data.masseSalarialeM1,
+        color: baseColors.color,
+        borderColor: baseColors.border,
+        textColor: baseColors.text,
+        bgColor: baseColors.bg,
+        isBase: true,
+        isTarget: false
+      },
+      {
+        label: 'Effet Prix',
+        value: data.effetPrix,
+        cumulative: (cumulative = data.masseSalarialeM1 + data.effetPrix),
+        color: prixColors.color,
+        borderColor: prixColors.border,
+        textColor: prixColors.text,
+        bgColor: prixColors.bg,
+        isBase: false,
+        isTarget: false
+      },
+      {
+        label: 'Effet Volume',
+        value: data.effetVolume,
+        cumulative: (cumulative = cumulative + data.effetVolume),
+        color: volumeColors.color,
+        borderColor: volumeColors.border,
+        textColor: volumeColors.text,
+        bgColor: volumeColors.bg,
+        isBase: false,
+        isTarget: false
+      },
+      {
+        label: 'Effet Mix',
+        value: data.effetMix,
+        cumulative: (cumulative = cumulative + data.effetMix),
+        color: mixColors.color,
+        borderColor: mixColors.border,
+        textColor: mixColors.text,
+        bgColor: mixColors.bg,
+        isBase: false,
+        isTarget: false
+      },
+      {
+        label: 'Cible M',
+        value: data.masseSalarialeM,
+        cumulative: data.masseSalarialeM,
+        color: targetColors.color,
+        borderColor: targetColors.border,
+        textColor: targetColors.text,
+        bgColor: targetColors.bg,
+        isBase: false,
+        isTarget: true
+      }
+    ]
+  }, [data])
+  
+  const chartMetrics = useMemo(() => {
+    const values = steps.map(s => Math.abs(s.value))
+    const maxValue = Math.max(...values)
+    
+    return {
+      maxValue,
+      scale: (value: number) => {
+        if (maxValue === 0) return 0
+        return (Math.abs(value) / maxValue) * 100
+      }
+    }
+  }, [steps])
+  
+  const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat('fr-FR', {
       style: 'currency',
       currency: 'EUR',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).format(Math.abs(value))
+    }).format(value)
   }
-
-  const chartData = useMemo(() => {
-    let runningTotal = 0
-    const bars = data.map((point, index) => {
-      let startValue: number
-      let endValue: number
-      
-      if (point.isTotal) {
-        // Pour les totaux, la barre part de 0
-        startValue = 0
-        endValue = point.value
-        runningTotal = point.value
-      } else {
-        // Pour les variations, la barre part du running total
-        startValue = runningTotal
-        endValue = runningTotal + point.value
-        runningTotal = endValue
-      }
-
-      return {
-        ...point,
-        startValue,
-        endValue,
-        barHeight: Math.abs(endValue - startValue),
-        isPositive: point.value >= 0,
-        isIncrease: point.value > 0,
-        index
-      }
-    })
-
-    // Calcul de l'échelle
-    const allValues = bars.flatMap(b => [b.startValue, b.endValue])
-    const maxValue = Math.max(...allValues)
-    const minValue = Math.min(...allValues, 0)
-    const range = maxValue - minValue
-    const scale = (height - 100) / range
-    const baseY = maxValue * scale + 20
-
-    return bars.map(bar => {
-      const barTop = Math.min(bar.startValue, bar.endValue)
-      const barBottom = Math.max(bar.startValue, bar.endValue)
-      
-      return {
-        ...bar,
-        displayHeight: bar.barHeight * scale,
-        displayY: baseY - (barBottom * scale),
-        baselineY: baseY
-      }
-    })
-  }, [data, height])
-
-  const barWidth = 80
-  const gap = 60
-  const totalWidth = chartData.length * (barWidth + gap) + gap * 2
-
-  return (
-    <div className="w-full overflow-x-auto pb-4">
-      <svg 
-        width={totalWidth} 
-        height={height} 
-        className="mx-auto"
-        style={{ minWidth: '100%' }}
-      >
-        <defs>
-  {/* Gradients corporate - couleurs professionnelles et sobres */}
-  <linearGradient id="grad-increase" x1="0%" y1="0%" x2="0%" y2="100%">
-    <stop offset="0%" stopColor="#dc2626" stopOpacity="0.85" />
-    <stop offset="100%" stopColor="#991b1b" stopOpacity="0.95" />
-  </linearGradient>
-  <linearGradient id="grad-decrease" x1="0%" y1="0%" x2="0%" y2="100%">
-    <stop offset="0%" stopColor="#059669" stopOpacity="0.85" />
-    <stop offset="100%" stopColor="#047857" stopOpacity="0.95" />
-  </linearGradient>
-  <linearGradient id="grad-total" x1="0%" y1="0%" x2="0%" y2="100%">
-    <stop offset="0%" stopColor="#0891b2" stopOpacity="0.85" />
-    <stop offset="100%" stopColor="#0e7490" stopOpacity="0.95" />
-  </linearGradient>
   
-  {/* Glow effect réduit pour un look plus corporate */}
-  <filter id="neon-glow">
-    <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
-    <feMerge>
-      <feMergeNode in="coloredBlur"/>
-      <feMergeNode in="SourceGraphic"/>
-    </feMerge>
-  </filter>
-</defs>
-
-        {/* Ligne de base (axe zéro) */}
-        <line
-          x1={0}
-          y1={chartData[0]?.baselineY || height / 2}
-          x2={totalWidth}
-          y2={chartData[0]?.baselineY || height / 2}
-          stroke="#475569"
-          strokeWidth="1"
-          strokeDasharray="4,4"
-          opacity="0.3"
-        />
-
-        {chartData.map((bar, index) => {
-          const x = gap + index * (barWidth + gap)
-          const nextBar = chartData[index + 1]
+  const calculatedTotal = data.masseSalarialeM1 + data.effetPrix + data.effetVolume + data.effetMix
+  const isCoherent = Math.abs(calculatedTotal - data.masseSalarialeM) < 1
+  const variation = data.masseSalarialeM - data.masseSalarialeM1
+  
+  if (loading) {
+    return (
+      <div className="animate-pulse rounded-xl bg-slate-800/30 p-8 border border-slate-700/30">
+        <div className="h-6 bg-slate-700/50 rounded w-48 mb-6" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 h-96 bg-slate-700/30 rounded" />
+          <div className="space-y-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 bg-slate-700/30 rounded" />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  return (
+    <div className="rounded-xl bg-white/[0.02] border border-slate-700/30 p-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-700/30">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-slate-700/30 flex items-center justify-center">
+            <Activity size={20} className="text-slate-300" />
+          </div>
+          <div>
+            <h3 className="text-white font-semibold text-lg">Waterfall Masse Salariale</h3>
+            <p className="text-slate-400 text-sm">Décomposition des variations</p>
+          </div>
+        </div>
+        
+        <div className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${
+          isCoherent 
+            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+            : 'bg-red-500/10 text-red-400 border border-red-500/20'
+        }`}>
+          {isCoherent && <CheckCircle2 size={16} />}
+          {isCoherent ? 'Cohérent' : `Écart: ${formatCurrency(Math.abs(calculatedTotal - data.masseSalarialeM))}`}
+        </div>
+      </div>
+      
+      {/* Layout: Waterfall à gauche (2/3) + Cards à droite (1/3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Waterfall Chart - 2 colonnes */}
+        <div className="lg:col-span-2">
+          <div className="relative h-96 bg-slate-900/30 rounded-lg p-6">
+            <div className="absolute inset-0 flex items-end justify-around gap-6 px-8 pb-6">
+              {steps.map((step, index) => {
+                const previousCumulative = index > 0 ? steps[index - 1].cumulative : 0
+                const barHeight = chartMetrics.scale(step.value)
+                const barBottom = step.isBase || step.isTarget 
+                  ? 0 
+                  : chartMetrics.scale(Math.min(previousCumulative, step.cumulative))
+                
+                return (
+                  <motion.div
+                    key={step.label}
+                    className="flex-1 flex flex-col items-center relative"
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1, duration: 0.4 }}
+                    style={{ height: '100%' }}
+                  >
+                    <div className="relative w-full flex-1">
+                      <motion.div
+                        className={`absolute left-0 right-0 rounded-t-lg bg-gradient-to-t ${step.color} border ${step.borderColor}`}
+                        style={{
+                          height: `${barHeight}%`,
+                          bottom: `${barBottom}%`
+                        }}
+                        initial={{ scaleY: 0 }}
+                        animate={{ scaleY: 1 }}
+                        transition={{ delay: index * 0.1 + 0.2, duration: 0.5 }}
+                      />
+                      
+                      <motion.div
+                        className={`absolute left-1/2 -translate-x-1/2 ${step.textColor} font-semibold text-sm whitespace-nowrap`}
+                        style={{
+                          bottom: `${barBottom + barHeight + 2}%`
+                        }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: index * 0.1 + 0.4 }}
+                      >
+                        <div className={`flex items-center gap-1 px-3 py-1.5 rounded ${step.bgColor} backdrop-blur-sm border border-slate-700/30`}>
+                          {!step.isBase && !step.isTarget && (
+                            step.value >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />
+                          )}
+                          <span>{formatCurrency(Math.abs(step.value))}</span>
+                        </div>
+                      </motion.div>
+                      
+                      {!step.isBase && !step.isTarget && index > 0 && (
+                        <div 
+                          className="absolute left-0 w-full border-t border-dashed border-slate-600/40"
+                          style={{
+                            bottom: `${barBottom}%`
+                          }}
+                        />
+                      )}
+                    </div>
+                    
+                    <motion.div
+                      className="mt-4 text-center"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: index * 0.1 + 0.5 }}
+                    >
+                      <p className="text-slate-300 text-sm font-medium">{step.label}</p>
+                    </motion.div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+        
+        {/* Summary Cards à droite - 1 colonne */}
+        <div className="space-y-4">
+          <motion.div 
+            className="p-5 rounded-lg bg-slate-800/20 border border-slate-700/20"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <p className="text-slate-500 text-xs uppercase tracking-wider mb-2">Base M-1</p>
+            <p className="text-white text-xl font-semibold">{formatCurrency(data.masseSalarialeM1)}</p>
+          </motion.div>
           
-          // Déterminer la couleur
-          let fillGradient: string
-let strokeColor: string
-let glowColor: string
-
-if (bar.isTotal) {
-  fillGradient = "url(#grad-total)"
-  strokeColor = "#0891b2"
-  glowColor = "rgba(8, 145, 178, 0.3)"
-} else if (bar.isIncrease) {
-  fillGradient = "url(#grad-increase)"
-  strokeColor = "#dc2626"
-  glowColor = "rgba(220, 38, 38, 0.3)"
-} else {
-  fillGradient = "url(#grad-decrease)"
-  strokeColor = "#059669"
-  glowColor = "rgba(5, 150, 105, 0.3)"
-}
-
-          return (
-            <g key={index}>
-              {/* Ligne de connexion pointillée vers la barre suivante */}
-              {nextBar && !bar.isTotal && (
-                <motion.line
-                  initial={{ pathLength: 0, opacity: 0 }}
-                  animate={{ pathLength: 1, opacity: 0.4 }}
-                  transition={{ delay: index * 0.15 + 0.5, duration: 0.3 }}
-                  x1={x + barWidth}
-                  y1={bar.displayY + (bar.isIncrease ? 0 : bar.displayHeight)}
-                  x2={x + barWidth + gap}
-                  y2={bar.displayY + (bar.isIncrease ? 0 : bar.displayHeight)}
-                  stroke="#64748b"
-                  strokeWidth="2"
-                  strokeDasharray="3,3"
-                />
+          <motion.div 
+            className="p-5 rounded-lg bg-slate-800/20 border border-slate-700/20"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <p className="text-slate-500 text-xs uppercase tracking-wider mb-2">Somme Effets</p>
+            <p className="text-slate-300 text-xl font-semibold">
+              {formatCurrency(data.effetPrix + data.effetVolume + data.effetMix)}
+            </p>
+          </motion.div>
+          
+          <motion.div 
+            className="p-5 rounded-lg bg-slate-800/20 border border-slate-700/20"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <p className="text-slate-500 text-xs uppercase tracking-wider mb-2">Cible M</p>
+            <p className="text-white text-xl font-semibold">{formatCurrency(data.masseSalarialeM)}</p>
+          </motion.div>
+          
+          <motion.div 
+            className="p-5 rounded-lg bg-slate-800/20 border border-slate-700/20"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <p className="text-slate-500 text-xs uppercase tracking-wider mb-2">Variation</p>
+            <div className="flex items-center gap-2">
+              {variation >= 0 ? (
+                <TrendingUp size={16} className="text-red-400" />
+              ) : (
+                <TrendingDown size={16} className="text-emerald-400" />
               )}
-
-              {/* Barre invisible de base (pour le hover) */}
-              {!bar.isTotal && (
-                <motion.rect
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: bar.displayY + bar.displayHeight - bar.baselineY, opacity: 0.1 }}
-                  transition={{ delay: index * 0.15, duration: 0.4 }}
-                  x={x}
-                  y={bar.baselineY}
-                  width={barWidth}
-                  height={bar.displayY + bar.displayHeight - bar.baselineY}
-                  fill="#1e293b"
-                  rx="6"
-                />
-              )}
-
-              {/* Barre principale avec animation */}
-              <motion.rect
-                initial={{ height: 0, y: bar.displayY + bar.displayHeight }}
-                animate={{ height: bar.displayHeight, y: bar.displayY }}
-                transition={{ delay: index * 0.15, duration: 0.6, ease: "easeOut" }}
-                x={x}
-                y={bar.displayY}
-                width={barWidth}
-                height={bar.displayHeight}
-                fill={fillGradient}
-                rx="6"
-                filter="url(#neon-glow)"
-              />
-
-              {/* Bordure lumineuse */}
-              <motion.rect
-                initial={{ height: 0, y: bar.displayY + bar.displayHeight, opacity: 0 }}
-                animate={{ height: bar.displayHeight, y: bar.displayY, opacity: 1 }}
-                transition={{ delay: index * 0.15 + 0.2, duration: 0.5 }}
-                x={x}
-                y={bar.displayY}
-                width={barWidth}
-                height={bar.displayHeight}
-                fill="none"
-                stroke={strokeColor}
-                strokeWidth="2"
-                rx="6"
-                style={{
-                  filter: `drop-shadow(0 0 8px ${glowColor})`
-                }}
-              />
-
-              {/* Valeur au-dessus de la barre */}
-              <motion.text
-                initial={{ opacity: 0, y: bar.displayY - 5 }}
-                animate={{ opacity: 1, y: bar.displayY - 12 }}
-                transition={{ delay: index * 0.15 + 0.4, duration: 0.3 }}
-                x={x + barWidth / 2}
-                y={bar.displayY - 12}
-                textAnchor="middle"
-                className="text-xs font-bold font-mono"
-                fill={bar.isTotal ? "#0891b2" : bar.isIncrease ? "#c5003c" : "#39c4b6"}
-                  style={{
-                   filter: `drop-shadow(0 0 2px ${glowColor})`,  // Réduit de 4px à 2px
-                    textShadow: `0 0 4px ${glowColor}`  // Réduit de 10px à 4px
-                }}
-              >
-                {!bar.isTotal && bar.isIncrease ? '+' : !bar.isTotal && !bar.isIncrease ? '-' : ''}
-                {formatValue(bar.value)}
-              </motion.text>
-
-              {/* Label en dessous */}
-              <motion.text
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: index * 0.15 + 0.5, duration: 0.3 }}
-                x={x + barWidth / 2}
-                y={height - 35}
-                textAnchor="middle"
-                className="text-sm font-medium"
-                fill="#cbd5e1"
-              >
-                {bar.label}
-              </motion.text>
-
-              {/* Valeur totale en dessous du label pour les totaux */}
-              {bar.isTotal && (
-                <motion.text
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: index * 0.15 + 0.6, duration: 0.3 }}
-                  x={x + barWidth / 2}
-                  y={height - 18}
-                  textAnchor="middle"
-                  className="text-xs font-bold"
-                  fill="#06b6d4"
-                  style={{
-                    filter: 'drop-shadow(0 0 4px rgba(6, 182, 212, 0.5))'
-                  }}
-                >
-                  {formatValue(bar.endValue)}
-                </motion.text>
-              )}
-
-              {/* Grid lines horizontales (optionnel) */}
-              {index === 0 && (
-                <>
-                  <line
-                    x1={0}
-                    y1={bar.displayY}
-                    x2={totalWidth}
-                    y2={bar.displayY}
-                    stroke="#334155"
-                    strokeWidth="1"
-                    strokeDasharray="2,4"
-                    opacity="0.2"
-                  />
-                  <line
-                    x1={0}
-                    y1={bar.displayY + bar.displayHeight}
-                    x2={totalWidth}
-                    y2={bar.displayY + bar.displayHeight}
-                    stroke="#334155"
-                    strokeWidth="1"
-                    strokeDasharray="2,4"
-                    opacity="0.2"
-                  />
-                </>
-              )}
-            </g>
-          )
-        })}
-      </svg>
+              <p className={`text-xl font-semibold ${variation >= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                {variation >= 0 ? '+' : ''}{formatCurrency(variation)}
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      </div>
     </div>
   )
 }
