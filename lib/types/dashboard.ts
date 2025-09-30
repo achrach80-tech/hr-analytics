@@ -25,6 +25,12 @@ export interface PayrollKPIs {
   coutMoyenFTE: number
   partVariable: number
   tauxCharges: number
+  // Effets prix/volume/mix
+  effetPrix: number
+  effetVolume: number
+  effetMix: number
+  variationMasseSalariale: number
+  variationMasseSalarialePct: number
 }
 
 export interface AbsenceKPIs {
