@@ -8,11 +8,15 @@ import type { WorkforceKPIs } from '@/lib/types/dashboard'
 
 interface CyberDemographicsSectionProps {
   data: WorkforceKPIs | null
+  previousMonthData?: WorkforceKPIs | null
+  previousYearData?: WorkforceKPIs | null
   loading?: boolean
 }
 
 export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> = React.memo(({ 
-  data, 
+  data,
+  previousMonthData,
+  previousYearData,
   loading = false 
 }) => {
   if (loading) {
@@ -27,6 +31,22 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
     )
   }
 
+  // Calculs des évolutions - Âge Moyen (en %)
+  const evolutionM1AgeMoyen = previousMonthData && previousMonthData.ageMoyen > 0
+    ? ((data.ageMoyen - previousMonthData.ageMoyen) / previousMonthData.ageMoyen) * 100
+    : undefined
+  const evolutionN1AgeMoyen = previousYearData && previousYearData.ageMoyen > 0
+    ? ((data.ageMoyen - previousYearData.ageMoyen) / previousYearData.ageMoyen) * 100
+    : undefined
+
+  // Calculs des évolutions - Ancienneté Moyenne (en %)
+  const evolutionM1Anciennete = previousMonthData && previousMonthData.ancienneteMoyenne > 0
+    ? ((data.ancienneteMoyenne - previousMonthData.ancienneteMoyenne) / previousMonthData.ancienneteMoyenne) * 100
+    : undefined
+  const evolutionN1Anciennete = previousYearData && previousYearData.ancienneteMoyenne > 0
+    ? ((data.ancienneteMoyenne - previousYearData.ancienneteMoyenne) / previousYearData.ancienneteMoyenne) * 100
+    : undefined
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 30 }}
@@ -40,12 +60,41 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
       />
       
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        {/* Age Moyen */}
+        {/* Age Moyen avec évolutions */}
         <motion.div 
           className="relative p-6 rounded-2xl backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40"
           whileHover={{ y: -2 }}
         >
           <div className="absolute inset-0 opacity-20 bg-gradient-to-r from-violet-500 to-violet-600 rounded-2xl" />
+          
+          {/* Badges M-1 et N-1 */}
+          {evolutionM1AgeMoyen !== undefined && (
+            <div className="absolute top-2 right-2 z-20 flex flex-col gap-1">
+              <div className={`flex items-center gap-1 px-2 py-1 rounded-lg backdrop-blur-md border text-xs font-mono font-bold ${
+                evolutionM1AgeMoyen === 0 
+                  ? 'bg-slate-700/50 border-slate-600/30 text-slate-400'
+                  : evolutionM1AgeMoyen > 0
+                  ? 'bg-green-500/20 border-green-500/30 text-green-400'
+                  : 'bg-red-500/20 border-red-500/30 text-red-400'
+              }`}>
+                <span>M-1 {evolutionM1AgeMoyen > 0 ? '+' : ''}{evolutionM1AgeMoyen.toFixed(1)}%</span>
+              </div>
+            </div>
+          )}
+          {evolutionN1AgeMoyen !== undefined && (
+            <div className="absolute bottom-2 right-2 z-20">
+              <div className={`flex items-center gap-1 px-2 py-1 rounded-lg backdrop-blur-md border text-xs font-mono font-bold ${
+                evolutionN1AgeMoyen === 0 
+                  ? 'bg-slate-700/50 border-slate-600/30 text-slate-400'
+                  : evolutionN1AgeMoyen > 0
+                  ? 'bg-green-500/20 border-green-500/30 text-green-400'
+                  : 'bg-red-500/20 border-red-500/30 text-red-400'
+              }`}>
+                <span>N-1 {evolutionN1AgeMoyen > 0 ? '+' : ''}{evolutionN1AgeMoyen.toFixed(1)}%</span>
+              </div>
+            </div>
+          )}
+          
           <div className="relative z-10">
             <div className="flex items-start justify-between mb-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-violet-500 to-violet-600 flex items-center justify-center shadow-lg">
@@ -59,12 +108,41 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
           </div>
         </motion.div>
 
-        {/* Ancienneté Moyenne */}
+        {/* Ancienneté Moyenne avec évolutions */}
         <motion.div 
           className="relative p-6 rounded-2xl backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40"
           whileHover={{ y: -2 }}
         >
           <div className="absolute inset-0 opacity-20 bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl" />
+          
+          {/* Badges M-1 et N-1 */}
+          {evolutionM1Anciennete !== undefined && (
+            <div className="absolute top-2 right-2 z-20 flex flex-col gap-1">
+              <div className={`flex items-center gap-1 px-2 py-1 rounded-lg backdrop-blur-md border text-xs font-mono font-bold ${
+                evolutionM1Anciennete === 0 
+                  ? 'bg-slate-700/50 border-slate-600/30 text-slate-400'
+                  : evolutionM1Anciennete > 0
+                  ? 'bg-green-500/20 border-green-500/30 text-green-400'
+                  : 'bg-red-500/20 border-red-500/30 text-red-400'
+              }`}>
+                <span>M-1 {evolutionM1Anciennete > 0 ? '+' : ''}{evolutionM1Anciennete.toFixed(1)}%</span>
+              </div>
+            </div>
+          )}
+          {evolutionN1Anciennete !== undefined && (
+            <div className="absolute bottom-2 right-2 z-20">
+              <div className={`flex items-center gap-1 px-2 py-1 rounded-lg backdrop-blur-md border text-xs font-mono font-bold ${
+                evolutionN1Anciennete === 0 
+                  ? 'bg-slate-700/50 border-slate-600/30 text-slate-400'
+                  : evolutionN1Anciennete > 0
+                  ? 'bg-green-500/20 border-green-500/30 text-green-400'
+                  : 'bg-red-500/20 border-red-500/30 text-red-400'
+              }`}>
+                <span>N-1 {evolutionN1Anciennete > 0 ? '+' : ''}{evolutionN1Anciennete.toFixed(1)}%</span>
+              </div>
+            </div>
+          )}
+          
           <div className="relative z-10">
             <div className="flex items-start justify-between mb-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -78,7 +156,7 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
           </div>
         </motion.div>
 
-        {/* Répartition par Sexe - Cyberpunk */}
+        {/* Répartition par Sexe - Cyberpunk (inchangé) */}
         <motion.div 
           className="col-span-1 md:col-span-2 relative p-6 rounded-2xl backdrop-blur-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40"
           initial={{ opacity: 0, y: 20 }}
@@ -95,7 +173,6 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
             </h3>
             
             <div className="space-y-6">
-              {/* Hommes */}
               <div className="relative">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
@@ -139,7 +216,6 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
                 </div>
               </div>
 
-              {/* Femmes */}
               <div className="relative">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
@@ -195,8 +271,7 @@ const DemographicsSkeleton: React.FC = () => (
     <div className="h-8 bg-slate-700 rounded w-64 mb-6"></div>
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="h-32 bg-slate-800 rounded-2xl"></div>
-      ))}
+        <div key={i} className="h-32 bg-slate-800 rounded-2xl"></div>))}
     </div>
   </div>
 )

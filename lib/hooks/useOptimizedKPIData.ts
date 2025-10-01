@@ -47,6 +47,8 @@ interface KPIData {
   previousYearFinancials: PayrollKPIs | null
   previousMonthWorkforce: WorkforceKPIs | null
   previousYearWorkforce: WorkforceKPIs | null
+  previousMonthAbsences: AbsenceKPIs | null
+  previousYearAbsences: AbsenceKPIs | null
 }
 
 export const useOptimizedKPIData = (establishmentId: string, period: string) => {
@@ -75,7 +77,6 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
         setLoading(true)
         setError(null)
 
-        // Calculer les périodes M-1 et N-1
         const currentDate = new Date(period)
         
         const previousMonthDate = new Date(currentDate)
@@ -86,7 +87,6 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
         previousYearDate.setFullYear(previousYearDate.getFullYear() - 1)
         const previousYearPeriod = previousYearDate.toISOString().split('T')[0].substring(0, 7) + '-01'
 
-        // Récupérer les 3 snapshots en parallèle
         const [currentResult, previousMonthResult, previousYearResult] = await Promise.all([
           supabase
             .from('snapshots_mensuels')
@@ -201,6 +201,22 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
               ancienneteMoyenne: previousYearSnapshot.anciennete_moyenne_mois || 0,
               pctHommes: previousYearSnapshot.pct_hommes || 0,
               pctFemmes: previousYearSnapshot.pct_femmes || 0
+            } : null,
+            previousMonthAbsences: previousMonthSnapshot ? {
+              tauxAbsenteisme: previousMonthSnapshot.taux_absenteisme || 0,
+              nbJoursAbsence: previousMonthSnapshot.nb_jours_absence || 0,
+              nbAbsencesTotal: previousMonthSnapshot.nb_absences_total || 0,
+              dureeMoyenne: previousMonthSnapshot.duree_moyenne_absence || 0,
+              nbSalariesAbsents: previousMonthSnapshot.nb_salaries_absents || 0,
+              nbJoursMaladie: previousMonthSnapshot.nb_jours_maladie || 0
+            } : null,
+            previousYearAbsences: previousYearSnapshot ? {
+              tauxAbsenteisme: previousYearSnapshot.taux_absenteisme || 0,
+              nbJoursAbsence: previousYearSnapshot.nb_jours_absence || 0,
+              nbAbsencesTotal: previousYearSnapshot.nb_absences_total || 0,
+              dureeMoyenne: previousYearSnapshot.duree_moyenne_absence || 0,
+              nbSalariesAbsents: previousYearSnapshot.nb_salaries_absents || 0,
+              nbJoursMaladie: previousYearSnapshot.nb_jours_maladie || 0
             } : null
           })
         } else {
@@ -211,16 +227,11 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
             previousMonthFinancials: null,
             previousYearFinancials: null,
             previousMonthWorkforce: null,
-            previousYearWorkforce: null
+            previousYearWorkforce: null,
+            previousMonthAbsences: null,
+            previousYearAbsences: null
           })
         }
-        console.log('🔍 DEBUG Payroll:')
-console.log('Current period:', period)
-console.log('Previous month period:', previousMonthPeriod)
-console.log('Previous year period:', previousYearPeriod)
-console.log('Current masse brute:', snapshot?.masse_salariale_brute)
-console.log('Previous month masse brute:', previousMonthSnapshot?.masse_salariale_brute)
-console.log('Previous year masse brute:', previousYearSnapshot?.masse_salariale_brute)
 
       } catch (err) {
         console.error('KPI fetch error:', err)
@@ -232,7 +243,9 @@ console.log('Previous year masse brute:', previousYearSnapshot?.masse_salariale_
           previousMonthFinancials: null,
           previousYearFinancials: null,
           previousMonthWorkforce: null,
-          previousYearWorkforce: null
+          previousYearWorkforce: null,
+          previousMonthAbsences: null,
+          previousYearAbsences: null
         })
       } finally {
         setLoading(false)

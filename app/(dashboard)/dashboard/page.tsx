@@ -467,30 +467,36 @@ export default function CyberDashboard() {
       {/* Main content */}
       <div className="relative z-10 p-8 space-y-12">
         {kpiData ? (
-          <>
-            <CyberWorkforceSection 
-              data={kpiData.workforce} 
-              loading={kpiLoading} 
-            />
-            
-            <CyberPayrollSection 
-  data={kpiData?.financials || null}
-  previousMonthData={kpiData?.previousMonthFinancials || null}
-  previousYearData={kpiData?.previousYearFinancials || null}
-  loading={kpiLoading} 
-/>
-            
-            <CyberAbsenceSection 
-              data={kpiData.absences} 
-              loading={kpiLoading} 
-            />
-            
-            <CyberDemographicsSection 
-              data={kpiData.workforce} 
-              loading={kpiLoading} 
-            />
-          </>
-        ) : (
+  <>
+    <CyberWorkforceSection 
+      data={kpiData.workforce} 
+      loading={kpiLoading}
+      previousMonthData={kpiData.previousMonthWorkforce}
+      previousYearData={kpiData.previousYearWorkforce}
+    />
+    
+    <CyberPayrollSection 
+      data={kpiData?.financials || null}
+      previousMonthData={kpiData?.previousMonthFinancials || null}
+      previousYearData={kpiData?.previousYearFinancials || null}
+      loading={kpiLoading} 
+    />
+    
+    <CyberAbsenceSection 
+      data={kpiData.absences} 
+      loading={kpiLoading}
+      previousMonthData={kpiData.previousMonthAbsences}
+      previousYearData={kpiData.previousYearAbsences}
+    />
+    
+    <CyberDemographicsSection 
+      data={kpiData.workforce} 
+      loading={kpiLoading}
+      previousMonthData={kpiData.previousMonthWorkforce}
+      previousYearData={kpiData.previousYearWorkforce}
+    />
+  </>
+) : (
           <motion.div 
             className="text-center py-20"
             initial={{ opacity: 0, scale: 0.9 }}
