@@ -19,8 +19,11 @@ interface CyberPieChartProps {
 export const CyberPieChart: React.FC<CyberPieChartProps> = ({ data, title, icon: Icon }) => {
   const total = data.reduce((sum, item) => sum + item.value, 0)
   
+  // Filter out zero values
+  const validData = data.filter(item => item.percentage > 0)
+  
   let currentAngle = -90
-  const segments = data.map(item => {
+  const segments = validData.map(item => {
     const angle = (item.percentage / 100) * 360
     const segment = {
       ...item,
@@ -33,6 +36,19 @@ export const CyberPieChart: React.FC<CyberPieChartProps> = ({ data, title, icon:
   })
 
   const createArc = (startAngle: number, endAngle: number, innerRadius: number, outerRadius: number) => {
+    // Special case: if it's 100%, draw a full circle
+    if (Math.abs(endAngle - startAngle) >= 359.9) {
+      return `
+        M ${150 + outerRadius} 150
+        A ${outerRadius} ${outerRadius} 0 1 1 ${150 - outerRadius} 150
+        A ${outerRadius} ${outerRadius} 0 1 1 ${150 + outerRadius} 150
+        M ${150 + innerRadius} 150
+        A ${innerRadius} ${innerRadius} 0 1 0 ${150 - innerRadius} 150
+        A ${innerRadius} ${innerRadius} 0 1 0 ${150 + innerRadius} 150
+        Z
+      `
+    }
+
     const startRad = (startAngle * Math.PI) / 180
     const endRad = (endAngle * Math.PI) / 180
 
@@ -57,21 +73,45 @@ export const CyberPieChart: React.FC<CyberPieChartProps> = ({ data, title, icon:
     `
   }
 
-  // ✅ FIX: Typage strict pour textAnchor
-  const getLabelPosition = (startAngle: number, endAngle: number, percentage: number): {
-    x: number
-    y: number
-    anchor: 'start' | 'end'
-  } => {
-    const midAngle = (startAngle + endAngle) / 2
+  // Distribute labels evenly around the chart to avoid collisions
+  const getLabelPosition = (segment: typeof segments[0], index: number) => {
+    const midAngle = (segment.startAngle + segment.endAngle) / 2
     const midRad = (midAngle * Math.PI) / 180
-    const radius = percentage < 8 ? 135 : 125
     
-    return {
-      x: 150 + radius * Math.cos(midRad),
-      y: 150 + radius * Math.sin(midRad),
-      anchor: (midAngle > -90 && midAngle < 90) ? 'start' : 'end'
+    // Base radius for label positioning
+    let radius = 135
+    
+    // For very small segments, push them further out and distribute evenly
+    if (segment.percentage < 10) {
+      radius = 155
+      
+      // If multiple small segments are close together, stagger them vertically
+      const hasCloseNeighbor = segments.some((other, otherIndex) => {
+        if (otherIndex === index) return false
+        const otherMidAngle = (other.startAngle + other.endAngle) / 2
+        const angleDiff = Math.abs(midAngle - otherMidAngle)
+        return other.percentage < 10 && (angleDiff < 40 || angleDiff > 320)
+      })
+      
+      if (hasCloseNeighbor) {
+        // Alternate positions for close neighbors
+        const stagger = index % 2 === 0 ? 10 : -10
+        radius += stagger
+      }
     }
+    
+    const x = 150 + radius * Math.cos(midRad)
+    const y = 150 + radius * Math.sin(midRad)
+    
+    // Determine text anchor
+    let anchor: 'start' | 'middle' | 'end' = 'middle'
+    if (midAngle > -80 && midAngle < 80) {
+      anchor = 'start'
+    } else if (midAngle > 100 || midAngle < -100) {
+      anchor = 'end'
+    }
+    
+    return { x, y, anchor, radius }
   }
 
   return (
@@ -87,7 +127,7 @@ export const CyberPieChart: React.FC<CyberPieChartProps> = ({ data, title, icon:
         )}
         
         <div className="flex items-center justify-center">
-          <svg width="300" height="300" viewBox="0 0 300 300" className="overflow-visible">
+          <svg width="380" height="380" viewBox="0 0 380 380" className="overflow-visible">
             <defs>
               {segments.map((segment, index) => (
                 <linearGradient key={`gradient-${index}`} id={`grad-${index}`} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -105,97 +145,102 @@ export const CyberPieChart: React.FC<CyberPieChartProps> = ({ data, title, icon:
               </filter>
             </defs>
 
-            {segments.map((segment, index) => {
-              const labelPos = getLabelPosition(segment.startAngle, segment.endAngle, segment.percentage)
-              
-              return (
-                <g key={index}>
-                  <motion.path
-                    d={createArc(segment.startAngle, segment.endAngle, 70, 100)}
-                    fill={`url(#grad-${index})`}
-                    stroke={segment.color}
-                    strokeWidth="2"
-                    filter="url(#glow)"
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: index * 0.1, duration: 0.5 }}
-                    whileHover={{ 
-                      scale: 1.05,
-                      filter: 'url(#glow) brightness(1.2)'
-                    }}
-                    style={{ transformOrigin: '150px 150px', cursor: 'pointer' }}
-                  />
-
-                  <motion.line
-                    x1={150 + 100 * Math.cos(((segment.startAngle + segment.endAngle) / 2) * Math.PI / 180)}
-                    y1={150 + 100 * Math.sin(((segment.startAngle + segment.endAngle) / 2) * Math.PI / 180)}
-                    x2={labelPos.x - (labelPos.anchor === 'start' ? 5 : -5)}
-                    y2={labelPos.y}
-                    stroke={segment.color}
-                    strokeWidth="1.5"
-                    strokeDasharray="2,2"
-                    opacity="0.6"
-                    initial={{ pathLength: 0 }}
-                    animate={{ pathLength: 1 }}
-                    transition={{ delay: index * 0.1 + 0.3, duration: 0.4 }}
-                  />
-
-                  <motion.g
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: index * 0.1 + 0.5, duration: 0.3 }}
-                  >
-                    <text
-                      x={labelPos.x}
-                      y={labelPos.y}
-                      textAnchor={labelPos.anchor}
-                      dominantBaseline="middle"
-                      fill="white"
-                      fontSize={segment.percentage < 8 ? "11" : "13"}
-                      fontWeight="600"
-                      style={{ 
-                        textShadow: '0 2px 8px rgba(0,0,0,0.9)',
-                        pointerEvents: 'none'
+            <g transform="translate(40, 40)">
+              {segments.map((segment, index) => {
+                const labelPos = getLabelPosition(segment, index)
+                const midAngle = (segment.startAngle + segment.endAngle) / 2
+                const midRad = (midAngle * Math.PI) / 180
+                
+                return (
+                  <g key={index}>
+                    <motion.path
+                      d={createArc(segment.startAngle, segment.endAngle, 70, 100)}
+                      fill={`url(#grad-${index})`}
+                      stroke={segment.color}
+                      strokeWidth="2"
+                      filter="url(#glow)"
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.1, duration: 0.5 }}
+                      whileHover={{ 
+                        scale: 1.05,
+                        filter: 'url(#glow) brightness(1.2)'
                       }}
+                      style={{ transformOrigin: '150px 150px', cursor: 'pointer' }}
+                    />
+
+                    {segment.percentage < 100 && (
+                      <motion.line
+                        x1={150 + 100 * Math.cos(midRad)}
+                        y1={150 + 100 * Math.sin(midRad)}
+                        x2={labelPos.x - (labelPos.anchor === 'start' ? 8 : labelPos.anchor === 'end' ? -8 : 0)}
+                        y2={labelPos.y}
+                        stroke={segment.color}
+                        strokeWidth="1.5"
+                        strokeDasharray="3,3"
+                        opacity="0.7"
+                        initial={{ pathLength: 0 }}
+                        animate={{ pathLength: 1 }}
+                        transition={{ delay: index * 0.1 + 0.3, duration: 0.4 }}
+                      />
+                    )}
+
+                    <motion.g
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: index * 0.1 + 0.5, duration: 0.3 }}
                     >
-                      {`${segment.name}: ${segment.percentage.toFixed(1)}%`}
-                    </text>
-                  </motion.g>
-                </g>
-              )
-            })}
+                      <text
+                        x={labelPos.x}
+                        y={labelPos.y}
+                        textAnchor={labelPos.anchor}
+                        dominantBaseline="middle"
+                        fill="white"
+                        fontSize={segment.percentage < 8 ? "12" : "13"}
+                        fontWeight="600"
+                        style={{ 
+                          textShadow: '0 2px 10px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.8)',
+                          pointerEvents: 'none'
+                        }}
+                      >
+                        {`${segment.name}: ${segment.percentage.toFixed(1)}%`}
+                      </text>
+                    </motion.g>
+                  </g>
+                )
+              })}
 
-            <circle
-  cx="150"
-  cy="150"
-  r="70"
-  fill="rgba(15, 23, 42, 0.8)"
-  stroke="rgba(148, 163, 184, 0.3)"
-  strokeWidth="1"
-/>
+              <circle
+                cx="150"
+                cy="150"
+                r="70"
+                fill="rgba(15, 23, 42, 0.8)"
+                stroke="rgba(148, 163, 184, 0.3)"
+                strokeWidth="1"
+              />
 
-<text
-  x="150"
-  y="135"
-  textAnchor="middle"
-  fill="#94a3b8"
-  fontSize="12"
-  fontWeight="500"
->
-  TOTAL ETP
-</text>
+              <text
+                x="150"
+                y="135"
+                textAnchor="middle"
+                fill="#94a3b8"
+                fontSize="12"
+                fontWeight="500"
+              >
+                TOTAL ETP
+              </text>
 
-{/* ✅ FIX: Afficher 1 décimale */}
-<text
-  x="150"
-  y="160"
-  textAnchor="middle"
-  fill="white"
-  fontSize="20"
-  fontWeight="bold"
->
-  {total.toFixed(1)}
-</text>
+              <text
+                x="150"
+                y="160"
+                textAnchor="middle"
+                fill="white"
+                fontSize="20"
+                fontWeight="bold"
+              >
+                {total.toFixed(1)}
+              </text>
+            </g>
           </svg>
         </div>
       </div>

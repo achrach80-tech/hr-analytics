@@ -509,28 +509,21 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
 </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.5 }}
-          className="relative overflow-hidden rounded-2xl backdrop-blur-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40 p-6"
-        >
-          <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-green-500 to-purple-500" />
-          
-          <div className="relative z-10">
-            <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
-              <Briefcase size={20} className="text-orange-400" />
-              Distribution % Contrats
-            </h3>
-            
-            <ResponsiveContainer width="100%" height={250}>
-              <CyberPieChart
-  data={contractData}
-  title="Distribution % Contrats"
-  icon={Briefcase}
-/>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
+  initial={{ opacity: 0, x: 20 }}
+  animate={{ opacity: 1, x: 0 }}
+  transition={{ delay: 0.5 }}
+  className="relative overflow-hidden rounded-2xl backdrop-blur-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40 p-6"
+>
+  <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-green-500 to-purple-500" />
+  
+  <div className="relative z-10">
+    <CyberPieChart
+      data={contractData}
+      title="Distribution % Contrats"
+      icon={Briefcase}
+    />
+  </div>
+</motion.div>
       </div>
     </motion.section>
   )
