@@ -476,6 +476,7 @@ export default function CyberDashboard() {
             <CyberPayrollSection 
   data={kpiData?.financials || null}
   previousMonthData={kpiData?.previousMonthFinancials || null}
+  previousYearData={kpiData?.previousYearFinancials || null}
   loading={kpiLoading} 
 />
             

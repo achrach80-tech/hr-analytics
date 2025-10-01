@@ -44,7 +44,7 @@ export const CyberAbsenceSection: React.FC<CyberAbsenceSectionProps> = React.mem
         gradient="bg-gradient-to-r from-red-500 via-pink-500 to-rose-600" 
       />
       
-      {/* Primary KPIs */}
+      {/* Primary KPIs - Tous avec le même style */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
         <CyberKPICard
           title="Taux d'Absentéisme"
@@ -75,7 +75,7 @@ export const CyberAbsenceSection: React.FC<CyberAbsenceSectionProps> = React.mem
         />
       </div>
 
-      {/* Secondary KPIs */}
+      {/* Secondary KPIs - Tous avec le même style */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <CyberKPICard
           title="Salariés Absents"

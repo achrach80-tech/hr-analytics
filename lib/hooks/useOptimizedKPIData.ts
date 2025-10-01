@@ -44,6 +44,9 @@ interface KPIData {
   financials: PayrollKPIs | null
   absences: AbsenceKPIs | null
   previousMonthFinancials: PayrollKPIs | null
+  previousYearFinancials: PayrollKPIs | null
+  previousMonthWorkforce: WorkforceKPIs | null
+  previousYearWorkforce: WorkforceKPIs | null
 }
 
 export const useOptimizedKPIData = (establishmentId: string, period: string) => {
@@ -72,14 +75,19 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
         setLoading(true)
         setError(null)
 
-        // Calculer la période précédente
+        // Calculer les périodes M-1 et N-1
         const currentDate = new Date(period)
-        const previousDate = new Date(currentDate)
-        previousDate.setMonth(previousDate.getMonth() - 1)
-        const previousPeriod = previousDate.toISOString().split('T')[0].substring(0, 7) + '-01'
+        
+        const previousMonthDate = new Date(currentDate)
+        previousMonthDate.setMonth(previousMonthDate.getMonth() - 1)
+        const previousMonthPeriod = previousMonthDate.toISOString().split('T')[0].substring(0, 7) + '-01'
 
-        // Récupérer snapshot actuel et précédent
-        const [currentResult, previousResult] = await Promise.all([
+        const previousYearDate = new Date(currentDate)
+        previousYearDate.setFullYear(previousYearDate.getFullYear() - 1)
+        const previousYearPeriod = previousYearDate.toISOString().split('T')[0].substring(0, 7) + '-01'
+
+        // Récupérer les 3 snapshots en parallèle
+        const [currentResult, previousMonthResult, previousYearResult] = await Promise.all([
           supabase
             .from('snapshots_mensuels')
             .select('*')
@@ -90,7 +98,13 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
             .from('snapshots_mensuels')
             .select('*')
             .eq('etablissement_id', establishmentId)
-            .eq('periode', previousPeriod)
+            .eq('periode', previousMonthPeriod)
+            .maybeSingle(),
+          supabase
+            .from('snapshots_mensuels')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', previousYearPeriod)
             .maybeSingle()
         ])
 
@@ -100,7 +114,8 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
         }
 
         const snapshot = currentResult.data
-        const previousSnapshot = previousResult.data
+        const previousMonthSnapshot = previousMonthResult.data
+        const previousYearSnapshot = previousYearResult.data
 
         if (snapshot) {
           setData({
@@ -137,18 +152,55 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
               nbSalariesAbsents: snapshot.nb_salaries_absents || 0,
               nbJoursMaladie: snapshot.nb_jours_maladie || 0
             },
-            previousMonthFinancials: previousSnapshot ? {
-              masseBrute: previousSnapshot.masse_salariale_brute || 0,
-              coutTotal: previousSnapshot.cout_total_employeur || 0,
-              salaireMoyen: previousSnapshot.salaire_base_moyen || 0,
-              coutMoyenFTE: previousSnapshot.cout_moyen_par_fte || 0,
-              partVariable: previousSnapshot.part_variable || 0,
-              tauxCharges: previousSnapshot.taux_charges || 0,
-              effetPrix: previousSnapshot.effet_prix || 0,
-              effetVolume: previousSnapshot.effet_volume || 0,
-              effetMix: previousSnapshot.effet_mix || 0,
-              variationMasseSalariale: previousSnapshot.variation_masse_salariale || 0,
-              variationMasseSalarialePct: previousSnapshot.variation_masse_salariale_pct || 0
+            previousMonthFinancials: previousMonthSnapshot ? {
+              masseBrute: previousMonthSnapshot.masse_salariale_brute || 0,
+              coutTotal: previousMonthSnapshot.cout_total_employeur || 0,
+              salaireMoyen: previousMonthSnapshot.salaire_base_moyen || 0,
+              coutMoyenFTE: previousMonthSnapshot.cout_moyen_par_fte || 0,
+              partVariable: previousMonthSnapshot.part_variable || 0,
+              tauxCharges: previousMonthSnapshot.taux_charges || 0,
+              effetPrix: previousMonthSnapshot.effet_prix || 0,
+              effetVolume: previousMonthSnapshot.effet_volume || 0,
+              effetMix: previousMonthSnapshot.effet_mix || 0,
+              variationMasseSalariale: previousMonthSnapshot.variation_masse_salariale || 0,
+              variationMasseSalarialePct: previousMonthSnapshot.variation_masse_salariale_pct || 0
+            } : null,
+            previousYearFinancials: previousYearSnapshot ? {
+              masseBrute: previousYearSnapshot.masse_salariale_brute || 0,
+              coutTotal: previousYearSnapshot.cout_total_employeur || 0,
+              salaireMoyen: previousYearSnapshot.salaire_base_moyen || 0,
+              coutMoyenFTE: previousYearSnapshot.cout_moyen_par_fte || 0,
+              partVariable: previousYearSnapshot.part_variable || 0,
+              tauxCharges: previousYearSnapshot.taux_charges || 0,
+              effetPrix: previousYearSnapshot.effet_prix || 0,
+              effetVolume: previousYearSnapshot.effet_volume || 0,
+              effetMix: previousYearSnapshot.effet_mix || 0,
+              variationMasseSalariale: previousYearSnapshot.variation_masse_salariale || 0,
+              variationMasseSalarialePct: previousYearSnapshot.variation_masse_salariale_pct || 0
+            } : null,
+            previousMonthWorkforce: previousMonthSnapshot ? {
+              etpTotal: previousMonthSnapshot.etp_fin_mois || 0,
+              headcountActif: previousMonthSnapshot.effectif_fin_mois || 0,
+              nbEntrees: previousMonthSnapshot.nb_entrees || 0,
+              nbSorties: previousMonthSnapshot.nb_sorties || 0,
+              tauxTurnover: previousMonthSnapshot.taux_turnover || 0,
+              pctCDI: previousMonthSnapshot.pct_cdi || 0,
+              ageMoyen: previousMonthSnapshot.age_moyen || 0,
+              ancienneteMoyenne: previousMonthSnapshot.anciennete_moyenne_mois || 0,
+              pctHommes: previousMonthSnapshot.pct_hommes || 0,
+              pctFemmes: previousMonthSnapshot.pct_femmes || 0
+            } : null,
+            previousYearWorkforce: previousYearSnapshot ? {
+              etpTotal: previousYearSnapshot.etp_fin_mois || 0,
+              headcountActif: previousYearSnapshot.effectif_fin_mois || 0,
+              nbEntrees: previousYearSnapshot.nb_entrees || 0,
+              nbSorties: previousYearSnapshot.nb_sorties || 0,
+              tauxTurnover: previousYearSnapshot.taux_turnover || 0,
+              pctCDI: previousYearSnapshot.pct_cdi || 0,
+              ageMoyen: previousYearSnapshot.age_moyen || 0,
+              ancienneteMoyenne: previousYearSnapshot.anciennete_moyenne_mois || 0,
+              pctHommes: previousYearSnapshot.pct_hommes || 0,
+              pctFemmes: previousYearSnapshot.pct_femmes || 0
             } : null
           })
         } else {
@@ -156,9 +208,19 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
             workforce: null, 
             financials: null, 
             absences: null,
-            previousMonthFinancials: null 
+            previousMonthFinancials: null,
+            previousYearFinancials: null,
+            previousMonthWorkforce: null,
+            previousYearWorkforce: null
           })
         }
+        console.log('🔍 DEBUG Payroll:')
+console.log('Current period:', period)
+console.log('Previous month period:', previousMonthPeriod)
+console.log('Previous year period:', previousYearPeriod)
+console.log('Current masse brute:', snapshot?.masse_salariale_brute)
+console.log('Previous month masse brute:', previousMonthSnapshot?.masse_salariale_brute)
+console.log('Previous year masse brute:', previousYearSnapshot?.masse_salariale_brute)
 
       } catch (err) {
         console.error('KPI fetch error:', err)
@@ -167,7 +229,10 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
           workforce: null, 
           financials: null, 
           absences: null,
-          previousMonthFinancials: null 
+          previousMonthFinancials: null,
+          previousYearFinancials: null,
+          previousMonthWorkforce: null,
+          previousYearWorkforce: null
         })
       } finally {
         setLoading(false)
@@ -182,7 +247,7 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
     loading, 
     error,  
     historicalData: [],
-    previousMonthData: data?.previousMonthFinancials || null, // ✅ Correction
-    previousYearData: null  
+    previousMonthData: data?.previousMonthWorkforce || null,
+    previousYearData: data?.previousYearWorkforce || null
   }
 }
