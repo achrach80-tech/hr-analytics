@@ -7,6 +7,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, 
 import { CyberSectionHeader } from './CyberSectionHeader'
 import { createClient } from '@/lib/supabase/client'
 import type { WorkforceKPIs } from '@/lib/types/dashboard'
+import { CyberPieChart } from './CyberPieChart'
 
 interface CyberWorkforceSectionProps {
   data: WorkforceKPIs | null
@@ -149,16 +150,17 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
   loading = false 
 }) => {
   const supabase = createClient()
+  
+  // ✅ TOUS LES HOOKS EN PREMIER - AVANT TOUT EARLY RETURN
   const [chartData, setChartData] = useState<Array<{month: string, etp: number}>>([])
   const [establishmentId, setEstablishmentId] = useState<string>('')
 
-  // Récupérer l'establishment_id depuis le localStorage
+  // Effect 1: Get establishment ID
   useEffect(() => {
     const sessionStr = localStorage.getItem('company_session')
     if (sessionStr) {
       try {
         const session = JSON.parse(sessionStr)
-        // On récupère l'établissement depuis le dashboard
         const fetchEstablishment = async () => {
           const { data: establishments } = await supabase
             .from('etablissements')
@@ -177,7 +179,7 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
     }
   }, [supabase])
 
-  // Récupérer les données historiques directement
+  // Effect 2: Fetch historical data
   useEffect(() => {
     if (!establishmentId) return
 
@@ -207,6 +209,33 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
     fetchHistoricalData()
   }, [establishmentId, supabase])
 
+  // Memoized calculations
+  const contractData = useMemo(() => {
+  if (!data) return []
+  
+  const cdiPct = data.pctCDI || 0
+  const precaritePct = 100 - cdiPct
+  
+  const cddPct = precaritePct * 0.60
+  const altPct = precaritePct * 0.25
+  const stagePct = precaritePct * 0.15
+  
+  // ✅ FIX: Calculer les ETP en décimal (pas arrondi)
+  const totalETP = data.etpTotal || data.headcountActif
+  const cdiETP = (cdiPct / 100) * totalETP
+  const cddETP = (cddPct / 100) * totalETP
+  const altETP = (altPct / 100) * totalETP
+  const staETP = (stagePct / 100) * totalETP
+  
+  return [
+    { name: 'CDI', value: cdiETP, percentage: cdiPct, color: '#10b981' },
+    { name: 'CDD', value: cddETP, percentage: cddPct, color: '#f59e0b' },
+    { name: 'ALT', value: altETP, percentage: altPct, color: '#3b82f6' },
+    { name: 'STA', value: staETP, percentage: stagePct, color: '#8b5cf6' }
+  ]
+}, [data])
+
+  // ✅ MAINTENANT ON PEUT FAIRE LES EARLY RETURNS
   if (loading) {
     return <WorkforceSkeleton />
   }
@@ -219,6 +248,7 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
     )
   }
 
+  // Reste du code avec les calculs...
   const evolutionM1ETP = previousMonthData 
     ? ((data.etpTotal - previousMonthData.etpTotal) / previousMonthData.etpTotal) * 100 
     : 0
@@ -254,27 +284,6 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
   const evolutionN1Turnover = previousYearData 
     ? data.tauxTurnover - previousYearData.tauxTurnover
     : 0
-
-  const contractData = useMemo(() => {
-    const cdiPct = data.pctCDI || 0
-    const precaritePct = 100 - cdiPct
-    
-    const cddPct = precaritePct * 0.60
-    const altPct = precaritePct * 0.25
-    const stagePct = precaritePct * 0.15
-    
-    const cdiCount = Math.round((cdiPct / 100) * data.headcountActif)
-    const cddCount = Math.round((cddPct / 100) * data.headcountActif)
-    const altCount = Math.round((altPct / 100) * data.headcountActif)
-    const staCount = Math.round((stagePct / 100) * data.headcountActif)
-    
-    return [
-      { name: 'CDI', value: cdiCount, percentage: cdiPct, color: '#10b981' },
-      { name: 'CDD', value: cddCount, percentage: cddPct, color: '#f59e0b' },
-      { name: 'ALT', value: altCount, percentage: altPct, color: '#3b82f6' },
-      { name: 'STA', value: staCount, percentage: stagePct, color: '#8b5cf6' }
-    ]
-  }, [data])
 
   return (
     <motion.section
@@ -342,53 +351,53 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
             </h3>
             
             <ResponsiveContainer width="100%" height={280}>
-  <LineChart 
-    data={chartData}
-    margin={{ top: 30, right: 30, left: 35, bottom: 10 }}
-  >
-    <defs>
-      <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stopColor="#06b6d4" />
-        <stop offset="100%" stopColor="#8b5cf6" />
-      </linearGradient>
-    </defs>
-    <XAxis 
-      dataKey="month" 
-      stroke="#94a3b8"
-      tick={{ fill: '#94a3b8', fontSize: 12 }}
-      tickLine={false}
-      interval={0}
-      angle={-45}
-      textAnchor="end"
-      height={60}
-    />
-    <Tooltip
-      contentStyle={{
-        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-        border: '1px solid rgba(148, 163, 184, 0.2)',
-        borderRadius: '12px',
-        backdropFilter: 'blur(10px)'
-      }}
-      labelStyle={{ color: '#94a3b8' }}
-      itemStyle={{ color: '#06b6d4' }}
-    />
-    <Line 
-      type="monotone" 
-      dataKey="etp" 
-      stroke="url(#lineGradient)"
-      strokeWidth={3}
-      dot={{ fill: '#8b5cf6', r: 6, strokeWidth: 2, stroke: '#fff' }}
-      activeDot={{ r: 8, fill: '#06b6d4' }}
-      label={{
-        position: 'top',
-        fill: '#fff',
-        fontSize: 12,
-        fontWeight: 'bold',
-        offset: 15
-      }}
-    />
-  </LineChart>
-</ResponsiveContainer>
+              <LineChart 
+                data={chartData}
+                margin={{ top: 30, right: 30, left: 35, bottom: 10 }}
+              >
+                <defs>
+                  <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#06b6d4" />
+                    <stop offset="100%" stopColor="#8b5cf6" />
+                  </linearGradient>
+                </defs>
+                <XAxis 
+                  dataKey="month" 
+                  stroke="#94a3b8"
+                  tick={{ fill: '#94a3b8', fontSize: 12 }}
+                  tickLine={false}
+                  interval={0}
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                    border: '1px solid rgba(148, 163, 184, 0.2)',
+                    borderRadius: '12px',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                  labelStyle={{ color: '#94a3b8' }}
+                  itemStyle={{ color: '#06b6d4' }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="etp" 
+                  stroke="url(#lineGradient)"
+                  strokeWidth={3}
+                  dot={{ fill: '#8b5cf6', r: 6, strokeWidth: 2, stroke: '#fff' }}
+                  activeDot={{ r: 8, fill: '#06b6d4' }}
+                  label={{
+                    position: 'top',
+                    fill: '#fff',
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    offset: 15
+                  }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </motion.div>
       )}
@@ -443,56 +452,61 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
       {/* Line 4: Contract Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.4 }}
-          className="relative overflow-hidden rounded-2xl backdrop-blur-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40 p-6"
-        >
-          <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-green-500 to-purple-500" />
-          
-          <div className="relative z-10">
-            <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
-              <Briefcase size={20} className="text-green-400" />
-              Répartition ETP par Contrat
-            </h3>
-            
-            <div className="space-y-4">
-              {contractData.map((contract, index) => (
-                <div key={contract.name}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-4 h-4 rounded-full"
-                        style={{ 
-                          backgroundColor: contract.color,
-                          boxShadow: `0 0 10px ${contract.color}` 
-                        }}
-                      />
-                      <span className="text-white font-semibold">{contract.name}</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xl font-bold text-white">{contract.value}</div>
-                      <div className="text-xs text-slate-400">{contract.percentage.toFixed(1)}%</div>
-                    </div>
-                  </div>
-                  <div className="relative h-8 bg-slate-800/50 rounded-full overflow-hidden border border-slate-700/30">
-                    <motion.div
-                      className="h-full rounded-full relative"
-                      style={{ 
-                        background: `linear-gradient(90deg, ${contract.color}, ${contract.color}dd)`
-                      }}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${contract.percentage}%` }}
-                      transition={{ delay: 0.5 + index * 0.1, duration: 1, ease: "easeOut" }}
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent" />
-                    </motion.div>
-                  </div>
-                </div>
-              ))}
+  initial={{ opacity: 0, x: -20 }}
+  animate={{ opacity: 1, x: 0 }}
+  transition={{ delay: 0.4 }}
+  className="relative overflow-hidden rounded-2xl backdrop-blur-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40 p-6"
+>
+  <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-green-500 to-purple-500" />
+  
+  <div className="relative z-10">
+    <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
+      <Briefcase size={20} className="text-green-400" />
+      Répartition ETP par Contrat
+    </h3>
+    
+    <div className="space-y-4">
+      {contractData.map((contract, index) => (
+        <div key={contract.name}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <div 
+                className="w-4 h-4 rounded-full"
+                style={{ 
+                  backgroundColor: contract.color,
+                  boxShadow: `0 0 10px ${contract.color}` 
+                }}
+              />
+              <span className="text-white font-semibold">{contract.name}</span>
+            </div>
+            <div className="text-right">
+              {/* ✅ FIX: Afficher 1 décimale au lieu d'arrondir */}
+              <div className="text-xl font-bold text-white">
+                {contract.value.toFixed(1)}
+              </div>
+              <div className="text-xs text-slate-400">
+                {contract.percentage.toFixed(1)}%
+              </div>
             </div>
           </div>
-        </motion.div>
+          <div className="relative h-8 bg-slate-800/50 rounded-full overflow-hidden border border-slate-700/30">
+            <motion.div
+              className="h-full rounded-full relative"
+              style={{ 
+                background: `linear-gradient(90deg, ${contract.color}, ${contract.color}dd)`
+              }}
+              initial={{ width: 0 }}
+              animate={{ width: `${contract.percentage}%` }}
+              transition={{ delay: 0.5 + index * 0.1, duration: 1, ease: "easeOut" }}
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent" />
+            </motion.div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</motion.div>
 
         <motion.div
           initial={{ opacity: 0, x: 20 }}
@@ -509,42 +523,11 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
             </h3>
             
             <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={contractData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={90}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({ name, percentage }) => `${name}: ${percentage.toFixed(1)}%`}
-                  labelLine={{
-                    stroke: '#94a3b8',
-                    strokeWidth: 2
-                  }}
-                >
-                  {contractData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={entry.color}
-                      stroke={entry.color}
-                      strokeWidth={2}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                    border: '1px solid rgba(148, 163, 184, 0.2)',
-                    borderRadius: '12px',
-                    backdropFilter: 'blur(10px)',
-                    color: '#ffffff'
-                  }}
-                  labelStyle={{ color: '#ffffff' }}
-                  itemStyle={{ color: '#ffffff' }}
-                />
-              </PieChart>
+              <CyberPieChart
+  data={contractData}
+  title="Distribution % Contrats"
+  icon={Briefcase}
+/>
             </ResponsiveContainer>
           </div>
         </motion.div>

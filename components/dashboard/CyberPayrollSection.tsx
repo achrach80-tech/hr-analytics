@@ -3,8 +3,7 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 import { 
-  DollarSign, Calculator, Target, Percent, Shield, 
-  TrendingUp, TrendingDown, BarChart3, Minus, Info
+  DollarSign, Calculator, Target, Percent, Shield
 } from 'lucide-react'
 import { CyberKPICard } from './CyberKPICard'
 import { CyberSectionHeader } from './CyberSectionHeader'
@@ -34,28 +33,20 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
     )
   }
 
-  const getEffectColor = (value: number) => {
-    if (value > 0) return 'text-red-400'
-    if (value < 0) return 'text-green-400'
-    return 'text-slate-400'
-  }
+  // ✅ FIX: Vérifier si les données d'effets EXISTENT (même si = 0)
+  const hasEffectsData = (
+    data.effetPrix !== undefined && data.effetPrix !== null &&
+    data.effetVolume !== undefined && data.effetVolume !== null &&
+    data.effetMix !== undefined && data.effetMix !== null
+  )
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value)
-  }
+  // Calculer la masse salariale M-1 pour le waterfall
+  const masseSalarialeM1 = hasEffectsData 
+    ? data.masseBrute - (data.effetPrix || 0) - (data.effetVolume || 0) - (data.effetMix || 0)
+    : 0
 
-  // Calculate base M-1 for waterfall
-  const masseSalarialeM1 = data.masseBrute - (data.effetPrix || 0) - (data.effetVolume || 0) - (data.effetMix || 0)
-  
-  // Check if we have effects data
-  const hasEffects = (data.effetPrix !== undefined && data.effetPrix !== 0) || 
-                     (data.effetVolume !== undefined && data.effetVolume !== 0) || 
-                     (data.effetMix !== undefined && data.effetMix !== 0)
+  // ✅ Afficher le waterfall SI les données existent, même si les valeurs sont 0
+  const shouldShowWaterfall = hasEffectsData && masseSalarialeM1 > 0
 
   return (
     <motion.section
@@ -103,8 +94,8 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
         />
       </div>
 
-      {/* Row 2: Waterfall Chart - Only if we have effects data */}
-      {hasEffects && (
+      {/* Row 2: Waterfall Chart */}
+      {shouldShowWaterfall ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -120,6 +111,28 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
             }}
             loading={false}
           />
+        </motion.div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="p-8 bg-slate-800/30 rounded-xl border border-slate-700/30 text-center"
+        >
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-slate-700/50 flex items-center justify-center">
+              <DollarSign size={32} className="text-slate-400" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold text-lg mb-2">
+                Waterfall non disponible
+              </h3>
+              <p className="text-slate-400 text-sm max-w-md mx-auto">
+                Les données d'effets Prix/Volume/Mix n'ont pas encore été calculées pour cette période. 
+                {!hasEffectsData && " Elles seront disponibles après avoir importé au moins 2 mois de données."}
+              </p>
+            </div>
+          </div>
         </motion.div>
       )}
 
