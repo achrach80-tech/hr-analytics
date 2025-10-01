@@ -13,12 +13,14 @@ import type { PayrollKPIs } from '@/lib/types/dashboard'
 interface CyberPayrollSectionProps {
   data: PayrollKPIs | null
   previousMonthData?: PayrollKPIs | null
+  previousYearData?: PayrollKPIs | null
   loading?: boolean
 }
 
 export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.memo(({ 
   data,
   previousMonthData,
+  previousYearData,
   loading = false 
 }) => {
   if (loading) {
@@ -33,19 +35,56 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
     )
   }
 
-  // ✅ FIX: Vérifier si les données d'effets EXISTENT (même si = 0)
+  // Calculs des évolutions pour Masse Brute
+  const evolutionM1MasseBrute = previousMonthData && previousMonthData.masseBrute > 0
+    ? ((data.masseBrute - previousMonthData.masseBrute) / previousMonthData.masseBrute) * 100 
+    : undefined
+  const evolutionN1MasseBrute = previousYearData && previousYearData.masseBrute > 0
+    ? ((data.masseBrute - previousYearData.masseBrute) / previousYearData.masseBrute) * 100 
+    : undefined
+
+  // Calculs des évolutions pour Coût Total
+  const evolutionM1CoutTotal = previousMonthData && previousMonthData.coutTotal > 0
+    ? ((data.coutTotal - previousMonthData.coutTotal) / previousMonthData.coutTotal) * 100 
+    : undefined
+  const evolutionN1CoutTotal = previousYearData && previousYearData.coutTotal > 0
+    ? ((data.coutTotal - previousYearData.coutTotal) / previousYearData.coutTotal) * 100 
+    : undefined
+
+  // Calculs des évolutions pour Coût Moyen FTE
+  const evolutionM1CoutMoyenFTE = previousMonthData && previousMonthData.coutMoyenFTE > 0
+    ? ((data.coutMoyenFTE - previousMonthData.coutMoyenFTE) / previousMonthData.coutMoyenFTE) * 100 
+    : undefined
+  const evolutionN1CoutMoyenFTE = previousYearData && previousYearData.coutMoyenFTE > 0
+    ? ((data.coutMoyenFTE - previousYearData.coutMoyenFTE) / previousYearData.coutMoyenFTE) * 100 
+    : undefined
+
+  // Calculs des évolutions pour Part Variable
+  const evolutionM1PartVariable = previousMonthData
+    ? data.partVariable - previousMonthData.partVariable
+    : undefined
+  const evolutionN1PartVariable = previousYearData
+    ? data.partVariable - previousYearData.partVariable
+    : undefined
+
+  // Calculs des évolutions pour Taux Charges
+  const evolutionM1TauxCharges = previousMonthData
+    ? data.tauxCharges - previousMonthData.tauxCharges
+    : undefined
+  const evolutionN1TauxCharges = previousYearData
+    ? data.tauxCharges - previousYearData.tauxCharges
+    : undefined
+
   const hasEffectsData = (
     data.effetPrix !== undefined && data.effetPrix !== null &&
     data.effetVolume !== undefined && data.effetVolume !== null &&
     data.effetMix !== undefined && data.effetMix !== null
   )
 
-  // Calculer la masse salariale M-1 pour le waterfall
   const masseSalarialeM1 = hasEffectsData 
     ? data.masseBrute - (data.effetPrix || 0) - (data.effetVolume || 0) - (data.effetMix || 0)
     : 0
 
-  // ✅ Afficher le waterfall SI les données existent, même si les valeurs sont 0
   const shouldShowWaterfall = hasEffectsData && masseSalarialeM1 > 0
 
   return (
@@ -61,7 +100,7 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
         gradient="bg-gradient-to-r from-emerald-500 to-cyan-600" 
       />
       
-      {/* Row 1: KPIs Principaux */}
+      {/* Row 1: KPIs Principaux avec évolutions */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <CyberKPICard
           title="Masse Salariale Brute"
@@ -71,6 +110,8 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
           gradient="bg-gradient-to-r from-emerald-500 to-emerald-600"
           subtitle="Total payroll mensuel"
           size="large"
+          evolutionM1={evolutionM1MasseBrute}
+          evolutionN1={evolutionN1MasseBrute}
         />
 
         <CyberKPICard
@@ -81,6 +122,8 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
           gradient="bg-gradient-to-r from-cyan-500 to-cyan-600"
           subtitle="Charges incluses"
           size="large"
+          evolutionM1={evolutionM1CoutTotal}
+          evolutionN1={evolutionN1CoutTotal}
         />
 
         <CyberKPICard
@@ -91,6 +134,8 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
           gradient="bg-gradient-to-r from-teal-500 to-teal-600"
           subtitle="Coût employeur unitaire"
           size="large"
+          evolutionM1={evolutionM1CoutMoyenFTE}
+          evolutionN1={evolutionN1CoutMoyenFTE}
         />
       </div>
 
@@ -136,7 +181,7 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
         </motion.div>
       )}
 
-      {/* Row 3: KPIs Complémentaires */}
+      {/* Row 3: KPIs Complémentaires avec évolutions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <CyberKPICard
           title="Part Variable"
@@ -145,6 +190,8 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
           icon={Percent}
           gradient="bg-gradient-to-r from-indigo-500 to-indigo-600"
           subtitle="Motivation & performance"
+          evolutionM1={evolutionM1PartVariable}
+          evolutionN1={evolutionN1PartVariable}
         />
 
         <CyberKPICard
@@ -154,6 +201,8 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
           icon={Shield}
           gradient="bg-gradient-to-r from-violet-500 to-violet-600"
           subtitle="Cotisations + taxes"
+          evolutionM1={evolutionM1TauxCharges}
+          evolutionN1={evolutionN1TauxCharges}
         />
       </div>
     </motion.section>
