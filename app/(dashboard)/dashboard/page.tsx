@@ -323,7 +323,7 @@ export default function CyberDashboard() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.2 }}
                 >
-                  RH Quantum Analytics
+                  Dashboard Talvio
                 </motion.h1>
                 <motion.div 
                   className="flex items-center gap-3 text-sm text-slate-400 mt-2"
