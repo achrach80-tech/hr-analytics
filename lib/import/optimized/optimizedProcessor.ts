@@ -247,62 +247,79 @@ export class OptimizedProcessor {
   }
 
  private async calculateSnapshots(
-    establishmentId: string,
-    periods: string[],
-    onProgress: (progress: ImportProgress) => void,
-    onLog: (message: string, type?: LogType) => void
-  ): Promise<void> {
+  establishmentId: string,
+  periods: string[],
+  onProgress: (progress: ImportProgress) => void,
+  onLog: (message: string, type?: LogType) => void
+): Promise<void> {
+  onProgress({
+    phase: 'snapshots',
+    step: 'Calcul snapshots optimisés',
+    current: 70,
+    total: 100,
+    percentage: 70,
+    message: 'Analyse des données...'
+  })
+
+  let successCount = 0
+  
+  for (let i = 0; i < periods.length; i++) {
+    if (this.isAborted) throw new Error('Import annulé')
+
+    const period = this.normalizePeriod(periods[i])
+    
     onProgress({
       phase: 'snapshots',
       step: 'Calcul snapshots optimisés',
-      current: 70,
+      current: 70 + Math.round((i / periods.length) * 25),
       total: 100,
-      percentage: 70,
-      message: 'Analyse des données...'
+      percentage: 70 + Math.round((i / periods.length) * 25),
+      message: `Période ${i + 1}/${periods.length}`,
+      detail: period
     })
 
-    let successCount = 0
-    
-    for (let i = 0; i < periods.length; i++) {
-      if (this.isAborted) throw new Error('Import annulé')
-
-      const period = this.normalizePeriod(periods[i])
-      
-      onProgress({
-        phase: 'snapshots',
-        step: 'Calcul snapshots optimisés',
-        current: 70 + Math.round((i / periods.length) * 25),
-        total: 100,
-        percentage: 70 + Math.round((i / periods.length) * 25),
-        message: `Période ${i + 1}/${periods.length}`,
-        detail: period
+    try {
+      // Appel de la fonction PostgreSQL
+      const { data, error } = await this.supabase.rpc('calculate_snapshot_for_period', {
+        p_etablissement_id: establishmentId,
+        p_periode: period,
+        p_force: true
       })
-
-      try {
-        // Use the function from your schema
-        const { error } = await this.supabase.rpc('calculate_snapshot_for_period', {
-          p_etablissement_id: establishmentId,
-          p_periode: period,
-          p_force: true
-        })
-        
-        if (error) throw error
-        
-        successCount++
-        onLog(`📈 Snapshot calculé: ${period}`, 'success')
-        
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
-        onLog(`⚠️ Erreur snapshot ${period}: ${errorMessage}`, 'warning')
+      
+      if (error) {
+        onLog(`❌ Erreur fonction SQL pour ${period}: ${error.message}`, 'error')
+        throw error
       }
+      
+      // Vérifier que le snapshot a bien été créé
+      const { data: snapshot, error: checkError } = await this.supabase
+        .from('snapshots_mensuels')
+        .select('effectif_fin_mois, masse_salariale_brute')
+        .eq('etablissement_id', establishmentId)
+        .eq('periode', period)
+        .maybeSingle()
+      
+      if (checkError) {
+        onLog(`⚠️ Erreur vérification snapshot ${period}: ${checkError.message}`, 'warning')
+      } else if (!snapshot) {
+        onLog(`⚠️ Snapshot ${period} non créé malgré succès fonction`, 'warning')
+      } else {
+        successCount++
+        onLog(`✅ Snapshot ${period}: ${snapshot.effectif_fin_mois} EMP, ${snapshot.masse_salariale_brute}€`, 'success')
+      }
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
+      onLog(`⚠️ Erreur snapshot ${period}: ${errorMessage}`, 'warning')
     }
-
-    if (successCount === 0) {
-      throw new Error('Aucun snapshot calculé avec succès')
-    }
-
-    onLog(`🎯 ${successCount}/${periods.length} snapshots calculés`, 'success')
   }
+
+  if (successCount === 0) {
+    throw new Error('Aucun snapshot calculé avec succès')
+  }
+
+  onLog(`🎯 ${successCount}/${periods.length} snapshots calculés`, 'success')
+}
 
   // Remove the individual snapshot methods and replace with this unified approach
   private async calculateWorkforceSnapshot(establishmentId: string, period: string): Promise<void> {
