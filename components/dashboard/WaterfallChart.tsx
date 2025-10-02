@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { TrendingUp, TrendingDown, Activity, CheckCircle2 } from 'lucide-react'
+import { TrendingUp, TrendingDown, Activity, CheckCircle2, Info } from 'lucide-react'
 
 interface WaterfallData {
   masseSalarialeM1: number
@@ -34,10 +34,10 @@ interface WaterfallStep {
   bgColor: string
   isBase: boolean
   isTarget: boolean
+  description?: string
 }
 
-// Palette corporate froide et sobre
-const COLORS: Record<'base' | 'positive' | 'negative' | 'target', ColorConfig> = {
+const COLORS: Record<'base' | 'positive' | 'negative' | 'target' | 'neutral', ColorConfig> = {
   base: {
     color: 'from-slate-500 to-slate-600',
     border: 'border-slate-400',
@@ -61,6 +61,12 @@ const COLORS: Record<'base' | 'positive' | 'negative' | 'target', ColorConfig> =
     border: 'border-sky-400',
     text: 'text-sky-400',
     bg: 'bg-sky-500/15'
+  },
+  neutral: {
+    color: 'from-amber-500 to-orange-500',
+    border: 'border-amber-400',
+    text: 'text-amber-400',
+    bg: 'bg-amber-500/15'
   }
 }
 
@@ -77,7 +83,7 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
     const targetColors = COLORS.target
     const prixColors = getColors(data.effetPrix)
     const volumeColors = getColors(data.effetVolume)
-    const mixColors = getColors(data.effetMix)
+    const mixColors = data.effetMix === 0 ? COLORS.neutral : getColors(data.effetMix)
     
     return [
       {
@@ -89,10 +95,11 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
         textColor: baseColors.text,
         bgColor: baseColors.bg,
         isBase: true,
-        isTarget: false
+        isTarget: false,
+        description: 'Masse salariale du mois précédent'
       },
       {
-        label: 'Effet Prix',
+        label: 'Prix Pur',
         value: data.effetPrix,
         cumulative: (cumulative = data.masseSalarialeM1 + data.effetPrix),
         color: prixColors.color,
@@ -100,10 +107,11 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
         textColor: prixColors.text,
         bgColor: prixColors.bg,
         isBase: false,
-        isTarget: false
+        isTarget: false,
+        description: 'Augmentations salariales du socle stable'
       },
       {
-        label: 'Effet Volume',
+        label: 'Volume',
         value: data.effetVolume,
         cumulative: (cumulative = cumulative + data.effetVolume),
         color: volumeColors.color,
@@ -111,10 +119,11 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
         textColor: volumeColors.text,
         bgColor: volumeColors.bg,
         isBase: false,
-        isTarget: false
+        isTarget: false,
+        description: 'Variation d\'effectif (ETP)'
       },
       {
-        label: 'Effet Mix',
+        label: 'Mix',
         value: data.effetMix,
         cumulative: (cumulative = cumulative + data.effetMix),
         color: mixColors.color,
@@ -122,7 +131,8 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
         textColor: mixColors.text,
         bgColor: mixColors.bg,
         isBase: false,
-        isTarget: false
+        isTarget: false,
+        description: 'Différence coût entrants/sortants'
       },
       {
         label: 'Cible M',
@@ -133,7 +143,8 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
         textColor: targetColors.text,
         bgColor: targetColors.bg,
         isBase: false,
-        isTarget: true
+        isTarget: true,
+        description: 'Masse salariale du mois actuel'
       }
     ]
   }, [data])
@@ -163,6 +174,7 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
   const calculatedTotal = data.masseSalarialeM1 + data.effetPrix + data.effetVolume + data.effetMix
   const isCoherent = Math.abs(calculatedTotal - data.masseSalarialeM) < 1
   const variation = data.masseSalarialeM - data.masseSalarialeM1
+  const effetPrixGlobal = data.effetPrix + data.effetMix
   
   if (loading) {
     return (
@@ -183,14 +195,14 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
   return (
     <div className="rounded-xl bg-white/[0.02] border border-slate-700/30 p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-700/30">
+      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-700/30">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-slate-700/30 flex items-center justify-center">
             <Activity size={20} className="text-slate-300" />
           </div>
           <div>
             <h3 className="text-white font-semibold text-lg">Waterfall Masse Salariale</h3>
-            <p className="text-slate-400 text-sm">Décomposition des variations</p>
+            <p className="text-slate-400 text-sm">Décomposition Prix Pur + Volume + Mix</p>
           </div>
         </div>
         
@@ -204,9 +216,9 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
         </div>
       </div>
       
-      {/* Layout: Waterfall à gauche (2/3) + Cards à droite (1/3) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Waterfall Chart - 2 colonnes */}
+      {/* Layout: Waterfall + Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-6">
+        {/* Waterfall Chart */}
         <div className="lg:col-span-2">
           <div className="relative h-96 bg-slate-900/30 rounded-lg p-6">
             <div className="absolute inset-0 flex items-end justify-around gap-6 px-8 pb-6">
@@ -220,7 +232,7 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
                 return (
                   <motion.div
                     key={step.label}
-                    className="flex-1 flex flex-col items-center relative"
+                    className="flex-1 flex flex-col items-center relative group"
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1, duration: 0.4 }}
@@ -228,7 +240,7 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
                   >
                     <div className="relative w-full flex-1">
                       <motion.div
-                        className={`absolute left-0 right-0 rounded-t-lg bg-gradient-to-t ${step.color} border ${step.borderColor}`}
+                        className={`absolute left-0 right-0 rounded-t-lg bg-gradient-to-t ${step.color} border ${step.borderColor} cursor-pointer`}
                         style={{
                           height: `${barHeight}%`,
                           bottom: `${barBottom}%`
@@ -236,7 +248,16 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
                         initial={{ scaleY: 0 }}
                         animate={{ scaleY: 1 }}
                         transition={{ delay: index * 0.1 + 0.2, duration: 0.5 }}
+                        whileHover={{ scale: 1.05 }}
                       />
+                      
+                      {step.description && (
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                          <div className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 whitespace-nowrap shadow-xl">
+                            {step.description}
+                          </div>
+                        </div>
+                      )}
                       
                       <motion.div
                         className={`absolute left-1/2 -translate-x-1/2 ${step.textColor} font-semibold text-sm whitespace-nowrap`}
@@ -280,7 +301,7 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
           </div>
         </div>
         
-        {/* Summary Cards à droite - 1 colonne */}
+        {/* Summary Cards */}
         <div className="space-y-4">
           <motion.div 
             className="p-5 rounded-lg bg-slate-800/20 border border-slate-700/20"
@@ -298,7 +319,7 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <p className="text-slate-500 text-xs uppercase tracking-wider mb-2">Somme Effets</p>
+            <p className="text-slate-500 text-xs uppercase tracking-wider mb-2">Prix Pur + Volume + Mix</p>
             <p className="text-slate-300 text-xl font-semibold">
               {formatCurrency(data.effetPrix + data.effetVolume + data.effetMix)}
             </p>
@@ -320,7 +341,7 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.5 }}
           >
-            <p className="text-slate-500 text-xs uppercase tracking-wider mb-2">Variation</p>
+            <p className="text-slate-500 text-xs uppercase tracking-wider mb-2">Variation Totale</p>
             <div className="flex items-center gap-2">
               {variation >= 0 ? (
                 <TrendingUp size={16} className="text-red-400" />
@@ -334,6 +355,35 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, loading = 
           </motion.div>
         </div>
       </div>
+      
+      {/* Note méthodologique EN BAS */}
+      <motion.div 
+        className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+      >
+        <div className="flex items-start gap-3">
+          <Info size={16} className="text-blue-400 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-blue-400 font-medium text-sm mb-2">Note méthodologique</p>
+            <div className="grid md:grid-cols-3 gap-4 text-xs text-slate-300">
+              <div>
+                <span className="font-semibold text-slate-200">Prix Pur</span>
+                <p className="mt-1">{formatCurrency(data.effetPrix)} = augmentations sur socle stable (salariés présents M-1 et M)</p>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-200">Mix</span>
+                <p className="mt-1">{formatCurrency(data.effetMix)} = différence de coût entre entrants et sortants</p>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-200">Prix Global</span>
+                <p className="mt-1">{formatCurrency(effetPrixGlobal)} = Prix Pur + Mix (incluant effet de structure)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
     </div>
   )
 }
