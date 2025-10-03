@@ -307,49 +307,73 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
         </motion.div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <CyberKPICard
-          title="Entrées du Mois"
-          value={data.nbEntrees}
-          format="number"
-          icon={UserPlus}
-          gradient="bg-gradient-to-r from-green-500 to-emerald-600"
-          subtitle="Nouveaux collaborateurs"
-          evolutionM1={previousMonthData ? data.nbEntrees - previousMonthData.nbEntrees : undefined}
-          evolutionN1={previousYearData ? data.nbEntrees - previousYearData.nbEntrees : undefined}
-        />
+     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+  <CyberKPICard
+    title="Entrées du Mois"
+    value={data.nbEntrees}
+    format="number"
+    icon={UserPlus}
+    gradient="bg-gradient-to-r from-green-500 to-emerald-600"
+    subtitle="Nouveaux collaborateurs"
+    evolutionM1={
+      previousMonthData && previousMonthData.nbEntrees > 0
+        ? ((data.nbEntrees - previousMonthData.nbEntrees) / previousMonthData.nbEntrees) * 100
+        : previousMonthData && previousMonthData.nbEntrees === 0 && data.nbEntrees > 0
+        ? 100 // Si on passe de 0 à X, c'est +100%
+        : undefined
+    }
+    evolutionN1={
+      previousYearData && previousYearData.nbEntrees > 0
+        ? ((data.nbEntrees - previousYearData.nbEntrees) / previousYearData.nbEntrees) * 100
+        : previousYearData && previousYearData.nbEntrees === 0 && data.nbEntrees > 0
+        ? 100
+        : undefined
+    }
+  />
 
-        <CyberKPICard
-          title="Sorties du Mois"
-          value={data.nbSorties}
-          format="number"
-          icon={UserMinus}
-          gradient="bg-gradient-to-r from-red-500 to-red-600"
-          subtitle="Départs"
-          evolutionM1={previousMonthData ? data.nbSorties - previousMonthData.nbSorties : undefined}
-          evolutionN1={previousYearData ? data.nbSorties - previousYearData.nbSorties : undefined}
-        />
+  <CyberKPICard
+    title="Sorties du Mois"
+    value={data.nbSorties}
+    format="number"
+    icon={UserMinus}
+    gradient="bg-gradient-to-r from-red-500 to-red-600"
+    subtitle="Départs"
+    evolutionM1={
+      previousMonthData && previousMonthData.nbSorties > 0
+        ? ((data.nbSorties - previousMonthData.nbSorties) / previousMonthData.nbSorties) * 100
+        : previousMonthData && previousMonthData.nbSorties === 0 && data.nbSorties > 0
+        ? 100
+        : undefined
+    }
+    evolutionN1={
+      previousYearData && previousYearData.nbSorties > 0
+        ? ((data.nbSorties - previousYearData.nbSorties) / previousYearData.nbSorties) * 100
+        : previousYearData && previousYearData.nbSorties === 0 && data.nbSorties > 0
+        ? 100
+        : undefined
+    }
+  />
 
-        <CyberKPICard
-          title="Taux de Turnover"
-          value={data.tauxTurnover}
-          format="percent"
-          icon={RefreshCw}
-          gradient="bg-gradient-to-r from-purple-500 to-purple-600"
-          subtitle="Mouvement mensuel"
-          evolutionM1={evolutionM1Turnover}
-          evolutionN1={evolutionN1Turnover}
-        />
+  <CyberKPICard
+    title="Taux de Turnover"
+    value={data.tauxTurnover}
+    format="percent"
+    icon={RefreshCw}
+    gradient="bg-gradient-to-r from-purple-500 to-purple-600"
+    subtitle="Mouvement mensuel"
+    evolutionM1={evolutionM1Turnover}
+    evolutionN1={evolutionN1Turnover}
+  />
 
-        <CyberKPICard
-          title="Mobilités Internes"
-          value={0}
-          format="number"
-          icon={Repeat}
-          gradient="bg-gradient-to-r from-orange-500 to-orange-600"
-          subtitle="Changements de poste"
-        />
-      </div>
+  <CyberKPICard
+    title="Mobilités Internes"
+    value={0}
+    format="number"
+    icon={Repeat}
+    gradient="bg-gradient-to-r from-orange-500 to-orange-600"
+    subtitle="Changements de poste"
+  />
+</div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <motion.div
