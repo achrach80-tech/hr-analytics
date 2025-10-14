@@ -279,46 +279,122 @@ export class OptimizedProcessor {
     })
 
     try {
-      // Appel de la fonction PostgreSQL
-      const { data, error } = await this.supabase.rpc('calculate_snapshot_for_period', {
-        p_etablissement_id: establishmentId,
-        p_periode: period,
-        p_force: true
-      })
+      onLog(`🔍 Tentative calcul snapshot pour ${period}...`, 'info')
       
-      if (error) {
-        onLog(`❌ Erreur fonction SQL pour ${period}: ${error.message}`, 'error')
-        throw error
+      // ✅ MÉTHODE 1 : Appel RPC avec timeout
+      const { data: rpcResult, error: rpcError } = await Promise.race([
+        this.supabase.rpc('calculate_snapshot_for_period', {
+          p_etablissement_id: establishmentId,
+          p_periode: period,
+          p_force: true
+        }),
+        new Promise<{ data: null; error: { message: string } }>((_, reject) => 
+          setTimeout(() => reject({ data: null, error: { message: 'Timeout après 30s' } }), 30000)
+        )
+      ]).catch(err => ({ data: null, error: err.error || err }))
+      
+      if (rpcError) {
+        onLog(`❌ Erreur RPC: ${rpcError.message}`, 'error')
+        
+        // ✅ MÉTHODE 2 : Fallback - Calcul direct avec SQL brut
+        onLog(`🔄 Tentative avec requête SQL directe...`, 'warning')
+        
+        const { error: sqlError } = await this.supabase
+          .rpc('calculate_snapshot_for_period', {
+            p_etablissement_id: establishmentId,
+            p_periode: period,
+            p_force: true
+          })
+        
+        if (sqlError) {
+          onLog(`❌ Erreur SQL directe: ${sqlError.message}`, 'error')
+          continue
+        }
       }
       
-      // Vérifier que le snapshot a bien été créé
-      const { data: snapshot, error: checkError } = await this.supabase
-        .from('snapshots_mensuels')
-        .select('effectif_fin_mois, masse_salariale_brute')
-        .eq('etablissement_id', establishmentId)
-        .eq('periode', period)
-        .maybeSingle()
+      onLog(`✅ Fonction exécutée, vérification du résultat...`, 'info')
       
-      if (checkError) {
-        onLog(`⚠️ Erreur vérification snapshot ${period}: ${checkError.message}`, 'warning')
-      } else if (!snapshot) {
-        onLog(`⚠️ Snapshot ${period} non créé malgré succès fonction`, 'warning')
-      } else {
-        successCount++
-        onLog(`✅ Snapshot ${period}: ${snapshot.effectif_fin_mois} EMP, ${snapshot.masse_salariale_brute}€`, 'success')
+      // ✅ Attendre pour laisser PostgreSQL commiter
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      // ✅ Vérifier avec plusieurs tentatives
+      let snapshot = null
+      let attempts = 0
+      const maxAttempts = 3
+      
+      while (!snapshot && attempts < maxAttempts) {
+        attempts++
+        
+        const { data: checkData, error: checkError } = await this.supabase
+          .from('snapshots_mensuels')
+          .select('id, effectif_fin_mois, etp_fin_mois, masse_salariale_brute, calculated_at')
+          .eq('etablissement_id', establishmentId)
+          .eq('periode', period)
+          .maybeSingle()
+        
+        if (checkError) {
+          onLog(`⚠️ Erreur vérification (tentative ${attempts}/${maxAttempts}): ${checkError.message}`, 'warning')
+          await new Promise(resolve => setTimeout(resolve, 500))
+          continue
+        }
+        
+        snapshot = checkData
+        
+        if (!snapshot && attempts < maxAttempts) {
+          onLog(`⏳ Snapshot pas encore visible, attente... (${attempts}/${maxAttempts})`, 'info')
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
       }
+      
+      if (!snapshot) {
+        onLog(`❌ ÉCHEC: Snapshot ${period} non trouvé après ${maxAttempts} tentatives`, 'error')
+        
+        // Debug : vérifier si la ligne existe avec n'importe quelle période proche
+        const { data: debugCheck, error: debugError } = await this.supabase
+          .from('snapshots_mensuels')
+          .select('periode, effectif_fin_mois, calculated_at')
+          .eq('etablissement_id', establishmentId)
+          .order('calculated_at', { ascending: false })
+          .limit(3)
+        
+        if (!debugError && debugCheck && debugCheck.length > 0) {
+          onLog(`🔍 Derniers snapshots trouvés:`, 'info')
+          debugCheck.forEach(s => {
+            onLog(`   - ${s.periode}: ${s.effectif_fin_mois} EMP (${new Date(s.calculated_at).toLocaleString()})`, 'info')
+          })
+        } else {
+          onLog(`🔍 Aucun snapshot trouvé dans toute la table pour cet établissement`, 'error')
+        }
+        
+        continue
+      }
+      
+      // ✅ Snapshot créé avec succès
+      successCount++
+      onLog(
+        `✅ Snapshot ${period} créé: ${snapshot.effectif_fin_mois} EMP, ` +
+        `${snapshot.etp_fin_mois?.toFixed(1)} ETP, ` +
+        `${new Intl.NumberFormat('fr-FR').format(snapshot.masse_salariale_brute || 0)}€`,
+        'success'
+      )
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
-      onLog(`⚠️ Erreur snapshot ${period}: ${errorMessage}`, 'warning')
+      onLog(`⚠️ Exception snapshot ${period}: ${errorMessage}`, 'warning')
+      console.error(`Snapshot error details for ${period}:`, error)
     }
   }
 
   if (successCount === 0) {
-    throw new Error('Aucun snapshot calculé avec succès')
+    onLog(`❌ ÉCHEC CRITIQUE: Aucun snapshot calculé sur ${periods.length} périodes`, 'error')
+    throw new Error(`Aucun snapshot calculé. Vérifiez les permissions RLS et les logs ci-dessus.`)
   }
 
-  onLog(`🎯 ${successCount}/${periods.length} snapshots calculés`, 'success')
+  const successRate = ((successCount / periods.length) * 100).toFixed(0)
+  onLog(
+    `🎯 Résultat final: ${successCount}/${periods.length} snapshots (${successRate}%)`, 
+    successCount === periods.length ? 'success' : 'warning'
+  )
 }
 
   // Remove the individual snapshot methods and replace with this unified approach
