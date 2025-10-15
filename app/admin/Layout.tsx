@@ -119,7 +119,7 @@ export default function AdminLayout({
                 <h2 className="text-xl font-bold bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">
                   Admin Portal
                 </h2>
-                <p className="text-xs text-gray-500">RH Quantum Control</p>
+                <p className="text-xs text-gray-500">RTalvio Control</p>
               </div>
             </div>
           </div>

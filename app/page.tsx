@@ -37,32 +37,32 @@ export default function LandingPage() {
   ]
 
   const clients = [
-    { name: 'TechCorp', employees: '2,500+' },
-    { name: 'FinanceHub', employees: '1,200+' },
-    { name: 'RetailMax', employees: '5,000+' },
-    { name: 'HealthPlus', employees: '800+' }
+    { name: 'Taille', employees: '10 à 3000 employés' },
+    { name: 'DRH', employees: 'sans équipe technique' },
+    { name: 'Startups', employees: 'en forte croissance' },
+    { name: 'Organisations', employees: ' multi-sites' }
   ]
 
   const benefits = [
     {
       icon: Clock,
-      title: "Décisions 10x plus rapides",
+      title: "Visualisation instantanée",
       description: "Visualisez tous vos KPIs RH en temps réel sur un seul dashboard"
     },
     {
       icon: Target,
-      title: "Prédiction du turnover",
-      description: "IA qui identifie les risques de départ 3 mois à l'avance"
+      title: "Tous vos indicateurs centralisés",
+      description: "Suivez vos métriques RH essentielles sur un seul tableau de bord temps réel"
     },
     {
       icon: Euro,
-      title: "ROI en 30 jours",
-      description: "Économisez jusqu'à 15% sur vos coûts RH dès le premier mois"
+      title: "Compatible avec votre process",
+      description: "Talvio s'adapte à vos données existantes. Pas besoin de changer vos habitudes."
     },
     {
       icon: Shield,
       title: "100% RGPD Compliant",
-      description: "Sécurité niveau bancaire avec chiffrement AES-256"
+      description: "Hébergement sécurisé en Europe avec chiffrement AES-256. Vos données RH protégées."
     }
   ]
 
@@ -91,9 +91,9 @@ export default function LandingPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-                  RH Quantum
+                  TALVIO
                 </h1>
-                <p className="text-xs text-gray-500">Enterprise Analytics Platform</p>
+                <p className="text-xs text-gray-500">Vos données RH, enfin lisibles</p>
               </div>
             </div>
             
@@ -123,22 +123,21 @@ export default function LandingPage() {
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/10 to-cyan-500/10 border border-purple-500/20 rounded-full mb-8">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-sm text-gray-300">Trusted by 50+ enterprises</span>
+                <span className="text-sm text-gray-300">La confiance de 20+ entreprises</span>
               </div>
               
               <h1 className="text-6xl font-bold leading-tight mb-6">
                 <span className="bg-gradient-to-br from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-                  L'Analytics RH qui
+                  Vos données RH
                 </span>
                 <br />
                 <span className="bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
-                  transforme vos décisions
+                  enfin lisibles
                 </span>
               </h1>
               
               <p className="text-xl text-gray-400 mb-8 leading-relaxed">
-                Tableau de bord temps réel, prédictions IA, et insights actionnables. 
-                Réduisez votre turnover de 40% et optimisez vos coûts RH instantanément.
+                Uploadez votre Excel RH, obtenez vos KPIs en 2 minutes. Effectifs, turnover, masse salariale : visualisez tout instantanément, sans formation technique.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 mb-8">
@@ -146,7 +145,7 @@ export default function LandingPage() {
                   onClick={() => router.push('/demo')}
                   className="group px-8 py-4 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl font-semibold text-lg hover:shadow-xl hover:shadow-purple-500/25 transition-all hover:scale-105 flex items-center justify-center gap-3"
                 >
-                  Voir la Démo Live
+                  Tester gratuitement
                   <ArrowRight className="group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button
@@ -162,15 +161,15 @@ export default function LandingPage() {
               <div className="flex items-center gap-8">
                 <div className="flex items-center gap-2">
                   <Shield className="text-green-500" size={20} />
-                  <span className="text-sm text-gray-400">RGPD Compliant</span>
+                  <span className="text-sm text-gray-400">Conforme RGPD</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Lock className="text-green-500" size={20} />
-                  <span className="text-sm text-gray-400">ISO 27001</span>
+                  <span className="text-sm text-gray-400">Certifié ISO 27001</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Globe className="text-green-500" size={20} />
-                  <span className="text-sm text-gray-400">Multi-sites</span>
+                  <span className="text-sm text-gray-400">Gestion multi-établissements</span>
                 </div>
               </div>
             </div>
@@ -251,12 +250,12 @@ export default function LandingPage() {
       {/* Client Logos */}
       <section className="py-16 border-y border-white/10 bg-white/[0.02]">
         <div className="max-w-7xl mx-auto px-6">
-          <p className="text-center text-gray-500 mb-8">Plus de 50 entreprises font confiance à RH Quantum</p>
+          <p className="text-center text-gray-500 mb-8">Données en Europe 🔐 Idéal pour les PME francophones</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {clients.map((client) => (
               <div key={client.name} className="flex flex-col items-center justify-center">
                 <div className="text-2xl font-bold text-gray-600 mb-1">{client.name}</div>
-                <div className="text-xs text-gray-500">{client.employees} employés</div>
+                <div className="text-xs text-gray-500">{client.employees}</div>
               </div>
             ))}
           </div>
@@ -268,10 +267,10 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-5xl font-bold mb-6 bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-              Pourquoi les DRH choisissent RH Quantum
+              Pourquoi les PME choisissent Talvio
             </h2>
             <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-              Une plateforme conçue par des experts RH pour transformer vos données en avantage compétitif
+              Pas de formation nécessaire, pas de consultant coûteux. Juste vos données Excel et des insights RH clairs.
             </p>
           </div>
 
@@ -305,53 +304,53 @@ export default function LandingPage() {
             {/* Feature Cards */}
             <div className="bg-gradient-to-br from-purple-500/10 to-transparent backdrop-blur rounded-2xl border border-purple-500/20 p-8">
               <Gauge className="text-purple-400 mb-4" size={32} />
-              <h3 className="text-2xl font-semibold mb-4">KPIs Temps Réel</h3>
+              <h3 className="text-2xl font-semibold mb-4">KPIs Essentiels</h3>
               <ul className="space-y-3">
+                <li className="flex items-center gap-2 text-gray-300">
+                  <Check className="text-green-500" size={16} />
+                  Effectifs et mouvements
+                </li>
                 <li className="flex items-center gap-2 text-gray-300">
                   <Check className="text-green-500" size={16} />
                   Turnover & Absentéisme
                 </li>
                 <li className="flex items-center gap-2 text-gray-300">
                   <Check className="text-green-500" size={16} />
-                  Masse Salariale
+                  Masse salariale
                 </li>
                 <li className="flex items-center gap-2 text-gray-300">
                   <Check className="text-green-500" size={16} />
                   Pyramide des âges
-                </li>
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  Index égalité H/F
                 </li>
               </ul>
             </div>
 
             <div className="bg-gradient-to-br from-cyan-500/10 to-transparent backdrop-blur rounded-2xl border border-cyan-500/20 p-8">
               <Brain className="text-cyan-400 mb-4" size={32} />
-              <h3 className="text-2xl font-semibold mb-4">IA Prédictive</h3>
+              <h3 className="text-2xl font-semibold mb-4">Analyses Avancées</h3>
               <ul className="space-y-3">
                 <li className="flex items-center gap-2 text-gray-300">
                   <Check className="text-green-500" size={16} />
-                  Risque de départ
+                  Évolutions sur 12 mois
                 </li>
                 <li className="flex items-center gap-2 text-gray-300">
                   <Check className="text-green-500" size={16} />
-                  Tendances salariales
+                  Tendances du marché
                 </li>
                 <li className="flex items-center gap-2 text-gray-300">
                   <Check className="text-green-500" size={16} />
-                  Besoins en recrutement
+                  Détection d'anomalies
                 </li>
                 <li className="flex items-center gap-2 text-gray-300">
                   <Check className="text-green-500" size={16} />
-                  Alertes automatiques
+                   Alertes personnalisables
                 </li>
               </ul>
             </div>
 
             <div className="bg-gradient-to-br from-green-500/10 to-transparent backdrop-blur rounded-2xl border border-green-500/20 p-8">
               <Database className="text-green-400 mb-4" size={32} />
-              <h3 className="text-2xl font-semibold mb-4">Import Simple</h3>
+              <h3 className="text-2xl font-semibold mb-4">Import Facile</h3>
               <ul className="space-y-3">
                 <li className="flex items-center gap-2 text-gray-300">
                   <Check className="text-green-500" size={16} />
@@ -363,11 +362,11 @@ export default function LandingPage() {
                 </li>
                 <li className="flex items-center gap-2 text-gray-300">
                   <Check className="text-green-500" size={16} />
-                  Synchronisation SIRH
+                   Connexion SIRH (à venir)
                 </li>
                 <li className="flex items-center gap-2 text-gray-300">
                   <Check className="text-green-500" size={16} />
-                  Validation automatique
+                  Validation des données
                 </li>
               </ul>
             </div>
@@ -378,24 +377,24 @@ export default function LandingPage() {
       {/* ROI Calculator */}
       <section className="py-32 px-6 bg-gradient-to-b from-transparent to-purple-900/10">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-5xl font-bold mb-6">ROI Garanti en 30 jours</h2>
+          <h2 className="text-5xl font-bold mb-6">Gagnez du temps sur vos reportings RH</h2>
           <p className="text-xl text-gray-400 mb-12">
-            Nos clients économisent en moyenne 2,800€ par mois
+            Automatisez vos tableaux de bord et récupérez plusieurs heures chaque mois
           </p>
           
           <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur rounded-3xl border border-white/10 p-12">
             <div className="grid md:grid-cols-3 gap-8 mb-8">
               <div>
-                <div className="text-4xl font-bold text-purple-400 mb-2">-40%</div>
-                <p className="text-gray-400">Réduction turnover</p>
+                <div className="text-4xl font-bold text-purple-400 mb-2">5h</div>
+                <p className="text-gray-400">économisées/mois</p>
               </div>
               <div>
-                <div className="text-4xl font-bold text-cyan-400 mb-2">-25%</div>
-                <p className="text-gray-400">Temps d'analyse</p>
+                <div className="text-4xl font-bold text-cyan-400 mb-2">1 clic</div>
+                <p className="text-gray-400">pour vos dashboards</p>
               </div>
               <div>
-                <div className="text-4xl font-bold text-green-400 mb-2">+15%</div>
-                <p className="text-gray-400">Productivité RH</p>
+                <div className="text-4xl font-bold text-green-400 mb-2">24 mois</div>
+                <p className="text-gray-400">d'analyse historique</p>
               </div>
             </div>
             
@@ -403,7 +402,7 @@ export default function LandingPage() {
               onClick={() => router.push('/demo')}
               className="px-8 py-4 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl font-semibold text-lg hover:shadow-xl hover:shadow-purple-500/25 transition-all hover:scale-105"
             >
-              Calculer votre ROI personnalisé →
+              Essayer gratuitement →
             </button>
           </div>
         </div>
@@ -413,10 +412,10 @@ export default function LandingPage() {
       <section className="py-32 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-5xl font-bold mb-6 bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-            Prêt à transformer vos RH ?
+            Commencez en 10 minutes
           </h2>
           <p className="text-xl text-gray-400 mb-12">
-            Rejoignez les entreprises qui ont déjà optimisé leur gestion RH avec RH Quantum
+            Uploadez votre premier fichier Excel et découvrez vos KPIs RH en temps réel
           </p>
           
           <div className="flex flex-col sm:flex-row gap-6 justify-center">
@@ -424,13 +423,13 @@ export default function LandingPage() {
               onClick={() => router.push('/demo')}
               className="group px-10 py-5 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl font-semibold text-xl hover:shadow-xl hover:shadow-purple-500/25 transition-all hover:scale-105 flex items-center justify-center gap-3"
             >
-              Réserver ma démo personnalisée
+              Essayer gratuitement
               <Calendar className="group-hover:rotate-12 transition-transform" />
             </button>
           </div>
           
           <p className="mt-8 text-gray-500 text-sm">
-            ✓ Démo de 30 minutes • ✓ Analyse de vos besoins • ✓ Sans engagement
+            ✓ 14 jours d'essai gratuit • ✓ Aucune carte bancaire requise • ✓ Configuration en 10 minutes
           </p>
         </div>
       </section>
@@ -443,7 +442,7 @@ export default function LandingPage() {
               <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-xl flex items-center justify-center">
                 <Brain size={24} className="text-white" />
               </div>
-              <span className="text-lg font-semibold">RH Quantum</span>
+              <span className="text-lg font-semibold">Talvio</span>
             </div>
             
             <div className="flex gap-8 text-sm text-gray-400">
@@ -454,7 +453,7 @@ export default function LandingPage() {
             </div>
             
             <p className="text-sm text-gray-500">
-              © 2025 RH Quantum. Tous droits réservés.
+              © 2025 TALVIO. Tous droits réservés.
             </p>
           </div>
         </div>

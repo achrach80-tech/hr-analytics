@@ -555,7 +555,7 @@ export default function CyberDashboard() {
             </div>
             <div className="flex items-center gap-2">
               <Zap size={14} className="text-purple-400" />
-              <span>RH Quantum Analytics v5.0</span>
+              <span>Talvio Analytics v5.0</span>
             </div>
           </div>
         </motion.div>

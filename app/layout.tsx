@@ -5,8 +5,8 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'RH Quantum - Transform HR with AI Analytics',
-  description: 'Next-generation HR platform for data-driven insights',
+  title: 'Talvio - Vos données RH, enfin lisibles',
+  description: 'Transformez vos données RH en décisions stratégiques',
 }
 
 export default function RootLayout({
