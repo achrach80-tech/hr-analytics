@@ -33,7 +33,7 @@ export default function LandingPage() {
     { label: 'Turnover Rate', value: '8.2%', trend: -2.3, color: '#10b981' },
     { label: 'Absenteeism', value: '4.7%', trend: -1.2, color: '#06b6d4' },
     { label: 'Headcount', value: '1,247', trend: 3.5, color: '#8b5cf6' },
-    { label: 'Payroll Cost', value: '€4.2M', trend: 2.1, color: '#f59e0b' }
+    { label: 'Masse Salariale', value: '€4.2M', trend: 2.1, color: '#f59e0b' }
   ]
 
   const clients = [

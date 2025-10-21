@@ -281,7 +281,7 @@ export class OptimizedProcessor {
     try {
       onLog(`🔍 Tentative calcul snapshot pour ${period}...`, 'info')
       
-      // ✅ MÉTHODE 1 : Appel RPC avec timeout
+      // ✅ ÉTAPE 1 : Appel RPC avec timeout
       const { data: rpcResult, error: rpcError } = await Promise.race([
         this.supabase.rpc('calculate_snapshot_for_period', {
           p_etablissement_id: establishmentId,
@@ -296,7 +296,7 @@ export class OptimizedProcessor {
       if (rpcError) {
         onLog(`❌ Erreur RPC: ${rpcError.message}`, 'error')
         
-        // ✅ MÉTHODE 2 : Fallback - Calcul direct avec SQL brut
+        // ✅ ÉTAPE 2 : Fallback - Calcul direct avec SQL brut
         onLog(`🔄 Tentative avec requête SQL directe...`, 'warning')
         
         const { error: sqlError } = await this.supabase
@@ -314,10 +314,10 @@ export class OptimizedProcessor {
       
       onLog(`✅ Fonction exécutée, vérification du résultat...`, 'info')
       
-      // ✅ Attendre pour laisser PostgreSQL commiter
+      // ✅ ÉTAPE 3 : Attendre pour laisser PostgreSQL commiter
       await new Promise(resolve => setTimeout(resolve, 1000))
       
-      // ✅ Vérifier avec plusieurs tentatives
+      // ✅ ÉTAPE 4 : Vérifier avec plusieurs tentatives
       let snapshot = null
       let attempts = 0
       const maxAttempts = 3
@@ -326,8 +326,8 @@ export class OptimizedProcessor {
         attempts++
         
         const { data: checkData, error: checkError } = await this.supabase
-          .from('snapshots_mensuels')
-          .select('id, effectif_fin_mois, etp_fin_mois, masse_salariale_brute, calculated_at')
+          .from('snapshots_workforce')
+          .select('id, effectif_fin_mois, etp_fin_mois, calculated_at')
           .eq('etablissement_id', establishmentId)
           .eq('periode', period)
           .maybeSingle()
@@ -349,9 +349,9 @@ export class OptimizedProcessor {
       if (!snapshot) {
         onLog(`❌ ÉCHEC: Snapshot ${period} non trouvé après ${maxAttempts} tentatives`, 'error')
         
-        // Debug : vérifier si la ligne existe avec n'importe quelle période proche
+        // ✅ ÉTAPE 5 : Debug - Vérifier si la ligne existe avec n'importe quelle période proche
         const { data: debugCheck, error: debugError } = await this.supabase
-          .from('snapshots_mensuels')
+          .from('snapshots_workforce')
           .select('periode, effectif_fin_mois, calculated_at')
           .eq('etablissement_id', establishmentId)
           .order('calculated_at', { ascending: false })
@@ -369,12 +369,11 @@ export class OptimizedProcessor {
         continue
       }
       
-      // ✅ Snapshot créé avec succès
+      // ✅ ÉTAPE 6 : Snapshot créé avec succès
       successCount++
       onLog(
         `✅ Snapshot ${period} créé: ${snapshot.effectif_fin_mois} EMP, ` +
-        `${snapshot.etp_fin_mois?.toFixed(1)} ETP, ` +
-        `${new Intl.NumberFormat('fr-FR').format(snapshot.masse_salariale_brute || 0)}€`,
+        `${snapshot.etp_fin_mois?.toFixed(1)} ETP`,
         'success'
       )
       

@@ -96,7 +96,7 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
 
     const fetchHistoricalData = async () => {
       const { data: snapshots, error } = await supabase
-        .from('snapshots_mensuels')
+        .from('snapshots_workforce')
         .select('periode, etp_fin_mois')
         .eq('etablissement_id', establishmentId)
         .not('periode', 'is', null)
