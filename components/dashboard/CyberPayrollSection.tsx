@@ -35,7 +35,20 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
     )
   }
 
-  // Calculs des évolutions pour Masse Brute
+  // ✅ FIX CRITIQUE : Utilisation de previousMonthData.masseBrute au lieu de calculer
+  const masseSalarialeM1 = previousMonthData?.masseBrute || 0
+  
+  // ✅ Vérification que TOUTES les données sont présentes
+  const hasEffectsData = (
+    masseSalarialeM1 > 0 &&
+    data.effetPrix !== undefined && data.effetPrix !== null &&
+    data.effetVolume !== undefined && data.effetVolume !== null &&
+    data.effetMix !== undefined && data.effetMix !== null
+  )
+
+  const shouldShowWaterfall = hasEffectsData
+
+  // Calculs des évolutions pour Masse Brute (éviter division par zéro)
   const evolutionM1MasseBrute = previousMonthData && previousMonthData.masseBrute > 0
     ? ((data.masseBrute - previousMonthData.masseBrute) / previousMonthData.masseBrute) * 100 
     : undefined
@@ -59,7 +72,7 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
     ? ((data.coutMoyenFTE - previousYearData.coutMoyenFTE) / previousYearData.coutMoyenFTE) * 100 
     : undefined
 
-  // Calculs des évolutions pour Part Variable
+  // Calculs des évolutions pour Part Variable (en points de %)
   const evolutionM1PartVariable = previousMonthData
     ? data.partVariable - previousMonthData.partVariable
     : undefined
@@ -67,25 +80,13 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
     ? data.partVariable - previousYearData.partVariable
     : undefined
 
-  // Calculs des évolutions pour Taux Charges
+  // Calculs des évolutions pour Taux Charges (en points de %)
   const evolutionM1TauxCharges = previousMonthData
     ? data.tauxCharges - previousMonthData.tauxCharges
     : undefined
   const evolutionN1TauxCharges = previousYearData
     ? data.tauxCharges - previousYearData.tauxCharges
     : undefined
-
-  const hasEffectsData = (
-    data.effetPrix !== undefined && data.effetPrix !== null &&
-    data.effetVolume !== undefined && data.effetVolume !== null &&
-    data.effetMix !== undefined && data.effetMix !== null
-  )
-
-  const masseSalarialeM1 = hasEffectsData 
-    ? data.masseBrute - (data.effetPrix || 0) - (data.effetVolume || 0) - (data.effetMix || 0)
-    : 0
-
-  const shouldShowWaterfall = hasEffectsData && masseSalarialeM1 > 0
 
   return (
     <motion.section
@@ -173,8 +174,9 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
                 Waterfall non disponible
               </h3>
               <p className="text-slate-400 text-sm max-w-md mx-auto">
-                Les données d'effets Prix/Volume/Mix n'ont pas encore été calculées pour cette période. 
-                {!hasEffectsData && " Elles seront disponibles après avoir importé au moins 2 mois de données."}
+                {!previousMonthData 
+                  ? "Aucune donnée du mois précédent disponible. Importez au moins 2 mois consécutifs."
+                  : "Les données d'effets Prix/Volume/Mix n'ont pas encore été calculées pour cette période."}
               </p>
             </div>
           </div>

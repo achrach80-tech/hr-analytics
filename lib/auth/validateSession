@@ -1,0 +1,65 @@
+import { createClient } from '@/lib/supabase/client'
+
+export async function validateCompanySession() {
+  const supabase = await createClient()
+  
+  // Get session from Supabase Auth
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  
+  if (sessionError || !session) {
+    return { 
+      valid: false, 
+      companyId: null, 
+      userId: null,
+      error: 'Non authentifié' 
+    }
+  }
+
+  // Get user details
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  
+  if (userError || !user) {
+    return { 
+      valid: false, 
+      companyId: null, 
+      userId: null,
+      error: 'Utilisateur introuvable' 
+    }
+  }
+
+  // Get company associated with user
+  const { data: companyData, error: companyError } = await supabase
+    .from('entreprises')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (companyError || !companyData) {
+    return { 
+      valid: false, 
+      companyId: null, 
+      userId: user.id,
+      error: 'Entreprise introuvable' 
+    }
+  }
+
+  return {
+    valid: true,
+    companyId: companyData.id,
+    userId: user.id,
+    error: null
+  }
+}
+
+export async function requireCompanySession() {
+  const validation = await validateCompanySession()
+  
+  if (!validation.valid) {
+    throw new Error(validation.error || 'Session invalide')
+  }
+  
+  return {
+    companyId: validation.companyId!,
+    userId: validation.userId!
+  }
+}
