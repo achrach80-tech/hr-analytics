@@ -1,7 +1,10 @@
+// lib/hooks/useOptimizedKPIData.ts
+// FIXED: Proper data loading with company context
+
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, getCompanyId } from '@/lib/supabase/client'
 
 interface WorkforceKPIs {
   etpTotal: number
@@ -60,12 +63,22 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
   const prevParamsRef = useRef({ establishmentId: '', period: '' })
 
   useEffect(() => {
+    // Reset if no params
     if (!establishmentId || !period) {
+      setLoading(false)
+      setData(null)
+      return
+    }
+
+    // CRITICAL FIX: Check company authentication
+    const companyId = getCompanyId()
+    if (!companyId) {
+      setError('Non authentifié - veuillez vous reconnecter')
       setLoading(false)
       return
     }
 
-    // ✅ OPTIMISATION : Ne pas refetch si même params
+    // Skip if same params
     if (prevParamsRef.current.establishmentId === establishmentId && 
         prevParamsRef.current.period === period) {
       return
@@ -78,6 +91,22 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
         setLoading(true)
         setError(null)
 
+        // CRITICAL FIX: Verify establishment belongs to company
+        const { data: establishment, error: estError } = await supabase
+          .from('etablissements')
+          .select('entreprise_id')
+          .eq('id', establishmentId)
+          .single()
+
+        if (estError || !establishment) {
+          throw new Error('Établissement non trouvé')
+        }
+
+        if (establishment.entreprise_id !== companyId) {
+          throw new Error('Accès non autorisé à cet établissement')
+        }
+
+        // Calculate comparison periods
         const currentDate = new Date(period)
         
         const previousMonthDate = new Date(currentDate)
@@ -88,7 +117,7 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
         previousYearDate.setFullYear(previousYearDate.getFullYear() - 1)
         const previousYearPeriod = previousYearDate.toISOString().split('T')[0].substring(0, 7) + '-01'
 
-        // ✅ OPTIMISATION : 9 requêtes parallèles au lieu de séquentielles
+        // OPTIMIZATION: Parallel queries with proper error handling
         const [
           workforceResult,
           financialsResult, 
@@ -99,36 +128,97 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
           prevYearFinancialsResult,
           prevMonthAbsencesResult,
           prevYearAbsencesResult
-        ] = await Promise.all([
-          // Période actuelle
-          supabase.from('snapshots_workforce').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
-          supabase.from('snapshots_financials').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
-          supabase.from('snapshots_absences').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
+        ] = await Promise.allSettled([
+          // Current period
+          supabase
+            .from('snapshots_workforce')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', period)
+            .maybeSingle(),
           
-          // Mois précédent
-          supabase.from('snapshots_workforce').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
-          supabase.from('snapshots_workforce').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle(),
-          supabase.from('snapshots_financials').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
-          supabase.from('snapshots_financials').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle(),
-          supabase.from('snapshots_absences').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
-          supabase.from('snapshots_absences').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle()
+          supabase
+            .from('snapshots_financials')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', period)
+            .maybeSingle(),
+          
+          supabase
+            .from('snapshots_absences')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', period)
+            .maybeSingle(),
+          
+          // Previous month
+          supabase
+            .from('snapshots_workforce')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', previousMonthPeriod)
+            .maybeSingle(),
+          
+          // Previous year
+          supabase
+            .from('snapshots_workforce')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', previousYearPeriod)
+            .maybeSingle(),
+          
+          supabase
+            .from('snapshots_financials')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', previousMonthPeriod)
+            .maybeSingle(),
+          
+          supabase
+            .from('snapshots_financials')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', previousYearPeriod)
+            .maybeSingle(),
+          
+          supabase
+            .from('snapshots_absences')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', previousMonthPeriod)
+            .maybeSingle(),
+          
+          supabase
+            .from('snapshots_absences')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', previousYearPeriod)
+            .maybeSingle()
         ])
 
-        // ✅ CORRECTION : Gestion d'erreur plus robuste
-        if (workforceResult.error) {
-          console.error('Workforce snapshot error:', workforceResult.error)
-          // Ne pas throw, juste logger
+        // Extract data from settled promises
+        const workforce = workforceResult.status === 'fulfilled' ? workforceResult.value.data : null
+        const financials = financialsResult.status === 'fulfilled' ? financialsResult.value.data : null
+        const absences = absencesResult.status === 'fulfilled' ? absencesResult.value.data : null
+        const prevMonthWorkforce = prevMonthWorkforceResult.status === 'fulfilled' ? prevMonthWorkforceResult.value.data : null
+        const prevYearWorkforce = prevYearWorkforceResult.status === 'fulfilled' ? prevYearWorkforceResult.value.data : null
+        const prevMonthFinancials = prevMonthFinancialsResult.status === 'fulfilled' ? prevMonthFinancialsResult.value.data : null
+        const prevYearFinancials = prevYearFinancialsResult.status === 'fulfilled' ? prevYearFinancialsResult.value.data : null
+        const prevMonthAbsences = prevMonthAbsencesResult.status === 'fulfilled' ? prevMonthAbsencesResult.value.data : null
+        const prevYearAbsences = prevYearAbsencesResult.status === 'fulfilled' ? prevYearAbsencesResult.value.data : null
+
+        // Log any errors but don't fail
+        if (workforceResult.status === 'rejected') {
+          console.warn('Workforce snapshot error:', workforceResult.reason)
+        }
+        if (financialsResult.status === 'rejected') {
+          console.warn('Financials snapshot error:', financialsResult.reason)
+        }
+        if (absencesResult.status === 'rejected') {
+          console.warn('Absences snapshot error:', absencesResult.reason)
         }
 
-        if (financialsResult.error) {
-          console.error('Financials snapshot error:', financialsResult.error)
-        }
-
-        const workforce = workforceResult.data
-        const financials = financialsResult.data
-        const absences = absencesResult.data
-
-        // ✅ CORRECTION : Afficher même si données partielles
+        // Build response data
         setData({
           workforce: workforce ? {
             etpTotal: workforce.etp_fin_mois || 0,
@@ -166,83 +256,85 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
             nbJoursMaladie: absences.nb_jours_maladie || 0
           } : null,
           
-          previousMonthWorkforce: prevMonthWorkforceResult.data ? {
-            etpTotal: prevMonthWorkforceResult.data.etp_fin_mois || 0,
-            headcountActif: prevMonthWorkforceResult.data.effectif_fin_mois || 0,
-            nbEntrees: prevMonthWorkforceResult.data.nb_entrees || 0,
-            nbSorties: prevMonthWorkforceResult.data.nb_sorties || 0,
-            tauxTurnover: prevMonthWorkforceResult.data.taux_turnover || 0,
-            pctCDI: prevMonthWorkforceResult.data.pct_cdi || 0,
-            ageMoyen: prevMonthWorkforceResult.data.age_moyen || 0,
-            ancienneteMoyenne: prevMonthWorkforceResult.data.anciennete_moyenne_mois || 0,
-            pctHommes: prevMonthWorkforceResult.data.pct_hommes || 0,
-            pctFemmes: prevMonthWorkforceResult.data.pct_femmes || 0
+          previousMonthWorkforce: prevMonthWorkforce ? {
+            etpTotal: prevMonthWorkforce.etp_fin_mois || 0,
+            headcountActif: prevMonthWorkforce.effectif_fin_mois || 0,
+            nbEntrees: prevMonthWorkforce.nb_entrees || 0,
+            nbSorties: prevMonthWorkforce.nb_sorties || 0,
+            tauxTurnover: prevMonthWorkforce.taux_turnover || 0,
+            pctCDI: prevMonthWorkforce.pct_cdi || 0,
+            ageMoyen: prevMonthWorkforce.age_moyen || 0,
+            ancienneteMoyenne: prevMonthWorkforce.anciennete_moyenne_mois || 0,
+            pctHommes: prevMonthWorkforce.pct_hommes || 0,
+            pctFemmes: prevMonthWorkforce.pct_femmes || 0
           } : null,
           
-          previousYearWorkforce: prevYearWorkforceResult.data ? {
-            etpTotal: prevYearWorkforceResult.data.etp_fin_mois || 0,
-            headcountActif: prevYearWorkforceResult.data.effectif_fin_mois || 0,
-            nbEntrees: prevYearWorkforceResult.data.nb_entrees || 0,
-            nbSorties: prevYearWorkforceResult.data.nb_sorties || 0,
-            tauxTurnover: prevYearWorkforceResult.data.taux_turnover || 0,
-            pctCDI: prevYearWorkforceResult.data.pct_cdi || 0,
-            ageMoyen: prevYearWorkforceResult.data.age_moyen || 0,
-            ancienneteMoyenne: prevYearWorkforceResult.data.anciennete_moyenne_mois || 0,
-            pctHommes: prevYearWorkforceResult.data.pct_hommes || 0,
-            pctFemmes: prevYearWorkforceResult.data.pct_femmes || 0
+          previousYearWorkforce: prevYearWorkforce ? {
+            etpTotal: prevYearWorkforce.etp_fin_mois || 0,
+            headcountActif: prevYearWorkforce.effectif_fin_mois || 0,
+            nbEntrees: prevYearWorkforce.nb_entrees || 0,
+            nbSorties: prevYearWorkforce.nb_sorties || 0,
+            tauxTurnover: prevYearWorkforce.taux_turnover || 0,
+            pctCDI: prevYearWorkforce.pct_cdi || 0,
+            ageMoyen: prevYearWorkforce.age_moyen || 0,
+            ancienneteMoyenne: prevYearWorkforce.anciennete_moyenne_mois || 0,
+            pctHommes: prevYearWorkforce.pct_hommes || 0,
+            pctFemmes: prevYearWorkforce.pct_femmes || 0
           } : null,
           
-          previousMonthFinancials: prevMonthFinancialsResult.data ? {
-            masseBrute: prevMonthFinancialsResult.data.masse_salariale_brute || 0,
-            coutTotal: prevMonthFinancialsResult.data.cout_total_employeur || 0,
-            salaireMoyen: prevMonthFinancialsResult.data.salaire_base_moyen || 0,
-            coutMoyenFTE: prevMonthFinancialsResult.data.cout_moyen_par_fte || 0,
-            partVariable: prevMonthFinancialsResult.data.part_variable || 0,
-            tauxCharges: prevMonthFinancialsResult.data.taux_charges || 0,
-            effetPrix: prevMonthFinancialsResult.data.effet_prix || 0,
-            effetVolume: prevMonthFinancialsResult.data.effet_volume || 0,
-            effetMix: prevMonthFinancialsResult.data.effet_mix || 0,
-            variationMasseSalariale: prevMonthFinancialsResult.data.variation_masse_salariale || 0,
-            variationMasseSalarialePct: prevMonthFinancialsResult.data.variation_masse_salariale_pct || 0
+          previousMonthFinancials: prevMonthFinancials ? {
+            masseBrute: prevMonthFinancials.masse_salariale_brute || 0,
+            coutTotal: prevMonthFinancials.cout_total_employeur || 0,
+            salaireMoyen: prevMonthFinancials.salaire_base_moyen || 0,
+            coutMoyenFTE: prevMonthFinancials.cout_moyen_par_fte || 0,
+            partVariable: prevMonthFinancials.part_variable || 0,
+            tauxCharges: prevMonthFinancials.taux_charges || 0,
+            effetPrix: prevMonthFinancials.effet_prix || 0,
+            effetVolume: prevMonthFinancials.effet_volume || 0,
+            effetMix: prevMonthFinancials.effet_mix || 0,
+            variationMasseSalariale: prevMonthFinancials.variation_masse_salariale || 0,
+            variationMasseSalarialePct: prevMonthFinancials.variation_masse_salariale_pct || 0
           } : null,
           
-          previousYearFinancials: prevYearFinancialsResult.data ? {
-            masseBrute: prevYearFinancialsResult.data.masse_salariale_brute || 0,
-            coutTotal: prevYearFinancialsResult.data.cout_total_employeur || 0,
-            salaireMoyen: prevYearFinancialsResult.data.salaire_base_moyen || 0,
-            coutMoyenFTE: prevYearFinancialsResult.data.cout_moyen_par_fte || 0,
-            partVariable: prevYearFinancialsResult.data.part_variable || 0,
-            tauxCharges: prevYearFinancialsResult.data.taux_charges || 0,
-            effetPrix: prevYearFinancialsResult.data.effet_prix || 0,
-            effetVolume: prevYearFinancialsResult.data.effet_volume || 0,
-            effetMix: prevYearFinancialsResult.data.effet_mix || 0,
-            variationMasseSalariale: prevYearFinancialsResult.data.variation_masse_salariale || 0,
-            variationMasseSalarialePct: prevYearFinancialsResult.data.variation_masse_salariale_pct || 0
+          previousYearFinancials: prevYearFinancials ? {
+            masseBrute: prevYearFinancials.masse_salariale_brute || 0,
+            coutTotal: prevYearFinancials.cout_total_employeur || 0,
+            salaireMoyen: prevYearFinancials.salaire_base_moyen || 0,
+            coutMoyenFTE: prevYearFinancials.cout_moyen_par_fte || 0,
+            partVariable: prevYearFinancials.part_variable || 0,
+            tauxCharges: prevYearFinancials.taux_charges || 0,
+            effetPrix: prevYearFinancials.effet_prix || 0,
+            effetVolume: prevYearFinancials.effet_volume || 0,
+            effetMix: prevYearFinancials.effet_mix || 0,
+            variationMasseSalariale: prevYearFinancials.variation_masse_salariale || 0,
+            variationMasseSalarialePct: prevYearFinancials.variation_masse_salariale_pct || 0
           } : null,
           
-          previousMonthAbsences: prevMonthAbsencesResult.data ? {
-            tauxAbsenteisme: prevMonthAbsencesResult.data.taux_absenteisme || 0,
-            nbJoursAbsence: prevMonthAbsencesResult.data.nb_jours_absence || 0,
-            nbAbsencesTotal: prevMonthAbsencesResult.data.nb_absences_total || 0,
-            dureeMoyenne: prevMonthAbsencesResult.data.duree_moyenne_absence || 0,
-            nbSalariesAbsents: prevMonthAbsencesResult.data.nb_salaries_absents || 0,
-            nbJoursMaladie: prevMonthAbsencesResult.data.nb_jours_maladie || 0
+          previousMonthAbsences: prevMonthAbsences ? {
+            tauxAbsenteisme: prevMonthAbsences.taux_absenteisme || 0,
+            nbJoursAbsence: prevMonthAbsences.nb_jours_absence || 0,
+            nbAbsencesTotal: prevMonthAbsences.nb_absences_total || 0,
+            dureeMoyenne: prevMonthAbsences.duree_moyenne_absence || 0,
+            nbSalariesAbsents: prevMonthAbsences.nb_salaries_absents || 0,
+            nbJoursMaladie: prevMonthAbsences.nb_jours_maladie || 0
           } : null,
           
-          previousYearAbsences: prevYearAbsencesResult.data ? {
-            tauxAbsenteisme: prevYearAbsencesResult.data.taux_absenteisme || 0,
-            nbJoursAbsence: prevYearAbsencesResult.data.nb_jours_absence || 0,
-            nbAbsencesTotal: prevYearAbsencesResult.data.nb_absences_total || 0,
-            dureeMoyenne: prevYearAbsencesResult.data.duree_moyenne_absence || 0,
-            nbSalariesAbsents: prevYearAbsencesResult.data.nb_salaries_absents || 0,
-            nbJoursMaladie: prevYearAbsencesResult.data.nb_jours_maladie || 0
+          previousYearAbsences: prevYearAbsences ? {
+            tauxAbsenteisme: prevYearAbsences.taux_absenteisme || 0,
+            nbJoursAbsence: prevYearAbsences.nb_jours_absence || 0,
+            nbAbsencesTotal: prevYearAbsences.nb_absences_total || 0,
+            dureeMoyenne: prevYearAbsences.duree_moyenne_absence || 0,
+            nbSalariesAbsents: prevYearAbsences.nb_salaries_absents || 0,
+            nbJoursMaladie: prevYearAbsences.nb_jours_maladie || 0
           } : null
         })
 
       } catch (err) {
         console.error('KPI fetch error:', err)
-        setError(err instanceof Error ? err.message : 'Erreur de chargement')
-        // ✅ Ne pas bloquer l'affichage, juste logger l'erreur
+        const errorMessage = err instanceof Error ? err.message : 'Erreur de chargement'
+        setError(errorMessage)
+        
+        // Set empty data structure on error
         setData({ 
           workforce: null, 
           financials: null, 
