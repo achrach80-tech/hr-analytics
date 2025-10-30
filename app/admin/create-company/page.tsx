@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { 
   Building2, Mail, User, Calendar, Package, 
   Loader2, CheckCircle, Copy, Send, ArrowRight,
@@ -25,78 +24,37 @@ export default function CreateCompanyPage() {
   const [createdCompany, setCreatedCompany] = useState<any>(null)
   const [generatedToken, setGeneratedToken] = useState('')
   const router = useRouter()
-  const supabase = createClient()
 
-  const generateAccessToken = () => {
-    const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-    return token
-  }
-
-  const generateCompanyCode = () => {
-    const timestamp = Date.now().toString(36).toUpperCase()
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase()
-    return `RHQ-${timestamp}-${random}`
-  }
-
+  // ✅ MODIFICATION: Utiliser l'API route au lieu de Supabase direct
   const createCompany = async () => {
     setLoading(true)
     try {
-      const accessToken = generateAccessToken()
-      const companyCode = generateCompanyCode()
-      const urlSlug = companyData.nom
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '-')
-        .replace(/-+/g, '-')
-        .substring(0, 50)
+      // Appeler l'API route qui utilise adminClient
+      const response = await fetch('/api/admin/companies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(companyData)
+      })
 
-      // Create company
-      const { data: company, error } = await supabase
-        .from('entreprises')
-        .insert({
-          nom: companyData.nom,
-          code_entreprise: companyCode,
-          access_token: accessToken,
-          access_url_slug: urlSlug,
-          subscription_plan: companyData.subscription_plan,
-          subscription_status: 'active',
-          billing_email: companyData.email,
-          trial_ends_at: companyData.subscription_plan === 'trial' 
-            ? new Date(Date.now() + companyData.trial_days * 24 * 60 * 60 * 1000).toISOString()
-            : null,
-          activation_date: new Date().toISOString(),
-          onboarding_status: 'trial_started',
-          max_employees: companyData.max_employees,
-          features: {
-            export: true,
-            api: companyData.subscription_plan !== 'trial',
-            white_label: companyData.subscription_plan === 'enterprise',
-            ai_features: companyData.subscription_plan !== 'trial'
-          }
-        })
-        .select()
-        .single()
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to create company')
+      }
 
-      if (error) throw error
+      const result = await response.json()
 
-      // Create default establishment
-      await supabase
-        .from('etablissements')
-        .insert({
-          entreprise_id: company.id,
-          nom: `${companyData.nom} - Siège`,
-          code_etablissement: 'SIEGE',
-          is_headquarters: true,
-          statut: 'Actif'
-        })
+      if (result.warning) {
+        console.warn(result.warning)
+      }
 
-      setGeneratedToken(accessToken)
-      setCreatedCompany(company)
+      setGeneratedToken(result.access_token)
+      setCreatedCompany(result.company)
       setStep(3)
     } catch (error) {
       console.error('Error creating company:', error)
-      alert('Error creating company. Please try again.')
+      alert(`Error creating company: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setLoading(false)
     }
@@ -209,7 +167,7 @@ export default function CreateCompanyPage() {
                 value={companyData.email}
                 onChange={(e) => setCompanyData({...companyData, email: e.target.value})}
                 className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                placeholder="contact@company.com"
+                placeholder="contact@acme.com"
                 required
               />
             </div>
@@ -236,35 +194,21 @@ export default function CreateCompanyPage() {
                 onChange={(e) => setCompanyData({...companyData, employee_count: e.target.value})}
                 className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
-                <option value="1-50">1-50</option>
-                <option value="51-200">51-200</option>
-                <option value="201-500">201-500</option>
-                <option value="500+">500+</option>
+                <option value="1-50">1-50 employees</option>
+                <option value="51-200">51-200 employees</option>
+                <option value="201-500">201-500 employees</option>
+                <option value="500+">500+ employees</option>
               </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Max Employees (System Limit)
-              </label>
-              <input
-                type="number"
-                value={companyData.max_employees}
-                onChange={(e) => setCompanyData({...companyData, max_employees: parseInt(e.target.value)})}
-                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                min="10"
-                max="10000"
-              />
             </div>
           </div>
 
-          <div className="mt-8 flex justify-end">
+          <div className="flex justify-end mt-8">
             <button
               onClick={() => setStep(2)}
               disabled={!companyData.nom || !companyData.email}
               className="px-8 py-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-400 hover:to-red-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-semibold transition-all flex items-center gap-2"
             >
-              Continue
+              Next: Choose Plan
               <ArrowRight size={20} />
             </button>
           </div>

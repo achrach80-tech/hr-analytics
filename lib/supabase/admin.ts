@@ -1,20 +1,26 @@
-// lib/supabase/admin.ts
-// Client Supabase avec SERVICE_ROLE key pour bypass RLS (admin uniquement)
-
 import { createClient } from '@supabase/supabase-js'
 
-export function createAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
+}
 
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing Supabase environment variables')
-  }
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable')
+}
 
-  return createClient(supabaseUrl, supabaseServiceKey, {
+export const adminClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
     auth: {
       autoRefreshToken: false,
       persistSession: false
     }
-  })
+  }
+)
+
+export function ensureServerSide() {
+  if (typeof window !== 'undefined') {
+    throw new Error('adminClient ne doit être utilisé que côté serveur!')
+  }
 }
