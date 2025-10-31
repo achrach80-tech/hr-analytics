@@ -27,7 +27,6 @@ export default function CyberDashboard() {
   const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClient()
   const router = useRouter()
   const mountedRef = useRef(true)
   const initializedRef = useRef(false)
@@ -49,6 +48,9 @@ export default function CyberDashboard() {
     if (!estId || !mountedRef.current) return
     
     try {
+      // FIXED: Create client fresh each time to ensure headers are included
+      const supabase = createClient()
+      
       // Try snapshots first
       const { data: periodData, error: snapError } = await supabase
         .from('snapshots_workforce')
@@ -103,7 +105,7 @@ export default function CyberDashboard() {
       console.error('Unexpected error loading periods:', err)
       setError('Erreur système')
     }
-  }, [supabase])
+  }, [])
 
   // OPTIMIZATION: Single useEffect for initialization - only runs once
   useEffect(() => {
@@ -116,13 +118,24 @@ export default function CyberDashboard() {
         setInitialLoading(true)
         setError(null)
 
+        console.log('🔄 Initializing dashboard...')
+
+        // Check session
         const sessionStr = localStorage.getItem('company_session')
         if (!sessionStr) {
+          console.log('❌ No session found, redirecting to login')
           router.push('/login')
           return
         }
 
         const session = JSON.parse(sessionStr)
+        console.log('✅ Session found for company:', session.company_id)
+
+        // FIXED: Create Supabase client AFTER we have the session
+        // This ensures the x-company-token header is included
+        const supabase = createClient()
+
+        console.log('🔄 Loading company data...')
 
         const { data: companyData, error: companyError } = await supabase
           .from('entreprises')
@@ -139,22 +152,52 @@ export default function CyberDashboard() {
           .eq('id', session.company_id)
           .single()
 
-        if (companyError) throw companyError
+        if (companyError) {
+          console.error('❌ Company load error:', companyError)
+          console.error('Error details:', {
+            message: companyError.message,
+            details: companyError.details,
+            hint: companyError.hint,
+            code: companyError.code
+          })
+          throw companyError
+        }
+
+        console.log('✅ Company loaded:', companyData.nom)
 
         if (!mountedRef.current) return
 
         setCompany(companyData as Company)
         const establishments = companyData.etablissements || []
         
+        console.log('✅ Found', establishments.length, 'establishment(s)')
+
         const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
         if (defaultEst) {
+          console.log('✅ Selected establishment:', defaultEst.nom)
           setSelectedEstablishment(defaultEst as Establishment)
           await loadPeriodsForEstablishment(defaultEst.id)
+        } else {
+          console.log('⚠️ No establishments found')
+          setError('Aucun établissement trouvé. Contactez le support.')
         }
       } catch (err) {
         if (!mountedRef.current) return
-        console.error('Initialize error:', err)
-        setError('Erreur d\'initialisation')
+        console.error('❌ Initialize error:', err)
+        
+        if (err && typeof err === 'object' && 'code' in err) {
+          const error = err as any
+          if (error.code === 'PGRST116' || error.message?.includes('0 rows')) {
+            setError('Entreprise introuvable. Vérifiez votre token d\'accès.')
+          } else if (error.code === '42501' || error.message?.includes('permission')) {
+            setError('Accès refusé. Reconnectez-vous.')
+            setTimeout(() => router.push('/login'), 2000)
+          } else {
+            setError('Erreur de chargement. Réessayez.')
+          }
+        } else {
+          setError('Erreur d\'initialisation')
+        }
       } finally {
         if (mountedRef.current) {
           setInitialLoading(false)
@@ -167,7 +210,7 @@ export default function CyberDashboard() {
     return () => {
       mountedRef.current = false
     }
-  }, [router, supabase, loadPeriodsForEstablishment])
+  }, [router, loadPeriodsForEstablishment])
 
   // OPTIMIZATION: Separate useEffect for modal overflow management
   useEffect(() => {
@@ -207,137 +250,107 @@ export default function CyberDashboard() {
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center">
         <motion.div 
           className="text-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
         >
-          <motion.div 
-            className="w-20 h-20 border-4 border-purple-500/30 rounded-full mb-6 mx-auto relative"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          <motion.div
+            className="w-32 h-32 mx-auto mb-8 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-3xl flex items-center justify-center"
+            animate={{ 
+              rotate: [0, 360],
+              scale: [1, 1.1, 1]
+            }}
+            transition={{ 
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
           >
-            <div className="absolute inset-0 border-4 border-t-purple-500 rounded-full"></div>
+            <Brain size={64} className="text-white" />
           </motion.div>
-          <motion.p 
-            className="text-white text-xl"
-            animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 1.5, repeat: Infinity }}
-          >
-            Chargement Cyber Dashboard...
-          </motion.p>
+          <h2 className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent mb-4">
+            Initialisation du Dashboard
+          </h2>
+          <p className="text-slate-400 text-lg">
+            Chargement des données cyberpunk...
+          </p>
         </motion.div>
       </div>
     )
   }
 
   // Error state
-  if (error && !kpiData) {
+  if (error && !company) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center p-4">
         <motion.div 
-          className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-8 max-w-lg text-center border border-red-500/30"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md w-full bg-slate-900/50 backdrop-blur-xl border border-red-500/30 rounded-2xl p-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
         >
-          <AlertTriangle size={48} className="text-red-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-4">Erreur de chargement</h2>
-          <p className="text-slate-300 mb-6">{error}</p>
-          <button
-            onClick={() => router.push('/import')}
-            className="px-6 py-3 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
-          >
-            Importer des données
-          </button>
+          <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <AlertTriangle size={40} className="text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-white text-center mb-4">
+            Erreur de Chargement
+          </h2>
+          <p className="text-slate-300 text-center mb-6">
+            {error}
+          </p>
+          <div className="flex gap-4">
+            <button
+              onClick={() => window.location.reload()}
+              className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl text-white font-semibold transition-all"
+            >
+              Réessayer
+            </button>
+            <button
+              onClick={() => router.push('/login')}
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400 rounded-xl text-white font-semibold transition-all"
+            >
+              Se Reconnecter
+            </button>
+          </div>
         </motion.div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/10 to-slate-950">
-      {/* Animated cyberpunk background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <motion.div 
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage: `radial-gradient(circle at 2px 2px, rgba(139, 92, 246, 0.3) 1px, transparent 1px)`,
-            backgroundSize: '48px 48px'
-          }}
-          animate={{
-            backgroundPosition: ['0px 0px', '48px 48px']
-          }}
-          transition={{
-            duration: 20,
-            repeat: Infinity,
-            ease: "linear"
-          }}
-        />
-        <motion.div 
-          className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl"
-          animate={{
-            x: [0, 100, 0],
-            y: [0, -50, 0],
-            scale: [1, 1.2, 1]
-          }}
-          transition={{
-            duration: 15,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-        />
-        <motion.div 
-          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl"
-          animate={{
-            x: [0, -80, 0],
-            y: [0, 60, 0],
-            scale: [1, 0.8, 1]
-          }}
-          transition={{
-            duration: 12,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-        />
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 relative overflow-hidden">
+      {/* Cyber grid background */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
       </div>
 
       {/* Header */}
       <motion.div 
-        className="relative z-10 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800/50"
-        initial={{ opacity: 0, y: -50 }}
-        animate={{ opacity: 1, y: 0 }}
+        className="relative z-20 border-b border-slate-800/50 bg-slate-900/30 backdrop-blur-xl"
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.6 }}
       >
-        <div className="px-8 py-6">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-6">
-              <motion.div 
-                className="w-16 h-16 bg-gradient-to-br from-purple-500 via-pink-500 to-cyan-500 rounded-3xl flex items-center justify-center shadow-2xl"
-                whileHover={{ scale: 1.1, rotate: 360 }}
-                transition={{ duration: 0.6 }}
-              >
-                <Brain size={32} className="text-white drop-shadow-lg" />
-              </motion.div>
-              <div>
-                <motion.h1 
-                  className="text-4xl font-bold bg-gradient-to-r from-white via-purple-200 to-cyan-200 bg-clip-text text-transparent"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  Dashboard Talvio
-                </motion.h1>
+        <div className="max-w-[1800px] mx-auto px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-4 mb-2">
                 <motion.div 
-                  className="flex items-center gap-3 text-sm text-slate-400 mt-2"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.3 }}
+                  className="w-12 h-12 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-xl flex items-center justify-center"
+                  whileHover={{ scale: 1.1, rotate: 180 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <Building2 size={14} />
-                  <span>{company?.nom}</span>
-                  <span>•</span>
-                  <span>{selectedEstablishment?.nom}</span>
-                  <span>•</span>
-                  <span className="text-green-400">Cyber Mode</span>
+                  <Brain size={24} className="text-white" />
                 </motion.div>
+                <div>
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+                    {company?.nom || 'Dashboard'}
+                  </h1>
+                  <p className="text-slate-400 text-sm">
+                    Plan: {company?.subscription_plan || 'N/A'}
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -346,17 +359,13 @@ export default function CyberDashboard() {
               <div className="relative">
                 <motion.button
                   onClick={() => setShowPeriodSelector(!showPeriodSelector)}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-xl border transition-all duration-200 ${
-                    showPeriodSelector 
-                      ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-lg shadow-purple-500/20' 
-                      : 'bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 text-white hover:border-purple-500/30'
-                  }`}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  className="px-6 py-3 bg-slate-800/50 backdrop-blur-xl border border-slate-700 hover:border-purple-500/50 rounded-xl flex items-center gap-3 transition-all shadow-lg"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                 >
                   <Calendar size={18} className="text-purple-400" />
-                  <span className={showPeriodSelector ? 'text-purple-300' : 'text-white'}>
-                    {selectedPeriod ? formatPeriodDisplay(selectedPeriod) : 'Sélectionner'}
+                  <span className="text-white font-medium">
+                    {selectedPeriod ? formatPeriodDisplay(selectedPeriod) : 'Sélectionner période'}
                   </span>
                   <motion.div
                     animate={{ rotate: showPeriodSelector ? 180 : 0 }}

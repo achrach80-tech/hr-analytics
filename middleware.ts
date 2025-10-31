@@ -25,12 +25,29 @@ export function middleware(request: NextRequest) {
     }
     
     try {
-      const sessionData = JSON.parse(atob(companySession.value))
-      if (new Date(sessionData.expires_at) < new Date()) {
-        return NextResponse.redirect(new URL('/login', request.url))
+      const sessionData = JSON.parse(companySession.value)
+      
+      // Check expiration
+      if (sessionData.expires_at && new Date(sessionData.expires_at) < new Date()) {
+        const response = NextResponse.redirect(new URL('/login', request.url))
+        response.cookies.delete('company_session')
+        return response
       }
-    } catch {
-      return NextResponse.redirect(new URL('/login', request.url))
+      
+      // CRITICAL FIX: Add x-company-token header to all dashboard requests
+      const requestHeaders = new Headers(request.headers)
+      requestHeaders.set('x-company-token', sessionData.access_token)
+      
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      })
+    } catch (error) {
+      console.error('Company session validation error:', error)
+      const response = NextResponse.redirect(new URL('/login', request.url))
+      response.cookies.delete('company_session')
+      return response
     }
   }
 
@@ -40,6 +57,35 @@ export function middleware(request: NextRequest) {
     
     if (!adminSession) {
       return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
+    
+    try {
+      // FIXED: Decode URI component before parsing JSON
+      const decodedValue = decodeURIComponent(adminSession.value)
+      const sessionData = JSON.parse(decodedValue)
+      
+      // Check expiration
+      if (sessionData.expires_at && new Date(sessionData.expires_at) < new Date()) {
+        const response = NextResponse.redirect(new URL('/admin/login', request.url))
+        response.cookies.delete('admin_session')
+        return response
+      }
+      
+      // Verify it's actually an admin session
+      if (!sessionData.isAdmin) {
+        const response = NextResponse.redirect(new URL('/admin/login', request.url))
+        response.cookies.delete('admin_session')
+        return response
+      }
+      
+      // Admin session is valid, allow access
+      return NextResponse.next()
+      
+    } catch (error) {
+      console.error('Admin session validation error:', error)
+      const response = NextResponse.redirect(new URL('/admin/login', request.url))
+      response.cookies.delete('admin_session')
+      return response
     }
   }
 

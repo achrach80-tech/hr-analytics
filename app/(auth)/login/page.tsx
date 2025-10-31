@@ -1,5 +1,5 @@
 // app/(auth)/login/page.tsx
-// ✅ VERSION CORRIGÉE - Utilise l'API route pour valider le token
+// FIXED: Proper cookie and localStorage handling that matches the API
 
 'use client'
 
@@ -30,7 +30,8 @@ export default function CompanyLoginPage() {
         },
         body: JSON.stringify({
           accessToken: accessToken.trim()
-        })
+        }),
+        credentials: 'include' // IMPORTANT: Include cookies in request
       })
 
       const result = await response.json()
@@ -41,15 +42,22 @@ export default function CompanyLoginPage() {
 
       console.log('✅ Login successful:', result.session.company_name)
 
-      // Store session
+      // CRITICAL FIX: Store session in localStorage for client-side access
+      // Cookie is already set by the API response
       localStorage.setItem('company_session', JSON.stringify(result.session))
-      document.cookie = `company_session=${btoa(JSON.stringify(result.session))}; path=/; max-age=86400; SameSite=Strict`
-      
-      // Store token in cookie for RLS
-      document.cookie = `company_token=${result.session.access_token}; path=/; max-age=86400; SameSite=Strict`
+
+      // Small delay to ensure cookie is set
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       // Redirect to dashboard
+      console.log('🚀 Redirecting to dashboard...')
       router.push('/dashboard')
+      
+      // Force page refresh to ensure middleware picks up the new cookie
+      setTimeout(() => {
+        window.location.href = '/dashboard'
+      }, 100)
+      
     } catch (err: any) {
       console.error('❌ Login failed:', err.message)
       setError(err.message || 'Erreur de connexion')

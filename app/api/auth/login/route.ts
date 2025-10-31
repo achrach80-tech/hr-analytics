@@ -1,6 +1,5 @@
 // app/api/auth/login/route.ts
-// API route pour valider le token et créer une session
-// Utilise service_role pour bypass RLS
+// FIXED: API route with proper cookie handling and session management
 
 import { NextRequest, NextResponse } from 'next/server'
 import { adminClient } from '@/lib/supabase/admin'
@@ -19,12 +18,29 @@ export async function POST(request: NextRequest) {
     // Validate token with service_role (bypass RLS)
     const { data: company, error: companyError } = await adminClient
       .from('entreprises')
-      .select('id, nom, access_token, subscription_plan, subscription_status, trial_ends_at, features, login_count')
+      .select('id, nom, access_token, subscription_plan, subscription_status, subscription_ends_at, trial_ends_at, features, login_count')
       .eq('access_token', accessToken.trim())
       .single()
 
     if (companyError || !company) {
       console.error('Token validation failed:', companyError)
+      
+      // Log failed attempt
+      try {
+        await adminClient
+          .from('access_logs')
+          .insert({
+            access_token_used: accessToken?.substring(0, 8) + '...' || 'unknown',
+            access_method: 'token',
+            path_accessed: '/login',
+            action: 'login_failed',
+            response_status: 401,
+            accessed_at: new Date().toISOString()
+          })
+      } catch (logError) {
+        // Ignore if access_logs doesn't exist
+      }
+      
       return NextResponse.json(
         { error: 'Code d\'accès invalide' },
         { status: 401 }
@@ -34,9 +50,20 @@ export async function POST(request: NextRequest) {
     // Check subscription status
     if (company.subscription_status !== 'active') {
       return NextResponse.json(
-        { error: 'Votre abonnement n\'est pas actif' },
+        { error: 'Votre abonnement n\'est pas actif. Contactez le support.' },
         { status: 403 }
       )
+    }
+
+    // Check subscription expiration
+    if (company.subscription_ends_at) {
+      const subscriptionEnd = new Date(company.subscription_ends_at)
+      if (subscriptionEnd < new Date()) {
+        return NextResponse.json(
+          { error: 'Votre abonnement a expiré. Veuillez renouveler.' },
+          { status: 403 }
+        )
+      }
     }
 
     // Check trial expiration
@@ -44,7 +71,7 @@ export async function POST(request: NextRequest) {
       const trialEnd = new Date(company.trial_ends_at)
       if (trialEnd < new Date()) {
         return NextResponse.json(
-          { error: 'Votre période d\'essai a expiré' },
+          { error: 'Votre période d\'essai a expiré. Passez à un abonnement payant.' },
           { status: 403 }
         )
       }
@@ -60,7 +87,7 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', company.id)
 
-    // Log successful access (if access_logs table exists)
+    // Log successful access
     try {
       await adminClient
         .from('access_logs')
@@ -78,32 +105,49 @@ export async function POST(request: NextRequest) {
       console.log('Access log not recorded:', logError)
     }
 
-    // Return session data
-    return NextResponse.json({
+    // Create session object
+    const sessionData = {
+      company_id: company.id,
+      company_name: company.nom,
+      subscription_plan: company.subscription_plan,
+      features: company.features || {},
+      access_token: company.access_token,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+      created_at: new Date().toISOString()
+    }
+
+    // CRITICAL FIX: Set cookie in response
+    const response = NextResponse.json({
       success: true,
-      session: {
-        company_id: company.id,
-        company_name: company.nom,
-        subscription_plan: company.subscription_plan,
-        features: company.features || {},
-        access_token: company.access_token,
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-      }
+      session: sessionData
     })
+
+    // Set HTTP-only cookie for better security
+    response.cookies.set({
+      name: 'company_session',
+      value: JSON.stringify(sessionData),
+      httpOnly: false, // Must be false so client JS can read it
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60, // 24 hours in seconds
+      path: '/'
+    })
+
+    return response
 
   } catch (error) {
     console.error('Login API error:', error)
     
-    // Log failed attempt (if access_logs exists)
+    // Log failed attempt
     try {
-      const { accessToken } = await request.json()
+      const body = await request.clone().json()
       await adminClient
         .from('access_logs')
         .insert({
-          access_token_used: accessToken?.substring(0, 8) + '...' || 'unknown',
+          access_token_used: body.accessToken?.substring(0, 8) + '...' || 'unknown',
           access_method: 'token',
           path_accessed: '/login',
-          action: 'login_failed',
+          action: 'login_error',
           response_status: 500,
           accessed_at: new Date().toISOString()
         })
@@ -112,7 +156,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Erreur de connexion' },
+      { error: 'Erreur de connexion. Veuillez réessayer.' },
       { status: 500 }
     )
   }

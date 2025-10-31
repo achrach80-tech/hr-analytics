@@ -31,10 +31,22 @@ export default function AdminLoginPage() {
         expires_at: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
       }
 
+      // FIXED: Store without base64 encoding (consistent with company login)
       localStorage.setItem('admin_session', JSON.stringify(sessionData))
-      document.cookie = `admin_session=${btoa(JSON.stringify(sessionData))}; path=/; max-age=28800`
+      
+      // FIXED: Set cookie without base64 encoding
+      document.cookie = `admin_session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=28800; samesite=strict`
+
+      // Small delay to ensure cookie is set
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       router.push('/admin')
+      
+      // Force refresh to ensure middleware picks up the cookie
+      setTimeout(() => {
+        window.location.href = '/admin'
+      }, 100)
+      
     } catch (err: any) {
       setError(err.message || 'Authentication failed')
     } finally {
@@ -69,6 +81,9 @@ export default function AdminLoginPage() {
                 required
                 autoFocus
               />
+              <p className="mt-2 text-xs text-slate-500">
+                Default password: admin2025! (change in production)
+              </p>
             </div>
 
             {error && (
