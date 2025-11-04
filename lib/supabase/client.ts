@@ -1,5 +1,5 @@
 // lib/supabase/client.ts
-// FIXED: Proper cookie parsing without errors
+// ENHANCED: Better session handling with comprehensive debugging
 
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -32,6 +32,7 @@ function getSessionData() {
         
         // Check expiration
         if (session.expires_at && new Date(session.expires_at) < new Date()) {
+          console.warn('🔴 Session expired, clearing cookies')
           document.cookie = 'company_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
           localStorage.removeItem('company_session')
           return null
@@ -42,7 +43,7 @@ function getSessionData() {
         return session
       } catch (parseError) {
         // If cookie can't be parsed, remove it and try localStorage
-        console.warn('Could not parse company_session cookie, trying localStorage')
+        console.warn('⚠️ Could not parse company_session cookie, trying localStorage')
         document.cookie = 'company_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
       }
     }
@@ -55,13 +56,14 @@ function getSessionData() {
     
     // Check expiration
     if (session.expires_at && new Date(session.expires_at) < new Date()) {
+      console.warn('🔴 Session expired (localStorage), clearing')
       localStorage.removeItem('company_session')
       return null
     }
     
     return session
   } catch (error) {
-    console.error('Error getting session data:', error)
+    console.error('❌ Error getting session data:', error)
     return null
   }
 }
@@ -82,6 +84,9 @@ export function createClient(): SupabaseClient {
   // CRITICAL: Add x-company-token header if available
   if (session?.access_token) {
     headers['x-company-token'] = session.access_token
+    console.log('✅ Creating Supabase client WITH x-company-token header')
+  } else {
+    console.warn('⚠️ Creating Supabase client WITHOUT x-company-token header (session not found)')
   }
 
   const client = createSupabaseClient(supabaseUrl, supabaseKey, {
@@ -112,7 +117,15 @@ export function getAccessToken(): string | null {
 // Check if user is authenticated
 export function isAuthenticated(): boolean {
   const session = getSessionData()
-  return !!session && !!session.company_id && !!session.access_token
+  const authenticated = !!session && !!session.company_id && !!session.access_token
+  
+  if (authenticated) {
+    console.log('✅ User is authenticated, company_id:', session.company_id)
+  } else {
+    console.warn('⚠️ User is NOT authenticated')
+  }
+  
+  return authenticated
 }
 
 // Get full session
@@ -123,6 +136,7 @@ export function getSession() {
 // Clear session
 export function clearSession() {
   if (typeof window !== 'undefined') {
+    console.log('🗑️ Clearing session')
     localStorage.removeItem('company_session')
     document.cookie = 'company_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
   }
@@ -131,9 +145,13 @@ export function clearSession() {
 // Refresh session if needed
 export async function refreshSession(): Promise<boolean> {
   const session = getSessionData()
-  if (!session?.access_token) return false
+  if (!session?.access_token) {
+    console.warn('⚠️ No session to refresh')
+    return false
+  }
   
   try {
+    console.log('🔄 Refreshing session...')
     const response = await fetch('/api/auth/refresh', {
       method: 'POST',
       headers: {
@@ -143,6 +161,7 @@ export async function refreshSession(): Promise<boolean> {
     })
     
     if (!response.ok) {
+      console.error('❌ Session refresh failed:', response.status)
       clearSession()
       return false
     }
@@ -152,12 +171,27 @@ export async function refreshSession(): Promise<boolean> {
       // Update session in both cookie and localStorage
       localStorage.setItem('company_session', JSON.stringify(data.session))
       document.cookie = `company_session=${encodeURIComponent(JSON.stringify(data.session))}; path=/; max-age=86400; samesite=strict`
+      console.log('✅ Session refreshed successfully')
       return true
     }
     
+    console.warn('⚠️ Session refresh returned no session')
     return false
   } catch (error) {
-    console.error('Session refresh error:', error)
+    console.error('❌ Session refresh error:', error)
     return false
   }
+}
+
+// Debug helper to log current session state
+export function debugSession() {
+  const session = getSessionData()
+  console.log('🔍 Session Debug:', {
+    hasSession: !!session,
+    companyId: session?.company_id || 'N/A',
+    hasAccessToken: !!session?.access_token,
+    expiresAt: session?.expires_at || 'N/A',
+    isExpired: session?.expires_at ? new Date(session.expires_at) < new Date() : 'N/A'
+  })
+  return session
 }

@@ -1,5 +1,5 @@
 // lib/hooks/useOptimizedKPIData.ts
-// FIXED: Proper data loading with company context
+// FIXED: Create Supabase client INSIDE useEffect to ensure session is available
 
 'use client'
 
@@ -59,7 +59,7 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
-  const supabase = createClient()
+  // CRITICAL FIX: Remove supabase client from outside useEffect
   const prevParamsRef = useRef({ establishmentId: '', period: '' })
 
   useEffect(() => {
@@ -90,6 +90,9 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
       try {
         setLoading(true)
         setError(null)
+
+        // CRITICAL FIX: Create client INSIDE useEffect to ensure session is available
+        const supabase = createClient()
 
         // CRITICAL FIX: Verify establishment belongs to company
         const { data: establishment, error: estError } = await supabase
@@ -352,7 +355,8 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
     }
 
     fetchData()
-  }, [establishmentId, period, supabase])
+    // CRITICAL FIX: Remove supabase from dependencies since we create it fresh each time
+  }, [establishmentId, period])
 
   return { 
     data, 
