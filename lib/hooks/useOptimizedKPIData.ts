@@ -201,7 +201,7 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
             pctFemmes: workforce.pct_femmes || 0
           } : null,
           
-          financials: financials,
+          financials: financials as FinancialsData | null,
           
           absences: absences ? {
             tauxAbsenteisme: absences.taux_absenteisme || 0,
@@ -238,9 +238,9 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
             pctFemmes: prevYearWorkforce.pct_femmes || 0
           } : null,
           
-          previousMonthFinancials: prevMonthFinancials,
+          previousMonthFinancials: prevMonthFinancials as FinancialsData | null,
           
-          previousYearFinancials: prevYearFinancials,
+          previousYearFinancials: prevYearFinancials as FinancialsData | null,
           
           previousMonthAbsences: prevMonthAbsences ? {
             tauxAbsenteisme: prevMonthAbsences.taux_absenteisme || 0,

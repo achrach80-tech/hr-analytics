@@ -1,18 +1,7 @@
 'use client'
 
 import React from 'react'
-import { motion } from 'framer-motion'
-import {
-  TrendingUp, TrendingDown, DollarSign, Wallet,
-  PieChart, ArrowUpRight, ArrowDownRight, Zap,
-  Target, Award, Users, Percent
-} from 'lucide-react'
-
-// ============================================
-// TYPES - Définitions des données
-// ============================================
-
-import { FinancialsData } from '@/lib/types/dashboard'
+import type { FinancialsData } from '@/lib/types/dashboard'
 
 interface CyberPayrollSectionProps {
   data: FinancialsData | null
