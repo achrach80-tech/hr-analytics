@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, isAuthenticated, debugSession } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Building2, Calendar, ChevronDown, Sparkles, Brain,
@@ -48,7 +48,9 @@ export default function CyberDashboard() {
     if (!estId || !mountedRef.current) return
     
     try {
-      // FIXED: Create client fresh each time to ensure headers are included
+      console.log('📅 Loading periods for establishment:', estId)
+      
+      // CRITICAL FIX: Create client fresh to ensure x-company-token is included
       const supabase = createClient()
       
       // Try snapshots first
@@ -62,7 +64,7 @@ export default function CyberDashboard() {
       if (!mountedRef.current) return
 
       if (snapError) {
-        console.error('Snapshot query error:', snapError)
+        console.error('❌ Snapshot query error:', snapError)
         
         // Fallback to employes table
         const { data: fallbackData, error: fallbackError } = await supabase
@@ -75,7 +77,7 @@ export default function CyberDashboard() {
         if (!mountedRef.current) return
 
         if (fallbackError) {
-          console.error('Fallback error:', fallbackError)
+          console.error('❌ Fallback error:', fallbackError)
           setError('Aucune période trouvée. Importez vos données.')
           return
         }
@@ -85,6 +87,7 @@ export default function CyberDashboard() {
         
         if (uniquePeriods.length > 0) {
           setSelectedPeriod(uniquePeriods[0])
+          console.log('✅ Loaded', uniquePeriods.length, 'periods from employes')
         } else {
           setError('Aucune donnée disponible.')
         }
@@ -97,17 +100,18 @@ export default function CyberDashboard() {
 
       if (uniquePeriods.length > 0) {
         setSelectedPeriod(uniquePeriods[0])
+        console.log('✅ Loaded', uniquePeriods.length, 'periods from snapshots')
       } else {
         setError('Aucune période disponible. Importez vos données.')
       }
     } catch (err) {
       if (!mountedRef.current) return
-      console.error('Unexpected error loading periods:', err)
+      console.error('❌ Unexpected error loading periods:', err)
       setError('Erreur système')
     }
   }, [])
 
-  // OPTIMIZATION: Single useEffect for initialization - only runs once
+  // CRITICAL FIX: Single useEffect for initialization with proper session check
   useEffect(() => {
     // Prevent double initialization
     if (initializedRef.current) return
@@ -118,20 +122,27 @@ export default function CyberDashboard() {
         setInitialLoading(true)
         setError(null)
 
-        console.log('🔄 Initializing dashboard...')
-
-        // Check session
-        const sessionStr = localStorage.getItem('company_session')
-        if (!sessionStr) {
+        console.log('🚀 Initializing dashboard...')
+        
+        // CRITICAL FIX: Debug session state first
+        const sessionDebug = debugSession()
+        
+        if (!sessionDebug) {
           console.log('❌ No session found, redirecting to login')
           router.push('/login')
           return
         }
 
-        const session = JSON.parse(sessionStr)
-        console.log('✅ Session found for company:', session.company_id)
+        // CRITICAL FIX: Verify authentication before proceeding
+        if (!isAuthenticated()) {
+          console.log('❌ User not authenticated, redirecting to login')
+          router.push('/login')
+          return
+        }
 
-        // FIXED: Create Supabase client AFTER we have the session
+        console.log('✅ Session verified, company_id:', sessionDebug.company_id)
+
+        // CRITICAL FIX: Create Supabase client AFTER session verification
         // This ensures the x-company-token header is included
         const supabase = createClient()
 
@@ -149,7 +160,7 @@ export default function CyberDashboard() {
               is_headquarters
             )
           `)
-          .eq('id', session.company_id)
+          .eq('id', sessionDebug.company_id)
           .single()
 
         if (companyError) {
@@ -160,6 +171,17 @@ export default function CyberDashboard() {
             hint: companyError.hint,
             code: companyError.code
           })
+          
+          // Provide helpful error messages based on error code
+          if (companyError.code === 'PGRST116' || companyError.message?.includes('0 rows')) {
+            setError('Entreprise introuvable. Vérifiez votre token d\'accès.')
+          } else if (companyError.code === '42501' || companyError.message?.includes('permission')) {
+            setError('Accès refusé. Le token ne donne pas accès aux données.')
+            setTimeout(() => router.push('/login'), 2000)
+          } else {
+            setError(`Erreur: ${companyError.message}`)
+          }
+          
           throw companyError
         }
 
@@ -185,18 +207,9 @@ export default function CyberDashboard() {
         if (!mountedRef.current) return
         console.error('❌ Initialize error:', err)
         
-        if (err && typeof err === 'object' && 'code' in err) {
-          const error = err as any
-          if (error.code === 'PGRST116' || error.message?.includes('0 rows')) {
-            setError('Entreprise introuvable. Vérifiez votre token d\'accès.')
-          } else if (error.code === '42501' || error.message?.includes('permission')) {
-            setError('Accès refusé. Reconnectez-vous.')
-            setTimeout(() => router.push('/login'), 2000)
-          } else {
-            setError('Erreur de chargement. Réessayez.')
-          }
-        } else {
-          setError('Erreur d\'initialisation')
+        // Only set error if we haven't already
+        if (!error) {
+          setError('Erreur d\'initialisation du dashboard')
         }
       } finally {
         if (mountedRef.current) {
@@ -212,182 +225,186 @@ export default function CyberDashboard() {
     }
   }, [router, loadPeriodsForEstablishment])
 
-  // OPTIMIZATION: Separate useEffect for modal overflow management
-  useEffect(() => {
-    if (typeof document !== 'undefined') {
-      document.body.style.overflow = showPeriodSelector ? 'hidden' : 'unset'
-    }
-    return () => {
-      if (typeof document !== 'undefined') {
-        document.body.style.overflow = 'unset'
-      }
-    }
-  }, [showPeriodSelector])
-
-  // OPTIMIZATION: Memoized format function
-  const formatPeriodDisplay = useCallback((periode: string): string => {
-    if (!periode) return ''
-    try {
-      const date = new Date(periode)
-      return date.toLocaleDateString('fr-FR', { 
-        month: 'long', 
-        year: 'numeric' 
-      })
-    } catch {
-      return periode
-    }
-  }, [])
-
-  // OPTIMIZATION: Memoized period change handler
-  const handlePeriodChange = useCallback((period: string) => {
-    setSelectedPeriod(period)
+  // Handle period changes
+  const handlePeriodChange = useCallback((newPeriod: string) => {
+    setSelectedPeriod(newPeriod)
     setShowPeriodSelector(false)
   }, [])
 
-  // Loading state
+  // Format period for display
+  const formatPeriodDisplay = (period: string) => {
+    if (!period) return ''
+    try {
+      const date = new Date(period)
+      return date.toLocaleDateString('fr-FR', { year: 'numeric', month: 'long' })
+    } catch {
+      return period
+    }
+  }
+
+  // Show loading state
   if (initialLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center">
-        <motion.div 
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 flex items-center justify-center">
+        <motion.div
           className="text-center"
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
         >
           <motion.div
-            className="w-32 h-32 mx-auto mb-8 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-3xl flex items-center justify-center"
-            animate={{ 
+            className="w-32 h-32 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl"
+            animate={{
               rotate: [0, 360],
               scale: [1, 1.1, 1]
             }}
-            transition={{ 
-              duration: 3,
+            transition={{
+              duration: 2,
               repeat: Infinity,
               ease: "easeInOut"
             }}
           >
-            <Brain size={64} className="text-white" />
+            <Brain size={64} className="text-white drop-shadow-lg" />
           </motion.div>
           <h2 className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent mb-4">
-            Initialisation du Dashboard
+            Initialisation...
           </h2>
           <p className="text-slate-400 text-lg">
-            Chargement des données cyberpunk...
+            Chargement de vos données cyberpunk
           </p>
         </motion.div>
       </div>
     )
   }
 
-  // Error state
+  // Show error state
   if (error && !company) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center p-4">
-        <motion.div 
-          className="max-w-md w-full bg-slate-900/50 backdrop-blur-xl border border-red-500/30 rounded-2xl p-8"
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 flex items-center justify-center">
+        <motion.div
+          className="text-center max-w-lg mx-auto p-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <AlertTriangle size={40} className="text-white" />
-          </div>
-          <h2 className="text-2xl font-bold text-white text-center mb-4">
-            Erreur de Chargement
+          <motion.div
+            className="w-32 h-32 bg-gradient-to-br from-red-500 to-orange-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl"
+            animate={{
+              rotate: [0, 5, -5, 0],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+            }}
+          >
+            <AlertTriangle size={64} className="text-white drop-shadow-lg" />
+          </motion.div>
+          <h2 className="text-4xl font-bold text-white mb-4">
+            Erreur
           </h2>
-          <p className="text-slate-300 text-center mb-6">
+          <p className="text-slate-300 text-lg mb-8">
             {error}
           </p>
-          <div className="flex gap-4">
-            <button
-              onClick={() => window.location.reload()}
-              className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl text-white font-semibold transition-all"
-            >
-              Réessayer
-            </button>
-            <button
-              onClick={() => router.push('/login')}
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400 rounded-xl text-white font-semibold transition-all"
-            >
-              Se Reconnecter
-            </button>
-          </div>
+          <motion.button
+            onClick={() => router.push('/login')}
+            className="px-8 py-4 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-xl font-bold hover:opacity-90 transition-opacity"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            Retour à la connexion
+          </motion.button>
         </motion.div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 relative overflow-hidden">
-      {/* Cyber grid background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 relative overflow-hidden">
+      {/* Animated background effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <motion.div
+          className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"
+          animate={{
+            scale: [1, 1.2, 1],
+            opacity: [0.3, 0.5, 0.3],
+          }}
+          transition={{
+            duration: 8,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        />
+        <motion.div
+          className="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl"
+          animate={{
+            scale: [1.2, 1, 1.2],
+            opacity: [0.3, 0.5, 0.3],
+          }}
+          transition={{
+            duration: 10,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        />
       </div>
 
       {/* Header */}
-      <motion.div 
-        className="relative z-20 border-b border-slate-800/50 bg-slate-900/30 backdrop-blur-xl"
-        initial={{ y: -100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.6 }}
+      <motion.div
+        className="relative z-20 border-b border-slate-700/30 bg-slate-900/50 backdrop-blur-xl"
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ type: "spring", stiffness: 100 }}
       >
-        <div className="max-w-[1800px] mx-auto px-8 py-6">
+        <div className="px-8 py-6">
           <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-4 mb-2">
-                <motion.div 
-                  className="w-12 h-12 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-xl flex items-center justify-center"
-                  whileHover={{ scale: 1.1, rotate: 180 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <Brain size={24} className="text-white" />
-                </motion.div>
+            <div className="flex items-center gap-6">
+              <motion.div
+                className="flex items-center gap-3"
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Brain size={28} className="text-white" />
+                </div>
                 <div>
-                  <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+                  <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
                     {company?.nom || 'Dashboard'}
                   </h1>
-                  <p className="text-slate-400 text-sm">
-                    Plan: {company?.subscription_plan || 'N/A'}
+                  <p className="text-sm text-slate-400">
+                    Analytics Platform
                   </p>
                 </div>
-              </div>
-            </div>
+              </motion.div>
 
-            <div className="flex items-center gap-4">
-              {/* Period selector */}
-              <div className="relative">
-                <motion.button
-                  onClick={() => setShowPeriodSelector(!showPeriodSelector)}
-                  className="px-6 py-3 bg-slate-800/50 backdrop-blur-xl border border-slate-700 hover:border-purple-500/50 rounded-xl flex items-center gap-3 transition-all shadow-lg"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Calendar size={18} className="text-purple-400" />
-                  <span className="text-white font-medium">
-                    {selectedPeriod ? formatPeriodDisplay(selectedPeriod) : 'Sélectionner période'}
-                  </span>
-                  <motion.div
-                    animate={{ rotate: showPeriodSelector ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <ChevronDown size={18} className="text-slate-400" />
-                  </motion.div>
-                </motion.button>
+              <div className="flex items-center gap-3 pl-6 border-l border-slate-700/50">
+                <Building2 size={20} className="text-purple-400" />
+                <span className="text-slate-300 font-medium">
+                  {selectedEstablishment?.nom || 'Sélectionnez'}
+                </span>
               </div>
 
               <motion.button
-                onClick={() => router.push('/import')}
-                className="px-6 py-3 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-xl font-medium hover:opacity-90 transition-opacity shadow-lg"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowPeriodSelector(true)}
+                className="flex items-center gap-3 px-4 py-2 bg-slate-800/50 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-all"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
               >
-                <div className="flex items-center gap-2">
-                  <Sparkles size={18} />
-                  Import
-                </div>
+                <Calendar size={18} className="text-cyan-400" />
+                <span className="text-slate-300 font-medium">
+                  {formatPeriodDisplay(selectedPeriod) || 'Sélectionner'}
+                </span>
+                <ChevronDown size={18} className="text-slate-500" />
               </motion.button>
             </div>
+
+            <motion.button
+              onClick={() => router.push('/import')}
+              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-xl font-medium hover:opacity-90 transition-opacity shadow-lg"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} />
+                Import
+              </div>
+            </motion.button>
           </div>
         </div>
       </motion.div>
@@ -476,36 +493,36 @@ export default function CyberDashboard() {
       {/* Main content */}
       <div className="relative z-10 p-8 space-y-12">
         {kpiData ? (
-  <>
-    <CyberWorkforceSection 
-      data={kpiData.workforce} 
-      loading={kpiLoading}
-      previousMonthData={kpiData.previousMonthWorkforce}
-      previousYearData={kpiData.previousYearWorkforce}
-    />
-    
-    <CyberPayrollSection 
-      data={kpiData?.financials || null}
-      previousMonthData={kpiData?.previousMonthFinancials || null}
-      previousYearData={kpiData?.previousYearFinancials || null}
-      loading={kpiLoading} 
-    />
-    
-    <CyberAbsenceSection 
-      data={kpiData.absences} 
-      loading={kpiLoading}
-      previousMonthData={kpiData.previousMonthAbsences}
-      previousYearData={kpiData.previousYearAbsences}
-    />
-    
-    <CyberDemographicsSection 
-      data={kpiData.workforce} 
-      loading={kpiLoading}
-      previousMonthData={kpiData.previousMonthWorkforce}
-      previousYearData={kpiData.previousYearWorkforce}
-    />
-  </>
-) : (
+          <>
+            <CyberWorkforceSection 
+              data={kpiData.workforce} 
+              loading={kpiLoading}
+              previousMonthData={kpiData.previousMonthWorkforce}
+              previousYearData={kpiData.previousYearWorkforce}
+            />
+            
+            <CyberPayrollSection 
+              data={kpiData?.financials || null}
+              previousMonthData={kpiData?.previousMonthFinancials || null}
+              previousYearData={kpiData?.previousYearFinancials || null}
+              loading={kpiLoading} 
+            />
+            
+            <CyberAbsenceSection 
+              data={kpiData.absences} 
+              loading={kpiLoading}
+              previousMonthData={kpiData.previousMonthAbsences}
+              previousYearData={kpiData.previousYearAbsences}
+            />
+            
+            <CyberDemographicsSection 
+              data={kpiData.workforce} 
+              loading={kpiLoading}
+              previousMonthData={kpiData.previousMonthWorkforce}
+              previousYearData={kpiData.previousYearWorkforce}
+            />
+          </>
+        ) : (
           <motion.div 
             className="text-center py-20"
             initial={{ opacity: 0, scale: 0.9 }}
@@ -564,7 +581,7 @@ export default function CyberDashboard() {
             </div>
             <div className="flex items-center gap-2">
               <Zap size={14} className="text-purple-400" />
-              <span>Talvio Analytics v5.0</span>
+              <span>Talvio Analytics v5.1</span>
             </div>
           </div>
         </motion.div>

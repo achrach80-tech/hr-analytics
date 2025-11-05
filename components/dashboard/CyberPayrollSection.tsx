@@ -12,32 +12,7 @@ import {
 // TYPES - Définitions des données
 // ============================================
 
-interface FinancialsData {
-  // Totaux mensuels
-  total_salaire_brut: number
-  total_salaire_de_base: number
-  total_primes_fixes: number
-  total_primes_variables: number
-  total_primes_exceptionnelles: number
-  total_heures_supp_payees: number
-  total_avantages_nature: number
-  total_indemnites: number
-  
-  // Charges
-  total_cotisations_sociales: number
-  total_taxes_sur_salaire: number
-  total_autres_charges: number
-  total_masse_salariale_chargee: number
-  
-  // Moyennes
-  salaire_brut_moyen: number
-  salaire_net_moyen: number
-  masse_salariale_moyenne: number
-  
-  // Métadonnées
-  nombre_bulletins: number
-  periode: string
-}
+import { FinancialsData } from '@/lib/types/dashboard'
 
 interface CyberPayrollSectionProps {
   data: FinancialsData | null

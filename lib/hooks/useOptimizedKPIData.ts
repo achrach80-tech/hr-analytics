@@ -5,49 +5,14 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient, getCompanyId } from '@/lib/supabase/client'
-
-interface WorkforceKPIs {
-  etpTotal: number
-  headcountActif: number
-  nbEntrees: number
-  nbSorties: number
-  tauxTurnover: number
-  pctCDI: number
-  ageMoyen: number
-  ancienneteMoyenne: number
-  pctHommes: number
-  pctFemmes: number
-}
-
-interface PayrollKPIs {
-  masseBrute: number
-  coutTotal: number
-  salaireMoyen: number
-  coutMoyenFTE: number
-  partVariable: number
-  tauxCharges: number
-  effetPrix: number
-  effetVolume: number
-  effetMix: number
-  variationMasseSalariale: number
-  variationMasseSalarialePct: number
-}
-
-interface AbsenceKPIs {
-  tauxAbsenteisme: number
-  nbJoursAbsence: number
-  nbAbsencesTotal: number
-  dureeMoyenne: number
-  nbSalariesAbsents: number
-  nbJoursMaladie: number
-}
+import { FinancialsData, WorkforceKPIs, AbsenceKPIs } from '@/lib/types/dashboard'
 
 interface KPIData {
   workforce: WorkforceKPIs | null
-  financials: PayrollKPIs | null
+  financials: FinancialsData | null
   absences: AbsenceKPIs | null
-  previousMonthFinancials: PayrollKPIs | null
-  previousYearFinancials: PayrollKPIs | null
+  previousMonthFinancials: FinancialsData | null
+  previousYearFinancials: FinancialsData | null
   previousMonthWorkforce: WorkforceKPIs | null
   previousYearWorkforce: WorkforceKPIs | null
   previousMonthAbsences: AbsenceKPIs | null
@@ -236,19 +201,7 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
             pctFemmes: workforce.pct_femmes || 0
           } : null,
           
-          financials: financials ? {
-            masseBrute: financials.masse_salariale_brute || 0,
-            coutTotal: financials.cout_total_employeur || 0,
-            salaireMoyen: financials.salaire_base_moyen || 0,
-            coutMoyenFTE: financials.cout_moyen_par_fte || 0,
-            partVariable: financials.part_variable || 0,
-            tauxCharges: financials.taux_charges || 0,
-            effetPrix: financials.effet_prix || 0,
-            effetVolume: financials.effet_volume || 0,
-            effetMix: financials.effet_mix || 0,
-            variationMasseSalariale: financials.variation_masse_salariale || 0,
-            variationMasseSalarialePct: financials.variation_masse_salariale_pct || 0
-          } : null,
+          financials: financials,
           
           absences: absences ? {
             tauxAbsenteisme: absences.taux_absenteisme || 0,
@@ -285,33 +238,9 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
             pctFemmes: prevYearWorkforce.pct_femmes || 0
           } : null,
           
-          previousMonthFinancials: prevMonthFinancials ? {
-            masseBrute: prevMonthFinancials.masse_salariale_brute || 0,
-            coutTotal: prevMonthFinancials.cout_total_employeur || 0,
-            salaireMoyen: prevMonthFinancials.salaire_base_moyen || 0,
-            coutMoyenFTE: prevMonthFinancials.cout_moyen_par_fte || 0,
-            partVariable: prevMonthFinancials.part_variable || 0,
-            tauxCharges: prevMonthFinancials.taux_charges || 0,
-            effetPrix: prevMonthFinancials.effet_prix || 0,
-            effetVolume: prevMonthFinancials.effet_volume || 0,
-            effetMix: prevMonthFinancials.effet_mix || 0,
-            variationMasseSalariale: prevMonthFinancials.variation_masse_salariale || 0,
-            variationMasseSalarialePct: prevMonthFinancials.variation_masse_salariale_pct || 0
-          } : null,
+          previousMonthFinancials: prevMonthFinancials,
           
-          previousYearFinancials: prevYearFinancials ? {
-            masseBrute: prevYearFinancials.masse_salariale_brute || 0,
-            coutTotal: prevYearFinancials.cout_total_employeur || 0,
-            salaireMoyen: prevYearFinancials.salaire_base_moyen || 0,
-            coutMoyenFTE: prevYearFinancials.cout_moyen_par_fte || 0,
-            partVariable: prevYearFinancials.part_variable || 0,
-            tauxCharges: prevYearFinancials.taux_charges || 0,
-            effetPrix: prevYearFinancials.effet_prix || 0,
-            effetVolume: prevYearFinancials.effet_volume || 0,
-            effetMix: prevYearFinancials.effet_mix || 0,
-            variationMasseSalariale: prevYearFinancials.variation_masse_salariale || 0,
-            variationMasseSalarialePct: prevYearFinancials.variation_masse_salariale_pct || 0
-          } : null,
+          previousYearFinancials: prevYearFinancials,
           
           previousMonthAbsences: prevMonthAbsences ? {
             tauxAbsenteisme: prevMonthAbsences.taux_absenteisme || 0,
