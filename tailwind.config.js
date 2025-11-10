@@ -126,4 +126,10 @@ module.exports = {
     },
   },
   plugins: [require("tailwindcss-animate")],
+  // tailwind.config.js
+safelist: [
+  'border-blue-500/20',
+  'hover:shadow-blue-500/10',
+  // Toutes les classes dynamiques
+]
 }
