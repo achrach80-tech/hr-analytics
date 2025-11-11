@@ -51,7 +51,7 @@ export default function CyberDashboard() {
     try {
       // Try snapshots first
       const { data: periodData, error: snapError } = await supabase
-        .from('snapshots_workforce')
+        .from('snapshots_mensuels')
         .select('periode')
         .eq('etablissement_id', estId)
         .not('periode', 'is', null)

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef } from 'react'
-import { OptimizedProcessor } from '../optimized/optimizedProcessor'
+import { GDPROptimizedProcessor } from '../optimized/Gdproptimizedprocessor'
 import type { 
   ProcessedData, 
   ImportProgress, 
@@ -23,7 +23,7 @@ export const useImport = () => {
   const [importLogs, setImportLogs] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const processorRef = useRef<OptimizedProcessor | null>(null)
+  const processorRef = useRef<GDPROptimizedProcessor | null>(null)
 
   const addLog = useCallback((message: string, type: LogType = 'info'): void => {
     const timestamp = new Date().toLocaleTimeString('fr-FR')
@@ -53,7 +53,7 @@ export const useImport = () => {
       setError(null)
       setImportLogs([])
       
-      processorRef.current = new OptimizedProcessor()
+      processorRef.current = new GDPROptimizedProcessor()
       
       await processorRef.current.processImport(
         processedData,

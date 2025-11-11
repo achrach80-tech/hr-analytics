@@ -100,17 +100,17 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
           prevYearAbsencesResult
         ] = await Promise.all([
           // Période actuelle
-          supabase.from('snapshots_workforce').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
-          supabase.from('snapshots_financials').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
-          supabase.from('snapshots_absences').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
+          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
+          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
+          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
           
           // Mois précédent
-          supabase.from('snapshots_workforce').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
-          supabase.from('snapshots_workforce').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle(),
-          supabase.from('snapshots_financials').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
-          supabase.from('snapshots_financials').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle(),
-          supabase.from('snapshots_absences').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
-          supabase.from('snapshots_absences').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle()
+          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
+          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle(),
+          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
+          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle(),
+          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
+          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle()
         ])
 
         if (workforceResult.error) {
