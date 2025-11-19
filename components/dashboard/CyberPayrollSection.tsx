@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { 
   DollarSign, Calculator, Target, Percent, Shield
@@ -8,7 +8,22 @@ import {
 import { CyberKPICard } from './CyberKPICard'
 import { CyberSectionHeader } from './CyberSectionHeader'
 import { WaterfallChart } from './WaterfallChart'
-import type { PayrollKPIs } from '@/lib/types/dashboard'
+
+interface PayrollKPIs {
+  masseBrute: number
+  coutTotal: number
+  salaireMoyen: number
+  coutMoyenFTE: number
+  partVariable: number
+  tauxCharges: number
+  effetPrix: number
+  effetVolume: number
+  effetMix: number
+  variationMasseSalariale: number
+  variationMasseSalarialePct: number
+  primesExceptionnelles?: number
+  primesMois13?: number
+}
 
 interface CyberPayrollSectionProps {
   data: PayrollKPIs | null
@@ -23,6 +38,32 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
   previousYearData,
   loading = false 
 }) => {
+  
+  // 🔍 DEBUG: Log des données reçues
+  useEffect(() => {
+    if (data && !loading) {
+      console.group('💰 CyberPayrollSection - Données reçues')
+      console.log('Masse Brute (M):', data.masseBrute)
+      console.log('Masse Brute (M-1):', previousMonthData?.masseBrute || 'N/A')
+      console.log('Effet Prix:', data.effetPrix)
+      console.log('Effet Volume:', data.effetVolume)
+      console.log('Variation stockée:', data.variationMasseSalariale)
+      
+      if (previousMonthData) {
+        const variationCalculee = data.masseBrute - previousMonthData.masseBrute
+        const effetsTotal = data.effetPrix + data.effetVolume
+        const ecart = Math.abs(variationCalculee - effetsTotal)
+        
+        console.log('🧮 Vérification:')
+        console.log('   Variation calculée:', variationCalculee)
+        console.log('   Effets (Prix + Volume):', effetsTotal)
+        console.log('   Écart:', ecart)
+        console.log('   Cohérence:', ecart < 100 ? '✅' : '❌')
+      }
+      console.groupEnd()
+    }
+  }, [data, previousMonthData, loading])
+
   if (loading) {
     return <PayrollSkeleton />
   }
@@ -75,17 +116,28 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
     ? data.tauxCharges - previousYearData.tauxCharges
     : undefined
 
+  // ✅ CORRECTION: Validation stricte des conditions d'affichage waterfall
   const hasEffectsData = (
-    data.effetPrix !== undefined && data.effetPrix !== null &&
-    data.effetVolume !== undefined && data.effetVolume !== null &&
-    data.effetMix !== undefined && data.effetMix !== null
+    typeof data.effetPrix === 'number' && 
+    typeof data.effetVolume === 'number'
   )
 
-  const masseSalarialeM1 = hasEffectsData 
-    ? data.masseBrute - (data.effetPrix || 0) - (data.effetVolume || 0) - (data.effetMix || 0)
-    : 0
+  const hasPreviousMonthData = (
+    previousMonthData !== null && 
+    previousMonthData !== undefined &&
+    previousMonthData.masseBrute > 0
+  )
 
-  const shouldShowWaterfall = hasEffectsData && masseSalarialeM1 > 0
+  const shouldShowWaterfall = hasEffectsData && hasPreviousMonthData
+
+  // 🔍 DEBUG: Log de la décision d'affichage
+  console.log('🎯 Waterfall Display Decision:', {
+    shouldShow: shouldShowWaterfall,
+    hasEffects: hasEffectsData,
+    hasPrevMonth: hasPreviousMonthData,
+    masseBruteM: data.masseBrute,
+    masseBruteM1: previousMonthData?.masseBrute || 0
+  })
 
   return (
     <motion.section
@@ -148,11 +200,12 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
         >
           <WaterfallChart
             data={{
-              masseSalarialeM1: masseSalarialeM1,
-              effetPrix: data.effetPrix || 0,
-              effetVolume: data.effetVolume || 0,
-              effetMix: data.effetMix || 0,
-              masseSalarialeM: data.masseBrute
+              masseSalarialeM1: previousMonthData!.masseBrute,
+              effetPrix: data.effetPrix,
+              effetVolume: data.effetVolume,
+              masseSalarialeM: data.masseBrute,
+              primesExceptionnelles: data.primesExceptionnelles,
+              primesMois13: data.primesMois13
             }}
             loading={false}
           />
@@ -172,10 +225,31 @@ export const CyberPayrollSection: React.FC<CyberPayrollSectionProps> = React.mem
               <h3 className="text-white font-semibold text-lg mb-2">
                 Waterfall non disponible
               </h3>
-              <p className="text-slate-400 text-sm max-w-md mx-auto">
-                Les données d'effets Prix/Volume/Mix n'ont pas encore été calculées pour cette période. 
-                {!hasEffectsData && " Elles seront disponibles après avoir importé au moins 2 mois de données."}
+              <p className="text-slate-400 text-sm max-w-md mx-auto mb-4">
+                {!hasPreviousMonthData 
+                  ? "📅 Les données du mois précédent sont nécessaires. Importez au moins 2 mois consécutifs."
+                  : !hasEffectsData
+                  ? "⚙️ Les effets Prix/Volume n'ont pas été calculés."
+                  : "❌ Données insuffisantes pour afficher le waterfall."}
               </p>
+              
+              {/* Instructions SQL pour recalcul */}
+              {!hasEffectsData && (
+                <div className="mt-4 p-4 bg-slate-900/50 rounded-lg border border-slate-600/30 text-left max-w-2xl mx-auto">
+                  <div className="text-xs text-slate-300 mb-2 font-semibold">
+                    💡 Action requise - Exécutez cette fonction SQL:
+                  </div>
+                  <code className="block text-xs text-cyan-400 bg-slate-950 p-3 rounded overflow-x-auto">
+                    SELECT calculate_payroll_effects_v3(<br/>
+                    &nbsp;&nbsp;'votre-etablissement-id',<br/>
+                    &nbsp;&nbsp;'2024-11-01'::DATE<br/>
+                    );
+                  </code>
+                  <div className="text-xs text-slate-400 mt-2">
+                    Puis rafraîchissez cette page (F5)
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>

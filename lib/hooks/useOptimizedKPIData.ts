@@ -28,6 +28,9 @@ interface PayrollKPIs {
   effetMix: number
   variationMasseSalariale: number
   variationMasseSalarialePct: number
+  // ✅ AJOUT: Données pour analyse intelligente du waterfall
+  primesExceptionnelles?: number
+  primesMois13?: number
 }
 
 interface AbsenceKPIs {
@@ -77,8 +80,11 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
         setLoading(true)
         setError(null)
 
-        const currentDate = new Date(period)
+        // ✅ CORRECTION: Normaliser la période au format YYYY-MM-01
+        const normalizedPeriod = period.substring(0, 7) + '-01'
+        const currentDate = new Date(normalizedPeriod)
         
+        // Calculer les périodes de référence
         const previousMonthDate = new Date(currentDate)
         previousMonthDate.setMonth(previousMonthDate.getMonth() - 1)
         const previousMonthPeriod = previousMonthDate.toISOString().split('T')[0].substring(0, 7) + '-01'
@@ -87,152 +93,209 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
         previousYearDate.setFullYear(previousYearDate.getFullYear() - 1)
         const previousYearPeriod = previousYearDate.toISOString().split('T')[0].substring(0, 7) + '-01'
 
-        // ✅ NOUVELLE MÉTHODE : 3 requêtes séparées au lieu d'1
+        // 🔍 DEBUG: Log des périodes calculées
+        console.group('🔍 TALVIO - Chargement KPI Data')
+        console.log('📅 Période actuelle:', normalizedPeriod)
+        console.log('📅 Période M-1:', previousMonthPeriod)
+        console.log('📅 Période N-1:', previousYearPeriod)
+        console.log('🏢 Établissement ID:', establishmentId)
+
+        // ✅ Requêtes optimisées avec Promise.all
         const [
-          workforceResult,
-          financialsResult, 
-          absencesResult,
-          prevMonthWorkforceResult,
-          prevYearWorkforceResult,
-          prevMonthFinancialsResult,
-          prevYearFinancialsResult,
-          prevMonthAbsencesResult,
-          prevYearAbsencesResult
+          currentSnapshot,
+          prevMonthSnapshot,
+          prevYearSnapshot
         ] = await Promise.all([
-          // Période actuelle
-          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
-          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
-          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', period).maybeSingle(),
+          supabase
+            .from('snapshots_mensuels')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', normalizedPeriod)
+            .maybeSingle(),
           
-          // Mois précédent
-          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
-          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle(),
-          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
-          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle(),
-          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousMonthPeriod).maybeSingle(),
-          supabase.from('snapshots_mensuels').select('*').eq('etablissement_id', establishmentId).eq('periode', previousYearPeriod).maybeSingle()
+          supabase
+            .from('snapshots_mensuels')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', previousMonthPeriod)
+            .maybeSingle(),
+          
+          supabase
+            .from('snapshots_mensuels')
+            .select('*')
+            .eq('etablissement_id', establishmentId)
+            .eq('periode', previousYearPeriod)
+            .maybeSingle()
         ])
 
-        if (workforceResult.error) {
-          console.error('Workforce snapshot error:', workforceResult.error)
-          throw workforceResult.error
+        // Vérification des erreurs
+        if (currentSnapshot.error) {
+          console.error('❌ Erreur snapshot actuel:', currentSnapshot.error)
+          throw currentSnapshot.error
         }
 
-        const workforce = workforceResult.data
-        const financials = financialsResult.data
-        const absences = absencesResult.data
+        if (prevMonthSnapshot.error) {
+          console.warn('⚠️ Erreur snapshot M-1:', prevMonthSnapshot.error)
+        }
 
-        if (workforce || financials || absences) {
+        if (prevYearSnapshot.error) {
+          console.warn('⚠️ Erreur snapshot N-1:', prevYearSnapshot.error)
+        }
+
+        const current = currentSnapshot.data
+        const prevMonth = prevMonthSnapshot.data
+        const prevYear = prevYearSnapshot.data
+
+        // 🔍 DEBUG: Log des masses salariales récupérées
+        console.log('💰 Masse salariale actuelle (M):', current?.masse_salariale_brute || 0)
+        console.log('💰 Masse salariale M-1:', prevMonth?.masse_salariale_brute || 0)
+        console.log('💰 Masse salariale N-1:', prevYear?.masse_salariale_brute || 0)
+        
+        if (current) {
+          console.log('📊 Effet Prix:', current.effet_prix || 0)
+          console.log('📊 Effet Volume:', current.effet_volume || 0)
+          console.log('📊 Variation:', current.variation_masse_salariale || 0)
+        }
+
+        // ✅ Vérification cohérence waterfall
+        if (current && prevMonth) {
+          const calculatedVariation = (current.masse_salariale_brute || 0) - (prevMonth.masse_salariale_brute || 0)
+          const storedVariation = current.variation_masse_salariale || 0
+          const ecart = Math.abs(calculatedVariation - storedVariation)
+          
+          if (ecart > 100) {
+            console.warn('⚠️ INCOHÉRENCE détectée!')
+            console.warn('   Variation calculée:', calculatedVariation)
+            console.warn('   Variation stockée:', storedVariation)
+            console.warn('   Écart:', ecart)
+            console.warn('   💡 Action requise: Exécuter calculate_payroll_effects_v3()')
+          } else {
+            console.log('✅ Cohérence waterfall validée (écart:', ecart, '€)')
+          }
+        }
+
+        console.groupEnd()
+
+        // Construction de l'objet KPIData
+        if (current || prevMonth || prevYear) {
           setData({
-            workforce: workforce ? {
-              etpTotal: workforce.etp_fin_mois || 0,
-              headcountActif: workforce.effectif_fin_mois || 0,
-              nbEntrees: workforce.nb_entrees || 0,
-              nbSorties: workforce.nb_sorties || 0,
-              tauxTurnover: workforce.taux_turnover || 0,
-              pctCDI: workforce.pct_cdi || 0,
-              ageMoyen: workforce.age_moyen || 0,
-              ancienneteMoyenne: workforce.anciennete_moyenne_mois || 0,
-              pctHommes: workforce.pct_hommes || 0,
-              pctFemmes: workforce.pct_femmes || 0
+            workforce: current ? {
+              etpTotal: current.etp_fin_mois || 0,
+              headcountActif: current.effectif_fin_mois || 0,
+              nbEntrees: current.nb_entrees || 0,
+              nbSorties: current.nb_sorties || 0,
+              tauxTurnover: current.taux_turnover || 0,
+              pctCDI: current.pct_cdi || 0,
+              ageMoyen: current.age_moyen || 0,
+              ancienneteMoyenne: current.anciennete_moyenne_mois || 0,
+              pctHommes: current.pct_hommes || 0,
+              pctFemmes: current.pct_femmes || 0
             } : null,
             
-            financials: financials ? {
-              masseBrute: financials.masse_salariale_brute || 0,
-              coutTotal: financials.cout_total_employeur || 0,
-              salaireMoyen: financials.salaire_base_moyen || 0,
-              coutMoyenFTE: financials.cout_moyen_par_fte || 0,
-              partVariable: financials.part_variable || 0,
-              tauxCharges: financials.taux_charges || 0,
-              effetPrix: financials.effet_prix || 0,
-              effetVolume: financials.effet_volume || 0,
-              effetMix: financials.effet_mix || 0,
-              variationMasseSalariale: financials.variation_masse_salariale || 0,
-              variationMasseSalarialePct: financials.variation_masse_salariale_pct || 0
+            financials: current ? {
+              masseBrute: current.masse_salariale_brute || 0,
+              coutTotal: current.cout_total_employeur || 0,
+              salaireMoyen: current.salaire_base_moyen || 0,
+              coutMoyenFTE: current.cout_moyen_par_fte || 0,
+              partVariable: current.part_variable || 0,
+              tauxCharges: current.taux_charges || 0,
+              effetPrix: current.effet_prix || 0,
+              effetVolume: current.effet_volume || 0,
+              effetMix: current.effet_mix || 0,
+              variationMasseSalariale: current.variation_masse_salariale || 0,
+              variationMasseSalarialePct: current.variation_masse_salariale_pct || 0,
+              // ✅ AJOUT: Primes pour analyse intelligente
+              primesExceptionnelles: current.primes_exceptionnelles_total || 0,
+              primesMois13: current.primes_exceptionnelles_total || 0 // À affiner selon vos données
             } : null,
             
-            absences: absences ? {
-              tauxAbsenteisme: absences.taux_absenteisme || 0,
-              nbJoursAbsence: absences.nb_jours_absence || 0,
-              nbAbsencesTotal: absences.nb_absences_total || 0,
-              dureeMoyenne: absences.duree_moyenne_absence || 0,
-              nbSalariesAbsents: absences.nb_salaries_absents || 0,
-              nbJoursMaladie: absences.nb_jours_maladie || 0
+            absences: current ? {
+              tauxAbsenteisme: current.taux_absenteisme || 0,
+              nbJoursAbsence: current.nb_jours_absence || 0,
+              nbAbsencesTotal: current.nb_absences_total || 0,
+              dureeMoyenne: current.duree_moyenne_absence || 0,
+              nbSalariesAbsents: current.nb_salaries_absents || 0,
+              nbJoursMaladie: current.nb_jours_maladie || 0
             } : null,
             
-            previousMonthWorkforce: prevMonthWorkforceResult.data ? {
-              etpTotal: prevMonthWorkforceResult.data.etp_fin_mois || 0,
-              headcountActif: prevMonthWorkforceResult.data.effectif_fin_mois || 0,
-              nbEntrees: prevMonthWorkforceResult.data.nb_entrees || 0,
-              nbSorties: prevMonthWorkforceResult.data.nb_sorties || 0,
-              tauxTurnover: prevMonthWorkforceResult.data.taux_turnover || 0,
-              pctCDI: prevMonthWorkforceResult.data.pct_cdi || 0,
-              ageMoyen: prevMonthWorkforceResult.data.age_moyen || 0,
-              ancienneteMoyenne: prevMonthWorkforceResult.data.anciennete_moyenne_mois || 0,
-              pctHommes: prevMonthWorkforceResult.data.pct_hommes || 0,
-              pctFemmes: prevMonthWorkforceResult.data.pct_femmes || 0
+            previousMonthWorkforce: prevMonth ? {
+              etpTotal: prevMonth.etp_fin_mois || 0,
+              headcountActif: prevMonth.effectif_fin_mois || 0,
+              nbEntrees: prevMonth.nb_entrees || 0,
+              nbSorties: prevMonth.nb_sorties || 0,
+              tauxTurnover: prevMonth.taux_turnover || 0,
+              pctCDI: prevMonth.pct_cdi || 0,
+              ageMoyen: prevMonth.age_moyen || 0,
+              ancienneteMoyenne: prevMonth.anciennete_moyenne_mois || 0,
+              pctHommes: prevMonth.pct_hommes || 0,
+              pctFemmes: prevMonth.pct_femmes || 0
             } : null,
             
-            previousYearWorkforce: prevYearWorkforceResult.data ? {
-              etpTotal: prevYearWorkforceResult.data.etp_fin_mois || 0,
-              headcountActif: prevYearWorkforceResult.data.effectif_fin_mois || 0,
-              nbEntrees: prevYearWorkforceResult.data.nb_entrees || 0,
-              nbSorties: prevYearWorkforceResult.data.nb_sorties || 0,
-              tauxTurnover: prevYearWorkforceResult.data.taux_turnover || 0,
-              pctCDI: prevYearWorkforceResult.data.pct_cdi || 0,
-              ageMoyen: prevYearWorkforceResult.data.age_moyen || 0,
-              ancienneteMoyenne: prevYearWorkforceResult.data.anciennete_moyenne_mois || 0,
-              pctHommes: prevYearWorkforceResult.data.pct_hommes || 0,
-              pctFemmes: prevYearWorkforceResult.data.pct_femmes || 0
+            previousYearWorkforce: prevYear ? {
+              etpTotal: prevYear.etp_fin_mois || 0,
+              headcountActif: prevYear.effectif_fin_mois || 0,
+              nbEntrees: prevYear.nb_entrees || 0,
+              nbSorties: prevYear.nb_sorties || 0,
+              tauxTurnover: prevYear.taux_turnover || 0,
+              pctCDI: prevYear.pct_cdi || 0,
+              ageMoyen: prevYear.age_moyen || 0,
+              ancienneteMoyenne: prevYear.anciennete_moyenne_mois || 0,
+              pctHommes: prevYear.pct_hommes || 0,
+              pctFemmes: prevYear.pct_femmes || 0
             } : null,
             
-            previousMonthFinancials: prevMonthFinancialsResult.data ? {
-              masseBrute: prevMonthFinancialsResult.data.masse_salariale_brute || 0,
-              coutTotal: prevMonthFinancialsResult.data.cout_total_employeur || 0,
-              salaireMoyen: prevMonthFinancialsResult.data.salaire_base_moyen || 0,
-              coutMoyenFTE: prevMonthFinancialsResult.data.cout_moyen_par_fte || 0,
-              partVariable: prevMonthFinancialsResult.data.part_variable || 0,
-              tauxCharges: prevMonthFinancialsResult.data.taux_charges || 0,
-              effetPrix: prevMonthFinancialsResult.data.effet_prix || 0,
-              effetVolume: prevMonthFinancialsResult.data.effet_volume || 0,
-              effetMix: prevMonthFinancialsResult.data.effet_mix || 0,
-              variationMasseSalariale: prevMonthFinancialsResult.data.variation_masse_salariale || 0,
-              variationMasseSalarialePct: prevMonthFinancialsResult.data.variation_masse_salariale_pct || 0
+            previousMonthFinancials: prevMonth ? {
+              masseBrute: prevMonth.masse_salariale_brute || 0,
+              coutTotal: prevMonth.cout_total_employeur || 0,
+              salaireMoyen: prevMonth.salaire_base_moyen || 0,
+              coutMoyenFTE: prevMonth.cout_moyen_par_fte || 0,
+              partVariable: prevMonth.part_variable || 0,
+              tauxCharges: prevMonth.taux_charges || 0,
+              effetPrix: prevMonth.effet_prix || 0,
+              effetVolume: prevMonth.effet_volume || 0,
+              effetMix: prevMonth.effet_mix || 0,
+              variationMasseSalariale: prevMonth.variation_masse_salariale || 0,
+              variationMasseSalarialePct: prevMonth.variation_masse_salariale_pct || 0,
+              primesExceptionnelles: prevMonth.primes_exceptionnelles_total || 0,
+              primesMois13: prevMonth.primes_exceptionnelles_total || 0
             } : null,
             
-            previousYearFinancials: prevYearFinancialsResult.data ? {
-              masseBrute: prevYearFinancialsResult.data.masse_salariale_brute || 0,
-              coutTotal: prevYearFinancialsResult.data.cout_total_employeur || 0,
-              salaireMoyen: prevYearFinancialsResult.data.salaire_base_moyen || 0,
-              coutMoyenFTE: prevYearFinancialsResult.data.cout_moyen_par_fte || 0,
-              partVariable: prevYearFinancialsResult.data.part_variable || 0,
-              tauxCharges: prevYearFinancialsResult.data.taux_charges || 0,
-              effetPrix: prevYearFinancialsResult.data.effet_prix || 0,
-              effetVolume: prevYearFinancialsResult.data.effet_volume || 0,
-              effetMix: prevYearFinancialsResult.data.effet_mix || 0,
-              variationMasseSalariale: prevYearFinancialsResult.data.variation_masse_salariale || 0,
-              variationMasseSalarialePct: prevYearFinancialsResult.data.variation_masse_salariale_pct || 0
+            previousYearFinancials: prevYear ? {
+              masseBrute: prevYear.masse_salariale_brute || 0,
+              coutTotal: prevYear.cout_total_employeur || 0,
+              salaireMoyen: prevYear.salaire_base_moyen || 0,
+              coutMoyenFTE: prevYear.cout_moyen_par_fte || 0,
+              partVariable: prevYear.part_variable || 0,
+              tauxCharges: prevYear.taux_charges || 0,
+              effetPrix: prevYear.effet_prix || 0,
+              effetVolume: prevYear.effet_volume || 0,
+              effetMix: prevYear.effet_mix || 0,
+              variationMasseSalariale: prevYear.variation_masse_salariale || 0,
+              variationMasseSalarialePct: prevYear.variation_masse_salariale_pct || 0,
+              primesExceptionnelles: prevYear.primes_exceptionnelles_total || 0,
+              primesMois13: prevYear.primes_exceptionnelles_total || 0
             } : null,
             
-            previousMonthAbsences: prevMonthAbsencesResult.data ? {
-              tauxAbsenteisme: prevMonthAbsencesResult.data.taux_absenteisme || 0,
-              nbJoursAbsence: prevMonthAbsencesResult.data.nb_jours_absence || 0,
-              nbAbsencesTotal: prevMonthAbsencesResult.data.nb_absences_total || 0,
-              dureeMoyenne: prevMonthAbsencesResult.data.duree_moyenne_absence || 0,
-              nbSalariesAbsents: prevMonthAbsencesResult.data.nb_salaries_absents || 0,
-              nbJoursMaladie: prevMonthAbsencesResult.data.nb_jours_maladie || 0
+            previousMonthAbsences: prevMonth ? {
+              tauxAbsenteisme: prevMonth.taux_absenteisme || 0,
+              nbJoursAbsence: prevMonth.nb_jours_absence || 0,
+              nbAbsencesTotal: prevMonth.nb_absences_total || 0,
+              dureeMoyenne: prevMonth.duree_moyenne_absence || 0,
+              nbSalariesAbsents: prevMonth.nb_salaries_absents || 0,
+              nbJoursMaladie: prevMonth.nb_jours_maladie || 0
             } : null,
             
-            previousYearAbsences: prevYearAbsencesResult.data ? {
-              tauxAbsenteisme: prevYearAbsencesResult.data.taux_absenteisme || 0,
-              nbJoursAbsence: prevYearAbsencesResult.data.nb_jours_absence || 0,
-              nbAbsencesTotal: prevYearAbsencesResult.data.nb_absences_total || 0,
-              dureeMoyenne: prevYearAbsencesResult.data.duree_moyenne_absence || 0,
-              nbSalariesAbsents: prevYearAbsencesResult.data.nb_salaries_absents || 0,
-              nbJoursMaladie: prevYearAbsencesResult.data.nb_jours_maladie || 0
+            previousYearAbsences: prevYear ? {
+              tauxAbsenteisme: prevYear.taux_absenteisme || 0,
+              nbJoursAbsence: prevYear.nb_jours_absence || 0,
+              nbAbsencesTotal: prevYear.nb_absences_total || 0,
+              dureeMoyenne: prevYear.duree_moyenne_absence || 0,
+              nbSalariesAbsents: prevYear.nb_salaries_absents || 0,
+              nbJoursMaladie: prevYear.nb_jours_maladie || 0
             } : null
           })
         } else {
+          console.warn('⚠️ Aucune donnée snapshot trouvée pour ces périodes')
           setData({ 
             workforce: null, 
             financials: null, 
@@ -247,7 +310,7 @@ export const useOptimizedKPIData = (establishmentId: string, period: string) => 
         }
 
       } catch (err) {
-        console.error('KPI fetch error:', err)
+        console.error('❌ Erreur fatale KPI fetch:', err)
         setError(err instanceof Error ? err.message : 'Erreur de chargement')
         setData({ 
           workforce: null, 
