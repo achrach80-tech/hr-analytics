@@ -74,36 +74,47 @@ export default function CyberDashboard() {
 
         if (fallbackError) {
           console.error('Fallback error:', fallbackError)
-          setError('Aucune période trouvée. Importez vos données.')
+          // ✅ FIX: Rediriger vers import au lieu de juste afficher erreur
+          console.log('🔄 Aucune donnée trouvée, redirection vers /import...')
+          router.push('/import')
           return
         }
         
         const uniquePeriods = [...new Set(fallbackData?.map(p => p.periode) || [])]
-        setPeriods(uniquePeriods)
         
-        if (uniquePeriods.length > 0) {
-          setSelectedPeriod(uniquePeriods[0])
-        } else {
-          setError('Aucune donnée disponible.')
+        // ✅ FIX: Si pas de périodes, rediriger vers import
+        if (uniquePeriods.length === 0) {
+          console.log('🔄 Aucune période disponible, redirection vers /import...')
+          router.push('/import')
+          return
         }
+        
+        setPeriods(uniquePeriods)
+        setSelectedPeriod(uniquePeriods[0])
         return
       }
 
       // Success path
       const uniquePeriods = [...new Set(periodData?.map(p => p.periode) || [])]
-      setPeriods(uniquePeriods)
-
-      if (uniquePeriods.length > 0) {
-        setSelectedPeriod(uniquePeriods[0])
-      } else {
-        setError('Aucune période disponible. Importez vos données.')
+      
+      // ✅ FIX: Si pas de périodes, rediriger vers import
+      if (uniquePeriods.length === 0) {
+        console.log('🔄 Aucune période disponible, redirection vers /import...')
+        router.push('/import')
+        return
       }
+      
+      setPeriods(uniquePeriods)
+      setSelectedPeriod(uniquePeriods[0])
+      
     } catch (err) {
       if (!mountedRef.current) return
       console.error('Unexpected error loading periods:', err)
-      setError('Erreur système')
+      // ✅ FIX: En cas d'erreur, rediriger vers import
+      console.log('🔄 Erreur chargement, redirection vers /import...')
+      router.push('/import')
     }
-  }, [supabase])
+  }, [supabase, router])
 
   // OPTIMIZATION: Single useEffect for initialization - only runs once
   useEffect(() => {
@@ -207,92 +218,98 @@ export default function CyberDashboard() {
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center">
         <motion.div 
           className="text-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
         >
           <motion.div 
-            className="w-20 h-20 border-4 border-purple-500/30 rounded-full mb-6 mx-auto relative"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="w-32 h-32 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl"
+            animate={{ 
+              rotate: [0, 360],
+              scale: [1, 1.1, 1]
+            }}
+            transition={{ 
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
           >
-            <div className="absolute inset-0 border-4 border-t-purple-500 rounded-full"></div>
+            <Brain size={64} className="text-white drop-shadow-lg" />
           </motion.div>
-          <motion.p 
-            className="text-white text-xl"
+          <motion.h2 
+            className="text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent mb-4"
             animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 1.5, repeat: Infinity }}
+            transition={{ duration: 2, repeat: Infinity }}
           >
-            Chargement Cyber Dashboard...
-          </motion.p>
+            Chargement des données...
+          </motion.h2>
+          <p className="text-slate-400 text-lg">Analyse cybernétique en cours</p>
         </motion.div>
       </div>
     )
   }
 
   // Error state
-  if (error && !kpiData) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950 flex items-center justify-center p-8">
         <motion.div 
-          className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-8 max-w-lg text-center border border-red-500/30"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
+          className="bg-red-500/10 border border-red-500/30 rounded-2xl p-12 max-w-md text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
         >
-          <AlertTriangle size={48} className="text-red-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-4">Erreur de chargement</h2>
-          <p className="text-slate-300 mb-6">{error}</p>
-          <button
-            onClick={() => router.push('/import')}
-            className="px-6 py-3 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
+          <AlertTriangle size={64} className="text-red-400 mx-auto mb-6" />
+          <h2 className="text-2xl font-bold text-white mb-4">Erreur</h2>
+          <p className="text-red-300 mb-8">{error}</p>
+          <motion.button
+            onClick={() => window.location.reload()}
+            className="px-8 py-3 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
-            Importer des données
-          </button>
+            Réessayer
+          </motion.button>
         </motion.div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/10 to-slate-950">
-      {/* Animated cyberpunk background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <motion.div 
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage: `radial-gradient(circle at 2px 2px, rgba(139, 92, 246, 0.3) 1px, transparent 1px)`,
-            backgroundSize: '48px 48px'
-          }}
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950">
+      {/* Cyber grid background */}
+      <div className="fixed inset-0 opacity-10">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `
+            linear-gradient(to right, rgba(124, 58, 237, 0.3) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(124, 58, 237, 0.3) 1px, transparent 1px)
+          `,
+          backgroundSize: '60px 60px'
+        }} />
+      </div>
+
+      {/* Animated gradient orbs */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <motion.div
+          className="absolute top-1/4 -left-32 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl"
           animate={{
-            backgroundPosition: ['0px 0px', '48px 48px']
+            x: [0, 100, 0],
+            y: [0, 50, 0],
+            scale: [1, 1.2, 1],
           }}
           transition={{
             duration: 20,
             repeat: Infinity,
-            ease: "linear"
-          }}
-        />
-        <motion.div 
-          className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl"
-          animate={{
-            x: [0, 100, 0],
-            y: [0, -50, 0],
-            scale: [1, 1.2, 1]
-          }}
-          transition={{
-            duration: 15,
-            repeat: Infinity,
             ease: "easeInOut"
           }}
         />
-        <motion.div 
-          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl"
+        <motion.div
+          className="absolute bottom-1/4 -right-32 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl"
           animate={{
-            x: [0, -80, 0],
-            y: [0, 60, 0],
-            scale: [1, 0.8, 1]
+            x: [0, -100, 0],
+            y: [0, -50, 0],
+            scale: [1, 1.3, 1],
           }}
           transition={{
-            duration: 12,
+            duration: 15,
             repeat: Infinity,
             ease: "easeInOut"
           }}
@@ -301,62 +318,44 @@ export default function CyberDashboard() {
 
       {/* Header */}
       <motion.div 
-        className="relative z-10 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800/50"
-        initial={{ opacity: 0, y: -50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
+        className="relative z-20 border-b border-slate-800/50 backdrop-blur-xl bg-slate-900/30"
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
       >
-        <div className="px-8 py-6">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-6">
-              <motion.div 
-                className="w-16 h-16 bg-gradient-to-br from-purple-500 via-pink-500 to-cyan-500 rounded-3xl flex items-center justify-center shadow-2xl"
-                whileHover={{ scale: 1.1, rotate: 360 }}
-                transition={{ duration: 0.6 }}
+        <div className="max-w-[2000px] mx-auto px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-8">
+              <motion.div
+                className="flex items-center gap-3"
+                whileHover={{ scale: 1.05 }}
               >
-                <Brain size={32} className="text-white drop-shadow-lg" />
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Brain size={24} className="text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+                    {company?.nom || 'Talvio'}
+                  </h1>
+                  <p className="text-sm text-slate-400 flex items-center gap-2">
+                    <Building2 size={14} />
+                    {selectedEstablishment?.nom || 'Établissement'}
+                  </p>
+                </div>
               </motion.div>
-              <div>
-                <motion.h1 
-                  className="text-4xl font-bold bg-gradient-to-r from-white via-purple-200 to-cyan-200 bg-clip-text text-transparent"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  Dashboard Talvio
-                </motion.h1>
-                <motion.div 
-                  className="flex items-center gap-3 text-sm text-slate-400 mt-2"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  <Building2 size={14} />
-                  <span>{company?.nom}</span>
-                  <span>•</span>
-                  <span>{selectedEstablishment?.nom}</span>
-                  <span>•</span>
-                  <span className="text-green-400">Cyber Mode</span>
-                </motion.div>
-              </div>
             </div>
 
             <div className="flex items-center gap-4">
-              {/* Period selector */}
               <div className="relative">
                 <motion.button
                   onClick={() => setShowPeriodSelector(!showPeriodSelector)}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-xl border transition-all duration-200 ${
-                    showPeriodSelector 
-                      ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-lg shadow-purple-500/20' 
-                      : 'bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 text-white hover:border-purple-500/30'
-                  }`}
+                  className="flex items-center gap-3 px-6 py-3 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 rounded-xl transition-all duration-200 backdrop-blur-sm"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   <Calendar size={18} className="text-purple-400" />
-                  <span className={showPeriodSelector ? 'text-purple-300' : 'text-white'}>
-                    {selectedPeriod ? formatPeriodDisplay(selectedPeriod) : 'Sélectionner'}
+                  <span className="text-white font-medium">
+                    {selectedPeriod ? formatPeriodDisplay(selectedPeriod) : 'Sélectionner période'}
                   </span>
                   <motion.div
                     animate={{ rotate: showPeriodSelector ? 180 : 0 }}
@@ -476,6 +475,8 @@ export default function CyberDashboard() {
     />
     
     <CyberPayrollSection 
+      establishmentId={establishmentId}
+      period={selectedPeriod}
       data={kpiData?.financials || null}
       previousMonthData={kpiData?.previousMonthFinancials || null}
       previousYearData={kpiData?.previousYearFinancials || null}
@@ -496,46 +497,7 @@ export default function CyberDashboard() {
       previousYearData={kpiData.previousYearWorkforce}
     />
   </>
-) : (
-          <motion.div 
-            className="text-center py-20"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-          >
-            <motion.div 
-              className="w-32 h-32 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl"
-              animate={{ 
-                rotate: [0, 10, -10, 0],
-                scale: [1, 1.05, 1]
-              }}
-              transition={{ 
-                duration: 4,
-                repeat: Infinity,
-                ease: "easeInOut"
-              }}
-            >
-              <BarChart3 size={64} className="text-white drop-shadow-lg" />
-            </motion.div>
-            <h2 className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent mb-6">
-              Aucune donnée disponible
-            </h2>
-            <p className="text-slate-400 text-lg mb-8 max-w-md mx-auto">
-              Importez vos fichiers Excel RH pour générer automatiquement vos KPIs cyberpunk
-            </p>
-            <motion.button
-              onClick={() => router.push('/import')}
-              className="px-12 py-4 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-2xl font-bold text-lg hover:opacity-90 transition-opacity shadow-xl"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <div className="flex items-center gap-3">
-                <Sparkles size={24} />
-                Commencer l'import
-                <Zap size={24} />
-              </div>
-            </motion.button>
-          </motion.div>
-        )}
+) : null}
         
         {/* Footer */}
         <motion.div 

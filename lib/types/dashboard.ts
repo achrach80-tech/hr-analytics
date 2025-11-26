@@ -112,3 +112,56 @@ export interface SnapshotMetadata {
   anomaliesDetectees: number
   calculationDurationMs?: number
 }
+// ============================================
+// FICHIER 3 : lib/types/dashboard.ts
+// ============================================
+// ⚠️ AJOUTE ce code À LA FIN du fichier (ne supprime rien)
+// Copie depuis la ligne suivante jusqu'à la fin
+// ============================================
+
+// Types pour Dual Waterfall v4.1
+export interface WaterfallData {
+  // Périodes
+  periodeCourante: string
+  periodePrecedente: string
+  
+  // Base M-1
+  masseSalarialeM1: number
+  coutMoyenM1: number
+  etpM1: number
+  
+  // Effets
+  effetPrix: number
+  effetVolume: number
+  variation: number
+  variationPct: number
+  
+  // Base M
+  masseSalarialeM: number
+  coutMoyenM: number
+  etpM: number
+  
+  // Primes
+  primesExceptionnellesM: number
+  primesExceptionnellesM1: number
+  
+  // Cohérence
+  coherenceOk: boolean
+  ecartCoherence: number
+  ecartCoherencePct: number
+  
+  // Metadata
+  recalculated: boolean
+}
+
+export interface DualWaterfallData {
+  // Waterfall vs M-1 (mois précédent)
+  vsMonthBefore: WaterfallData | null
+  
+  // Waterfall vs N-1 (même mois année dernière)
+  vsYearBefore: WaterfallData | null
+  
+  // Disponibilité
+  hasMonthBefore: boolean
+  hasYearBefore: boolean
+}
