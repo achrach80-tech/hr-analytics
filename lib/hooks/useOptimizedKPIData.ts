@@ -2,12 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { logger } from '@/lib/utils/logger'
 import type { WorkforceKPIs, PayrollKPIs, AbsenceKPIs, KPIData } from '@/lib/types/dashboard'
 
-// ============================================
-// CONSTANTES
-// ============================================
-const KPI_FETCH_TIMEOUT_MS = 10000 // 10 secondes max
+const KPI_FETCH_TIMEOUT_MS = 10000
 
 interface UseOptimizedKPIDataResult {
   data: KPIData | null
@@ -17,22 +15,8 @@ interface UseOptimizedKPIDataResult {
 }
 
 /**
- * ✅ Hook KPI Data v5.0 - Avec timeout et gestion d'erreur robuste
- * 
- * AMÉLIORATIONS v5.0:
- * - Timeout automatique (10s)
- * - Logs détaillés pour debugging
- * - Gestion erreurs améliorée
- * - Retry mechanism
- * 
- * ARCHITECTURE v4.0:
- * - Backend API calculates ALL KPIs
- * - Database stores pre-calculated values
- * - Frontend reads via simple SELECT queries
- * - NO SQL functions/calculations
- * 
- * @param establishmentId UUID de l'établissement
- * @param period Période au format YYYY-MM-DD ou YYYY-MM-01
+ * Hook KPI Data - Production Ready
+ * Backend calcule les KPIs, frontend lit les snapshots
  */
 export function useOptimizedKPIData(
   establishmentId: string,
@@ -47,41 +31,35 @@ export function useOptimizedKPIData(
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const fetchData = async () => {
-    // Validation des paramètres
     if (!establishmentId || !period) {
-      console.warn('⚠️ [useOptimizedKPIData] Paramètres manquants', { establishmentId, period })
-      // KEEP loading true si les params ne sont pas encore initialisés
-      // Cela évite d'afficher "pas de données" pendant que le dashboard charge
+      logger.warn('Paramètres manquants', { establishmentId, period }, 'KPI')
+      // FIX: Set loading to false when params are empty
+      setLoading(false)
       setData(null)
       setError(null)
       return
     }
 
-    // Annuler la requête précédente si elle existe
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
 
-    // Créer un nouveau AbortController pour cette requête
     abortControllerRef.current = new AbortController()
 
     try {
-      console.log('🚀 [useOptimizedKPIData] Début fetch KPI')
+      logger.debug('Début fetch KPI', null, 'KPI')
       setLoading(true)
       setError(null)
 
-      // Timeout automatique
       const timeoutPromise = new Promise((_, reject) => {
         timeoutRef.current = setTimeout(() => {
-          console.error('⏱️ [useOptimizedKPIData] TIMEOUT - Fetch trop long')
+          logger.error('Timeout fetch KPI', null, 'KPI')
           reject(new Error('Le chargement des données prend trop de temps. Veuillez réessayer.'))
         }, KPI_FETCH_TIMEOUT_MS)
       })
 
-      // Normaliser la période au format YYYY-MM-01
       const normalizedPeriod = period.substring(0, 7) + '-01'
       
-      // Calculer périodes de comparaison
       const currentDate = new Date(normalizedPeriod)
       
       const previousMonthDate = new Date(currentDate)
@@ -92,15 +70,8 @@ export function useOptimizedKPIData(
       previousYearDate.setFullYear(previousYearDate.getFullYear() - 1)
       const previousYear = previousYearDate.toISOString().substring(0, 7) + '-01'
 
-      console.group('📊 TALVIO - KPI Data Fetch v5.0 (Timeout + Retry)')
-      console.log('📅 Période courante:', normalizedPeriod)
-      console.log('📅 Mois précédent:', previousMonth)
-      console.log('📅 Année précédente:', previousYear)
-      console.log('🏢 Établissement:', establishmentId)
+      logger.debug('Périodes', { current: normalizedPeriod, previousMonth, previousYear }, 'KPI')
 
-      // ============================================
-      // REQUÊTE SUPABASE avec race contre timeout
-      // ============================================
       const fetchPromise = (async () => {
         const { data: snapshots, error: selectError } = await supabase
           .from('snapshots_mensuels')
@@ -109,55 +80,45 @@ export function useOptimizedKPIData(
           .in('periode', [normalizedPeriod, previousMonth, previousYear])
 
         if (selectError) {
-          console.error('❌ [useOptimizedKPIData] Erreur SELECT:', selectError)
+          logger.error('Erreur SELECT snapshots', selectError, 'KPI')
           throw new Error(`Erreur DB: ${selectError.message}`)
         }
 
         return snapshots
       })()
 
-      // Race entre fetch et timeout
       const snapshots = await Promise.race([fetchPromise, timeoutPromise]) as any[]
 
-      // Clear timeout si succès
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
         timeoutRef.current = null
       }
 
       if (!snapshots || snapshots.length === 0) {
-        console.warn('⚠️ [useOptimizedKPIData] Aucun snapshot trouvé')
+        logger.warn('Aucun snapshot', { period: normalizedPeriod }, 'KPI')
         throw new Error(`Aucune donnée disponible pour la période ${normalizedPeriod}. Veuillez d'abord importer vos données.`)
       }
 
-      // ============================================
-      // PARSE SNAPSHOTS
-      // ============================================
       const currentSnapshot = snapshots.find(s => s.periode === normalizedPeriod)
       const previousMonthSnapshot = snapshots.find(s => s.periode === previousMonth)
       const previousYearSnapshot = snapshots.find(s => s.periode === previousYear)
 
       if (!currentSnapshot) {
-        console.warn('⚠️ [useOptimizedKPIData] Snapshot courant manquant pour', normalizedPeriod)
+        logger.warn('Snapshot courant manquant', { period: normalizedPeriod }, 'KPI')
         throw new Error(`Données manquantes pour la période ${normalizedPeriod}`)
       }
 
-      console.log('📊 Snapshots trouvés:')
-      console.log('   Courant:', currentSnapshot ? '✅' : '❌')
-      console.log('   Mois -1:', previousMonthSnapshot ? '✅' : '❌')
-      console.log('   Année -1:', previousYearSnapshot ? '✅' : '❌')
+      logger.debug('Snapshots trouvés', {
+        current: !!currentSnapshot,
+        previousMonth: !!previousMonthSnapshot,
+        previousYear: !!previousYearSnapshot
+      }, 'KPI')
 
-      // ============================================
-      // HELPER: Parse number safely
-      // ============================================
       const parseNum = (val: any, defaultVal: number = 0): number => {
         const parsed = parseFloat(val)
         return isNaN(parsed) ? defaultVal : parsed
       }
 
-      // ============================================
-      // MAP TO TYPES - Current period
-      // ============================================
       const workforce: WorkforceKPIs = {
         etpTotal: parseNum(currentSnapshot.etp_fin_mois),
         headcountActif: currentSnapshot.effectif_fin_mois || 0,
@@ -169,13 +130,11 @@ export function useOptimizedKPIData(
         ancienneteMoyenne: parseNum(currentSnapshot.anciennete_moyenne_mois),
         pctHommes: parseNum(currentSnapshot.pct_hommes),
         pctFemmes: parseNum(currentSnapshot.pct_femmes),
-        // Pyramide des âges
         pctAgeMoins25: parseNum(currentSnapshot.pct_age_moins_25),
         pctAge2535: parseNum(currentSnapshot.pct_age_25_35),
         pctAge3545: parseNum(currentSnapshot.pct_age_35_45),
         pctAge4555: parseNum(currentSnapshot.pct_age_45_55),
         pctAgePlus55: parseNum(currentSnapshot.pct_age_plus_55),
-        // Pyramide des anciennetés
         pctAnciennete01: parseNum(currentSnapshot.pct_anciennete_0_1_an),
         pctAnciennete13: parseNum(currentSnapshot.pct_anciennete_1_3_ans),
         pctAnciennete35: parseNum(currentSnapshot.pct_anciennete_3_5_ans),
@@ -208,9 +167,6 @@ export function useOptimizedKPIData(
         nbJoursMaladie: currentSnapshot.nb_jours_maladie || 0
       }
 
-      // ============================================
-      // MAP TO TYPES - Previous month
-      // ============================================
       const previousMonthWorkforce: WorkforceKPIs | null = previousMonthSnapshot ? {
         etpTotal: parseNum(previousMonthSnapshot.etp_fin_mois),
         headcountActif: previousMonthSnapshot.effectif_fin_mois || 0,
@@ -249,9 +205,6 @@ export function useOptimizedKPIData(
         nbJoursMaladie: previousMonthSnapshot.nb_jours_maladie || 0
       } : null
 
-      // ============================================
-      // MAP TO TYPES - Previous year
-      // ============================================
       const previousYearWorkforce: WorkforceKPIs | null = previousYearSnapshot ? {
         etpTotal: parseNum(previousYearSnapshot.etp_fin_mois),
         headcountActif: previousYearSnapshot.effectif_fin_mois || 0,
@@ -290,12 +243,8 @@ export function useOptimizedKPIData(
         nbJoursMaladie: previousYearSnapshot.nb_jours_maladie || 0
       } : null
 
-      console.log('✅ [useOptimizedKPIData] Données parsées avec succès')
-      console.groupEnd()
+      logger.debug('Données KPI parsées', null, 'KPI')
 
-      // ============================================
-      // RETURN COMPLETE KPI DATA
-      // ============================================
       setData({
         workforce,
         financials,
@@ -311,14 +260,12 @@ export function useOptimizedKPIData(
       setError(null)
 
     } catch (err) {
-      // Clear timeout en cas d'erreur
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
         timeoutRef.current = null
       }
 
-      console.error('❌ [useOptimizedKPIData] Erreur fatale:', err)
-      console.groupEnd()
+      logger.error('Erreur fetch KPI', err, 'KPI')
       
       const errorMessage = err instanceof Error 
         ? err.message 
@@ -331,19 +278,13 @@ export function useOptimizedKPIData(
     }
   }
 
-  // ============================================
-  // EFFECT: Fetch on mount and when deps change
-  // ============================================
   useEffect(() => {
     fetchData()
 
-    // Cleanup
     return () => {
-      // Annuler la requête en cours
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
-      // Clear timeout
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
       }

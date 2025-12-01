@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Building2, Calendar, ChevronDown, Sparkles, Brain,
-  AlertTriangle, Zap, BarChart3, X, RefreshCw
+  AlertTriangle, Zap, BarChart3, X, RefreshCw, Download
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import ReactDOM from 'react-dom'
@@ -16,6 +16,8 @@ import { CyberWorkforceSection } from '@/components/dashboard/CyberWorkforceSect
 import { CyberPayrollSection } from '@/components/dashboard/CyberPayrollSection'
 import { CyberAbsenceSection } from '@/components/dashboard/CyberAbsenceSection'
 import { CyberDemographicsSection } from '@/components/dashboard/CyberDemographicsSection'
+import { ExportBuilder } from '@/components/dashboard/ExportBuilder'
+import { logger } from '@/lib/utils/logger'
 import type { Company, Establishment } from '@/lib/types/dashboard'
 
 // ============================================
@@ -30,6 +32,7 @@ export default function CyberDashboard() {
   const [periods, setPeriods] = useState<string[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState<string>('')
   const [showPeriodSelector, setShowPeriodSelector] = useState(false)
+  const [showExport, setShowExport] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
@@ -48,10 +51,13 @@ export default function CyberDashboard() {
     [selectedEstablishment?.id]
   )
 
+  // FIX: Only call KPI hook when we have valid data to prevent infinite loading
+  const shouldFetchKPI = !initialLoading && establishmentId && selectedPeriod
+  
   // OPTIMIZATION: Use optimized KPI hook - only triggers when deps change
   const { data: kpiData, loading: kpiLoading, error: kpiError } = useOptimizedKPIData(
-    establishmentId,
-    selectedPeriod
+    shouldFetchKPI ? establishmentId : '',
+    shouldFetchKPI ? selectedPeriod : ''
   )
 
   // ============================================
@@ -61,7 +67,7 @@ export default function CyberDashboard() {
     if (!estId || !mountedRef.current) return
     
     try {
-      console.log('🔍 [Dashboard] Chargement périodes pour établissement:', estId)
+      logger.debug('Chargement périodes pour établissement:', estId, 'Dashboard')
       
       // Essayer d'abord snapshots_mensuels
       const { data: periodData, error: snapError } = await supabase
@@ -74,14 +80,14 @@ export default function CyberDashboard() {
       if (!mountedRef.current) return
 
       if (snapError) {
-        console.error('❌ [Dashboard] Erreur query snapshots:', snapError)
+        logger.error('Erreur query snapshots:', snapError, 'Dashboard')
         throw new Error('Impossible de charger les périodes disponibles')
       }
 
       const uniquePeriods = [...new Set(periodData?.map(p => p.periode) || [])]
       
       if (uniquePeriods.length === 0) {
-        console.warn('⚠️ [Dashboard] Aucune période trouvée - Redirection /import')
+        logger.warn('Aucune période trouvée - Redirection /import', null, 'Dashboard')
         setError('Aucune donnée importée. Veuillez commencer par importer vos fichiers Excel.')
         setTimeout(() => router.push('/import'), 2000)
         return
@@ -93,7 +99,7 @@ export default function CyberDashboard() {
       
     } catch (err) {
       if (!mountedRef.current) return
-      console.error('❌ [Dashboard] Erreur chargement périodes:', err)
+      logger.error('Erreur chargement périodes:', err, 'Dashboard')
       setError(err instanceof Error ? err.message : 'Erreur de chargement des périodes')
     }
   }, [supabase, router])
@@ -108,7 +114,7 @@ export default function CyberDashboard() {
 
     const initializeData = async () => {
       try {
-        console.log('🚀 [Dashboard] Démarrage initialisation...')
+        logger.debug('Démarrage initialisation...', null, 'Dashboard')
         setInitialLoading(true)
         setError(null)
         setIsTimedOut(false)
@@ -116,7 +122,7 @@ export default function CyberDashboard() {
         // Timeout pour l'initialisation complète
         initTimeoutRef.current = setTimeout(() => {
           if (mountedRef.current && initialLoading) {
-            console.error('⏱️ [Dashboard] TIMEOUT - Initialisation trop longue')
+            logger.error('TIMEOUT - Initialisation trop longue', null, 'Dashboard')
             setIsTimedOut(true)
             setInitialLoading(false)
             setError('Le chargement prend trop de temps. Veuillez réessayer.')
@@ -126,17 +132,17 @@ export default function CyberDashboard() {
         // Vérifier la session
         const sessionStr = localStorage.getItem('company_session')
         if (!sessionStr) {
-          console.warn('⚠️ [Dashboard] Pas de session - Redirection /login')
+          logger.warn('Pas de session - Redirection /login', null, 'Dashboard')
           clearTimeout(initTimeoutRef.current)
           router.push('/login')
           return
         }
 
         const session = JSON.parse(sessionStr)
-        console.log('✅ [Dashboard] Session trouvée:', session.company_name)
+        logger.debug('Session trouvée:', session.company_name, 'Dashboard')
 
         // Charger les données entreprise avec timeout
-        console.log('📡 [Dashboard] Requête entreprise + établissements...')
+        logger.debug('Requête entreprise + établissements...', null, 'Dashboard')
         
         const { data: companyData, error: companyError } = await supabase
           .from('entreprises')
@@ -154,14 +160,14 @@ export default function CyberDashboard() {
           .single()
 
         if (companyError) {
-          console.error('❌ [Dashboard] Erreur chargement entreprise:', companyError)
+          logger.error('Erreur chargement entreprise:', companyError, 'Dashboard')
           throw new Error('Impossible de charger les informations de l\'entreprise')
         }
 
         if (!mountedRef.current) return
 
-        console.log('✅ [Dashboard] Entreprise chargée:', companyData.nom)
-        console.log('📊 [Dashboard] Établissements:', companyData.etablissements?.length || 0)
+        logger.debug('Entreprise chargée:', companyData.nom, 'Dashboard')
+        logger.debug('Établissements:', companyData.etablissements?.length || 0, 'Dashboard')
 
         setCompany(companyData as Company)
         const establishments = companyData.etablissements || []
@@ -172,7 +178,7 @@ export default function CyberDashboard() {
 
         // Sélectionner l'établissement par défaut
         const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
-        console.log('🏢 [Dashboard] Établissement sélectionné:', defaultEst.nom)
+        logger.debug('Établissement sélectionné:', defaultEst.nom, 'Dashboard')
         
         setSelectedEstablishment(defaultEst as Establishment)
         
@@ -184,11 +190,11 @@ export default function CyberDashboard() {
           clearTimeout(initTimeoutRef.current)
         }
         
-        console.log('✅ [Dashboard] Initialisation terminée avec succès')
+        logger.debug('Initialisation terminée avec succès', null, 'Dashboard')
 
       } catch (err) {
         if (!mountedRef.current) return
-        console.error('❌ [Dashboard] Erreur initialisation:', err)
+        logger.error('Erreur initialisation:', err, 'Dashboard')
         setError(err instanceof Error ? err.message : 'Erreur d\'initialisation du dashboard')
         
         // Clear timeout en cas d'erreur
@@ -244,7 +250,7 @@ export default function CyberDashboard() {
   }, [])
 
   const handlePeriodChange = useCallback((period: string) => {
-    console.log('📅 [Dashboard] Changement période:', period)
+    logger.debug('Changement période:', period, 'Dashboard')
     setSelectedPeriod(period)
     setShowPeriodSelector(false)
   }, [])
@@ -483,6 +489,16 @@ export default function CyberDashboard() {
               </div>
 
               <motion.button
+                onClick={() => setShowExport(true)}
+                className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 rounded-xl transition-all duration-200 flex items-center gap-2 text-white font-semibold shadow-lg"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <Download size={18} />
+                Exporter
+              </motion.button>
+
+              <motion.button
                 onClick={() => router.push('/import')}
                 className="px-6 py-3 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-xl font-medium hover:opacity-90 transition-opacity shadow-lg"
                 whileHover={{ scale: 1.05 }}
@@ -718,6 +734,14 @@ export default function CyberDashboard() {
           </div>
         </motion.div>
       </div>
+
+      {/* Export Modal */}
+      <ExportBuilder
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        period={selectedPeriod}
+        establishmentName={selectedEstablishment?.nom || ''}
+      />
     </div>
   )
 }

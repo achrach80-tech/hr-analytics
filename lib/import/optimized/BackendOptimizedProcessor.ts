@@ -17,6 +17,7 @@
  */
 
 import { createClient } from '@/lib/supabase/client'
+import { logger } from '@/lib/utils/logger'
 
 // ============================================
 // TYPES LOCAUX
@@ -258,7 +259,7 @@ export class BackendOptimizedProcessor {
       onLog(`⚡ Performance: ${(duration / snapshots.length).toFixed(0)}ms per period`, 'success')
 
     } catch (error) {
-      console.error('🔴 BACKEND IMPORT ERROR:', error)
+      logger.error('Erreur traitement import', error, 'Import')
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       onLog(`❌ FATAL ERROR: ${errorMessage}`, 'error')
       throw new Error(`Backend Import failed: ${errorMessage}`)
