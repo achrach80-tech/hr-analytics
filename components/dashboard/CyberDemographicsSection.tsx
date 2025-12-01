@@ -47,7 +47,6 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
     ? ((data.ancienneteMoyenne - previousYearData.ancienneteMoyenne) / previousYearData.ancienneteMoyenne) * 100
     : undefined
 
-  // Calcul répartition H/F par tranche d'âge
   const pyramidAgeData = useMemo(() => {
     const ratioHommes = data.pctHommes / 100
     const ratioFemmes = data.pctFemmes / 100
@@ -66,7 +65,6 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
     }
   }, [data])
 
-  // Calcul répartition H/F par tranche d'ancienneté
   const pyramidSeniorityData = useMemo(() => {
     const ratioHommes = data.pctHommes / 100
     const ratioFemmes = data.pctFemmes / 100
@@ -90,6 +88,7 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 0.6 }}
+      className="space-y-6"
     >
       <CyberSectionHeader 
         title="Démographie" 
@@ -97,7 +96,8 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
         gradient="bg-gradient-to-r from-violet-500 to-purple-600" 
       />
       
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+      {/* Row 1: 3 KPIs en ligne */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Age Moyen */}
         <motion.div 
           className="relative p-6 rounded-2xl backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40"
@@ -106,7 +106,7 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
           <div className="absolute inset-0 opacity-20 bg-gradient-to-r from-violet-500 to-violet-600 rounded-2xl" />
           
           {evolutionM1AgeMoyen !== undefined && (
-            <div className="absolute top-2 right-2 z-20 flex flex-col gap-1">
+            <div className="absolute top-2 right-2 z-20">
               <div className={`flex items-center gap-1 px-2 py-1 rounded-lg backdrop-blur-md border text-xs font-mono font-bold ${
                 evolutionM1AgeMoyen === 0 
                   ? 'bg-slate-700/50 border-slate-600/30 text-slate-400'
@@ -140,7 +140,7 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
             </div>
             <div className="space-y-2">
               <p className="text-slate-400 text-sm font-medium">Âge Moyen</p>
-              <p className="text-2xl font-bold text-white">{data.ageMoyen.toFixed(1)} ans</p>
+              <p className="text-3xl font-bold text-white">{data.ageMoyen.toFixed(1)} ans</p>
             </div>
           </div>
         </motion.div>
@@ -153,7 +153,7 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
           <div className="absolute inset-0 opacity-20 bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl" />
           
           {evolutionM1Anciennete !== undefined && (
-            <div className="absolute top-2 right-2 z-20 flex flex-col gap-1">
+            <div className="absolute top-2 right-2 z-20">
               <div className={`flex items-center gap-1 px-2 py-1 rounded-lg backdrop-blur-md border text-xs font-mono font-bold ${
                 evolutionM1Anciennete === 0 
                   ? 'bg-slate-700/50 border-slate-600/30 text-slate-400'
@@ -187,42 +187,41 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
             </div>
             <div className="space-y-2">
               <p className="text-slate-400 text-sm font-medium">Ancienneté Moyenne</p>
-              <p className="text-2xl font-bold text-white">{(data.ancienneteMoyenne / 12).toFixed(1)} ans</p>
+              <p className="text-3xl font-bold text-white">{(data.ancienneteMoyenne / 12).toFixed(1)} ans</p>
             </div>
           </div>
         </motion.div>
 
-        {/* Répartition par Sexe */}
+        {/* Répartition par Sexe - AVEC ID POUR EXPORT */}
         <motion.div 
-          className="col-span-1 md:col-span-2 relative p-6 rounded-2xl backdrop-blur-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40"
+          id="card-gender"
+          className="relative p-6 rounded-2xl backdrop-blur-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8 }}
         >
           <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-cyan-500 to-pink-500 rounded-2xl" />
           <div className="relative z-10">
-            <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
-              <User size={20} className="text-cyan-400" />
+            <h3 className="text-white font-bold text-base mb-4 flex items-center gap-2">
+              <User size={18} className="text-cyan-400" />
               <span className="bg-gradient-to-r from-cyan-300 to-pink-300 bg-clip-text text-transparent">
                 Répartition par Sexe
               </span>
             </h3>
             
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div className="relative">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 shadow-lg" />
-                    <span className="text-white font-semibold tracking-wide">HOMMES</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 shadow-lg" />
+                    <span className="text-white font-semibold text-sm">HOMMES</span>
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-cyan-300">
-                      {data.pctHommes.toFixed(1)}%
-                    </div>
+                  <div className="text-xl font-bold text-cyan-300">
+                    {data.pctHommes.toFixed(1)}%
                   </div>
                 </div>
                 
-                <div className="relative h-6 bg-slate-800/50 rounded-full overflow-hidden backdrop-blur-sm border border-slate-700/30">
+                <div className="relative h-7 bg-slate-800/50 rounded-full overflow-hidden backdrop-blur-sm border border-slate-700/30">
                   <motion.div 
                     className="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-400 rounded-full"
                     initial={{ width: 0 }}
@@ -233,19 +232,17 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
               </div>
 
               <div className="relative">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full bg-gradient-to-r from-pink-400 to-rose-500 shadow-lg" />
-                    <span className="text-white font-semibold tracking-wide">FEMMES</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-pink-400 to-rose-500 shadow-lg" />
+                    <span className="text-white font-semibold text-sm">FEMMES</span>
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-pink-300">
-                      {data.pctFemmes.toFixed(1)}%
-                    </div>
+                  <div className="text-xl font-bold text-pink-300">
+                    {data.pctFemmes.toFixed(1)}%
                   </div>
                 </div>
                 
-                <div className="relative h-6 bg-slate-800/50 rounded-full overflow-hidden backdrop-blur-sm border border-slate-700/30">
+                <div className="relative h-7 bg-slate-800/50 rounded-full overflow-hidden backdrop-blur-sm border border-slate-700/30">
                   <motion.div 
                     className="h-full bg-gradient-to-r from-pink-500 via-rose-500 to-pink-400 rounded-full"
                     initial={{ width: 0 }}
@@ -257,23 +254,36 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
             </div>
           </div>
         </motion.div>
+      </div>
 
-        {/* Pyramide des Âges */}
-        <CyberAgePyramid data={pyramidAgeData} />
+      {/* Row 2: 2 Pyramides en ligne (50% chaque) avec hauteur fixe */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Pyramide des Âges - AVEC ID POUR EXPORT */}
+        <div id="card-age-pyramid" className="h-[500px]">
+          <CyberAgePyramid data={pyramidAgeData} />
+        </div>
         
-        {/* Pyramide des Anciennetés */}
-        <CyberSeniorityPyramid data={pyramidSeniorityData} />
+        {/* Pyramide des Anciennetés - AVEC ID POUR EXPORT */}
+        <div id="card-seniority-pyramid" className="h-[500px]">
+          <CyberSeniorityPyramid data={pyramidSeniorityData} />
+        </div>
       </div>
     </motion.section>
   )
 })
 
 const DemographicsSkeleton: React.FC = () => (
-  <div className="animate-pulse">
-    <div className="h-8 bg-slate-700 rounded w-64 mb-6"></div>
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-      {[...Array(4)].map((_, i) => (
-        <div key={i} className="h-32 bg-slate-800 rounded-2xl"></div>))}
+  <div className="animate-pulse space-y-6">
+    <div className="h-8 bg-slate-700 rounded w-64"></div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {[...Array(3)].map((_, i) => (
+        <div key={i} className="h-40 bg-slate-800 rounded-2xl"></div>
+      ))}
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {[...Array(2)].map((_, i) => (
+        <div key={i} className="h-[500px] bg-slate-800 rounded-2xl"></div>
+      ))}
     </div>
   </div>
 )

@@ -44,7 +44,6 @@ export const CyberAbsenceSection: React.FC<CyberAbsenceSectionProps> = React.mem
     ? previousYearData.nbAbsencesTotal / previousYearData.nbSalariesAbsents
     : 0
 
-  // Calculs des évolutions - Taux Absentéisme (en points de %)
   const evolutionM1TauxAbsenteisme = previousMonthData
     ? data.tauxAbsenteisme - previousMonthData.tauxAbsenteisme
     : undefined
@@ -52,7 +51,6 @@ export const CyberAbsenceSection: React.FC<CyberAbsenceSectionProps> = React.mem
     ? data.tauxAbsenteisme - previousYearData.tauxAbsenteisme
     : undefined
 
-  // Calculs des évolutions - Jours d'Absence (en %)
   const evolutionM1JoursAbsence = previousMonthData && previousMonthData.nbJoursAbsence > 0
     ? ((data.nbJoursAbsence - previousMonthData.nbJoursAbsence) / previousMonthData.nbJoursAbsence) * 100
     : undefined
@@ -60,7 +58,6 @@ export const CyberAbsenceSection: React.FC<CyberAbsenceSectionProps> = React.mem
     ? ((data.nbJoursAbsence - previousYearData.nbJoursAbsence) / previousYearData.nbJoursAbsence) * 100
     : undefined
 
-  // Calculs des évolutions - Durée Moyenne (en %)
   const evolutionM1DureeMoyenne = previousMonthData && previousMonthData.dureeMoyenne > 0
     ? ((data.dureeMoyenne - previousMonthData.dureeMoyenne) / previousMonthData.dureeMoyenne) * 100
     : undefined
@@ -68,7 +65,6 @@ export const CyberAbsenceSection: React.FC<CyberAbsenceSectionProps> = React.mem
     ? ((data.dureeMoyenne - previousYearData.dureeMoyenne) / previousYearData.dureeMoyenne) * 100
     : undefined
 
-  // Calculs des évolutions - Salariés Absents (en %)
   const evolutionM1SalariesAbsents = previousMonthData && previousMonthData.nbSalariesAbsents > 0
     ? ((data.nbSalariesAbsents - previousMonthData.nbSalariesAbsents) / previousMonthData.nbSalariesAbsents) * 100
     : undefined
@@ -76,7 +72,6 @@ export const CyberAbsenceSection: React.FC<CyberAbsenceSectionProps> = React.mem
     ? ((data.nbSalariesAbsents - previousYearData.nbSalariesAbsents) / previousYearData.nbSalariesAbsents) * 100
     : undefined
 
-  // Calculs des évolutions - Fréquence Moyenne (en %)
   const evolutionM1Frequence = previousMonthFrequence > 0
     ? ((frequenceAbsence - previousMonthFrequence) / previousMonthFrequence) * 100
     : undefined
@@ -84,7 +79,6 @@ export const CyberAbsenceSection: React.FC<CyberAbsenceSectionProps> = React.mem
     ? ((frequenceAbsence - previousYearFrequence) / previousYearFrequence) * 100
     : undefined
 
-  // Calculs des évolutions - Jours Maladie (en %)
   const evolutionM1JoursMaladie = previousMonthData && previousMonthData.nbJoursMaladie > 0
     ? ((data.nbJoursMaladie - previousMonthData.nbJoursMaladie) / previousMonthData.nbJoursMaladie) * 100
     : undefined
@@ -94,6 +88,7 @@ export const CyberAbsenceSection: React.FC<CyberAbsenceSectionProps> = React.mem
 
   return (
     <motion.section
+      id="card-absences"
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 0.4 }}

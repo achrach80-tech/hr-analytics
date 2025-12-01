@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react'
 import { motion, AnimatePresence, Reorder } from 'framer-motion'
-import { Download, GripVertical, FileText, Image, X } from 'lucide-react'
+import { Download, GripVertical, FileText, Image, X, AlertCircle } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 
@@ -44,6 +44,34 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
   const [format, setFormat] = useState<'pdf' | 'images'>('pdf')
   const [isExporting, setIsExporting] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [availableCards, setAvailableCards] = useState<string[]>([])
+
+  // ✅ Vérifier quelles cartes sont disponibles dans le DOM
+  const checkAvailableCards = useCallback(() => {
+    const available: string[] = []
+    AVAILABLE_CARDS.forEach(card => {
+      const element = document.getElementById(card.elementId)
+      if (element) {
+        available.push(card.id)
+      }
+    })
+    setAvailableCards(available)
+    
+    // Désélectionner automatiquement les cartes non disponibles
+    setCards(prev => prev.map(c => ({
+      ...c,
+      selected: c.selected && available.includes(c.id)
+    })))
+  }, [])
+
+  // Vérifier les cartes disponibles quand le modal s'ouvre
+  React.useEffect(() => {
+    if (isOpen) {
+      // Attendre un peu que le DOM soit stable
+      setTimeout(checkAvailableCards, 300)
+    }
+  }, [isOpen, checkAvailableCards])
 
   const toggleCard = useCallback((id: string) => {
     setCards(prev => prev.map(c => 
@@ -52,32 +80,62 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
   }, [])
 
   const toggleAll = useCallback(() => {
-    const allSelected = cards.every(c => c.selected)
-    setCards(prev => prev.map(c => ({ ...c, selected: !allSelected })))
-  }, [cards])
+    const allSelected = cards.filter(c => availableCards.includes(c.id)).every(c => c.selected)
+    setCards(prev => prev.map(c => ({
+      ...c,
+      selected: availableCards.includes(c.id) ? !allSelected : false
+    })))
+  }, [cards, availableCards])
 
-  const captureCard = async (elementId: string): Promise<string> => {
+  const captureCard = async (elementId: string, cardTitle: string): Promise<string> => {
     const element = document.getElementById(elementId)
-    if (!element) throw new Error(`Element ${elementId} not found`)
+    
+    if (!element) {
+      throw new Error(`Carte "${cardTitle}" introuvable dans le dashboard. Assurez-vous qu'elle est visible.`)
+    }
 
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      backgroundColor: '#0f172a',
-      logging: false,
-      useCORS: true
-    })
+    try {
+      // Scroll vers l'élément pour s'assurer qu'il est visible
+      element.scrollIntoView({ behavior: 'instant', block: 'center' })
+      
+      // Attendre que les images soient chargées
+      await new Promise(resolve => setTimeout(resolve, 500))
 
-    return canvas.toDataURL('image/png')
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        backgroundColor: '#0f172a',
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        removeContainer: false,
+        imageTimeout: 15000,
+        onclone: (clonedDoc) => {
+          const clonedElement = clonedDoc.getElementById(elementId)
+          if (clonedElement) {
+            // Forcer la visibilité
+            clonedElement.style.display = 'block'
+            clonedElement.style.visibility = 'visible'
+          }
+        }
+      })
+
+      return canvas.toDataURL('image/png')
+    } catch (err) {
+      throw new Error(`Erreur lors de la capture de "${cardTitle}": ${err instanceof Error ? err.message : 'Erreur inconnue'}`)
+    }
   }
 
   const exportPDF = async () => {
     setIsExporting(true)
     setProgress(0)
+    setError(null)
 
     try {
-      const selectedCards = cards.filter(c => c.selected)
+      const selectedCards = cards.filter(c => c.selected && availableCards.includes(c.id))
+      
       if (selectedCards.length === 0) {
-        alert('Veuillez sélectionner au moins une carte')
+        setError('Veuillez sélectionner au moins une carte disponible')
+        setIsExporting(false)
         return
       }
 
@@ -100,7 +158,9 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
       
       pdf.setFontSize(14)
       pdf.setTextColor(148, 163, 184)
-      pdf.text(`Période: ${new Date(period).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}`, 148.5, 115, { align: 'center' })
+      const periodDate = new Date(period)
+      const periodText = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(periodDate)
+      pdf.text(`Période: ${periodText}`, 148.5, 115, { align: 'center' })
       
       pdf.setFontSize(10)
       pdf.text(`Généré le ${new Date().toLocaleDateString('fr-FR')}`, 148.5, 190, { align: 'center' })
@@ -111,29 +171,41 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
         const card = selectedCards[i]
         setProgress(Math.round(((i + 1) / selectedCards.length) * 100))
 
-        pdf.addPage()
-        
-        // Header
-        pdf.setFillColor(15, 23, 42)
-        pdf.rect(0, 0, 297, 20, 'F')
-        pdf.setTextColor(255, 255, 255)
-        pdf.setFontSize(14)
-        pdf.text(card.title, 10, 12)
-        pdf.setFontSize(10)
-        pdf.setTextColor(148, 163, 184)
-        pdf.text(period, 287, 12, { align: 'right' })
+        try {
+          pdf.addPage()
+          
+          // Header
+          pdf.setFillColor(15, 23, 42)
+          pdf.rect(0, 0, 297, 20, 'F')
+          pdf.setTextColor(255, 255, 255)
+          pdf.setFontSize(14)
+          pdf.text(card.title, 10, 12)
+          pdf.setFontSize(10)
+          pdf.setTextColor(148, 163, 184)
+          pdf.text(periodText, 287, 12, { align: 'right' })
 
-        // Capture de la card
-        const imageData = await captureCard(card.elementId)
-        
-        const imgWidth = 277
-        const imgHeight = 155
-        pdf.addImage(imageData, 'PNG', 10, 25, imgWidth, imgHeight)
+          // Capture de la card
+          const imageData = await captureCard(card.elementId, card.title)
+          
+          const imgWidth = 277
+          const imgHeight = 155
+          pdf.addImage(imageData, 'PNG', 10, 25, imgWidth, imgHeight)
 
-        // Footer
-        pdf.setFontSize(8)
-        pdf.setTextColor(100, 116, 139)
-        pdf.text(`Page ${i + 2}/${selectedCards.length + 1}`, 148.5, 205, { align: 'center' })
+          // Footer
+          pdf.setFontSize(8)
+          pdf.setTextColor(100, 116, 139)
+          pdf.text(`Page ${i + 2}/${selectedCards.length + 1}`, 148.5, 205, { align: 'center' })
+        } catch (cardError) {
+          console.error(`Erreur carte ${card.title}:`, cardError)
+          // Continuer avec les autres cartes
+          
+          // Ajouter une page d'erreur
+          pdf.setTextColor(239, 68, 68)
+          pdf.setFontSize(12)
+          pdf.text(`Erreur lors de la capture de "${card.title}"`, 148.5, 105, { align: 'center' })
+          pdf.setFontSize(10)
+          pdf.text('Cette carte a été ignorée.', 148.5, 115, { align: 'center' })
+        }
       }
 
       const filename = `Rapport_RH_${establishmentName.replace(/\s/g, '_')}_${period}.pdf`
@@ -147,7 +219,7 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
 
     } catch (error) {
       console.error('Export error:', error)
-      alert('Erreur lors de l\'export. Veuillez réessayer.')
+      setError(error instanceof Error ? error.message : 'Erreur lors de l\'export. Veuillez réessayer.')
       setIsExporting(false)
     }
   }
@@ -155,20 +227,35 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
   const exportImages = async () => {
     setIsExporting(true)
     setProgress(0)
+    setError(null)
 
     try {
-      const selectedCards = cards.filter(c => c.selected)
+      const selectedCards = cards.filter(c => c.selected && availableCards.includes(c.id))
+      
+      if (selectedCards.length === 0) {
+        setError('Veuillez sélectionner au moins une carte disponible')
+        setIsExporting(false)
+        return
+      }
       
       for (let i = 0; i < selectedCards.length; i++) {
         const card = selectedCards[i]
         setProgress(Math.round(((i + 1) / selectedCards.length) * 100))
 
-        const imageData = await captureCard(card.elementId)
-        
-        const link = document.createElement('a')
-        link.download = `${card.title.replace(/\s/g, '_')}_${period}.png`
-        link.href = imageData
-        link.click()
+        try {
+          const imageData = await captureCard(card.elementId, card.title)
+          
+          const link = document.createElement('a')
+          link.download = `${card.title.replace(/\s/g, '_')}_${period}.png`
+          link.href = imageData
+          link.click()
+          
+          // Attendre un peu entre chaque téléchargement
+          await new Promise(resolve => setTimeout(resolve, 300))
+        } catch (cardError) {
+          console.error(`Erreur carte ${card.title}:`, cardError)
+          // Continuer avec les autres cartes
+        }
       }
 
       setProgress(100)
@@ -179,7 +266,7 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
 
     } catch (error) {
       console.error('Export error:', error)
-      alert('Erreur lors de l\'export. Veuillez réessayer.')
+      setError(error instanceof Error ? error.message : 'Erreur lors de l\'export. Veuillez réessayer.')
       setIsExporting(false)
     }
   }
@@ -222,6 +309,27 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
             </button>
           </div>
 
+          {/* Error message */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mx-6 mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3"
+            >
+              <AlertCircle className="text-red-400 flex-shrink-0 mt-0.5" size={20} />
+              <div className="flex-1">
+                <p className="text-red-300 font-medium text-sm">Erreur d'export</p>
+                <p className="text-red-400/80 text-sm mt-1">{error}</p>
+              </div>
+              <button
+                onClick={() => setError(null)}
+                className="text-red-400 hover:text-red-300"
+              >
+                <X size={16} />
+              </button>
+            </motion.div>
+          )}
+
           {/* Body */}
           <div className="p-6 max-h-[60vh] overflow-y-auto">
             {/* Sélection des cartes */}
@@ -232,7 +340,7 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
                   onClick={toggleAll}
                   className="text-sm text-cyan-400 hover:text-cyan-300"
                 >
-                  {cards.every(c => c.selected) ? 'Tout désélectionner' : 'Tout sélectionner'}
+                  {cards.filter(c => availableCards.includes(c.id)).every(c => c.selected) ? 'Tout désélectionner' : 'Tout sélectionner'}
                 </button>
               </div>
 
@@ -242,25 +350,45 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
                 onReorder={setCards}
                 className="space-y-2"
               >
-                {cards.map((card) => (
-                  <Reorder.Item
-                    key={card.id}
-                    value={card}
-                    className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 cursor-move hover:bg-slate-800 transition-colors"
-                  >
-                    <GripVertical className="text-slate-500" size={20} />
-                    <input
-                      type="checkbox"
-                      checked={card.selected}
-                      onChange={() => toggleCard(card.id)}
-                      className="w-4 h-4 rounded border-slate-600 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    <span className={`flex-1 ${card.selected ? 'text-white' : 'text-slate-500'}`}>
-                      {card.title}
-                    </span>
-                  </Reorder.Item>
-                ))}
+                {cards.map((card) => {
+                  const isAvailable = availableCards.includes(card.id)
+                  
+                  return (
+                    <Reorder.Item
+                      key={card.id}
+                      value={card}
+                      className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                        isAvailable
+                          ? 'bg-slate-800/50 border-slate-700/50 cursor-move hover:bg-slate-800'
+                          : 'bg-slate-900/50 border-slate-800/50 opacity-50 cursor-not-allowed'
+                      }`}
+                    >
+                      <GripVertical className="text-slate-500" size={20} />
+                      <input
+                        type="checkbox"
+                        checked={card.selected && isAvailable}
+                        onChange={() => isAvailable && toggleCard(card.id)}
+                        disabled={!isAvailable}
+                        className="w-4 h-4 rounded border-slate-600 text-cyan-500 focus:ring-cyan-500 disabled:opacity-30"
+                      />
+                      <span className={`flex-1 ${card.selected && isAvailable ? 'text-white' : 'text-slate-500'}`}>
+                        {card.title}
+                        {!isAvailable && (
+                          <span className="ml-2 text-xs text-amber-400">(non disponible)</span>
+                        )}
+                      </span>
+                    </Reorder.Item>
+                  )
+                })}
               </Reorder.Group>
+              
+              {availableCards.length === 0 && (
+                <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <p className="text-amber-300 text-sm">
+                    ⚠️ Aucune carte disponible. Assurez-vous que le dashboard est complètement chargé.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Format */}
@@ -303,7 +431,7 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
           {/* Footer */}
           <div className="p-6 border-t border-slate-700 flex items-center justify-between">
             <div className="text-sm text-slate-400">
-              {cards.filter(c => c.selected).length} carte(s) sélectionnée(s)
+              {cards.filter(c => c.selected && availableCards.includes(c.id)).length} carte(s) sélectionnée(s)
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -314,7 +442,7 @@ export const ExportBuilder: React.FC<ExportBuilderProps> = ({
               </button>
               <button
                 onClick={handleExport}
-                disabled={isExporting || cards.filter(c => c.selected).length === 0}
+                disabled={isExporting || cards.filter(c => c.selected && availableCards.includes(c.id)).length === 0}
                 className="px-6 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isExporting ? (

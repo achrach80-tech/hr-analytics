@@ -12,6 +12,7 @@ import { CyberPieChart } from './CyberPieChart'
 
 /**
  * 🐛 FIX v6.0: Affichage correct du turnover
+ * ✅ EXPORT FIX: ID "card-workforce" ajouté pour export PDF/PNG
  * 
  * CORRECTIONS:
  * - ✅ Affiche taux_turnover (mensuel) par défaut
@@ -194,7 +195,6 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
     ? ((data.headcountActif - previousYearData.headcountActif) / previousYearData.headcountActif) * 100 
     : undefined
 
-  // ✅ FIX v6.0: Calcul correct des évolutions de turnover
   const evolutionM1Turnover = previousMonthData 
     ? data.tauxTurnover - previousMonthData.tauxTurnover
     : undefined
@@ -204,6 +204,7 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
 
   return (
     <motion.section
+      id="card-workforce"
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
@@ -317,7 +318,7 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
         </motion.div>
       )}
 
-      {/* ✅ FIX v6.0: Cartes Mouvements avec Turnover corrigé */}
+      {/* Cartes Mouvements avec Turnover */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <CyberKPICard
           title="Entrées du Mois"
@@ -365,7 +366,6 @@ export const CyberWorkforceSection: React.FC<CyberWorkforceSectionProps> = React
           }
         />
 
-        {/* ✅ FIX v6.0: Turnover MENSUEL (défaut) */}
         <CyberKPICard
           title="Turnover Mensuel"
           value={data.tauxTurnover}
