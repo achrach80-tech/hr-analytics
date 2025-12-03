@@ -2,7 +2,7 @@
 
 import { useWaterfallData } from '@/lib/hooks/useWaterfallData'
 import type { WaterfallData } from '@/lib/types/dashboard'
-import { TrendingUp, TrendingDown, MessageSquare, AlertCircle } from 'lucide-react'
+import { TrendingUp, TrendingDown, MessageSquare, AlertCircle, AlertTriangle } from 'lucide-react'
 
 interface WaterfallChartProps {
   establishmentId: string
@@ -93,7 +93,7 @@ export default function WaterfallChart({ establishmentId, period }: WaterfallCha
 export { WaterfallChart }
 
 // ============================================
-// WATERFALL CARD MVP CORPORATE
+// WATERFALL CARD
 // ============================================
 function WaterfallCard({ 
   title, 
@@ -114,7 +114,6 @@ function WaterfallCard({
     bg: 'bg-purple-500/10'
   }
 
-  // Génération des commentaires intelligents
   const comments = generateComments(data)
 
   return (
@@ -129,6 +128,21 @@ function WaterfallCard({
           {formatPeriod(data.periodePrecedente)} → {formatPeriod(data.periodeCourante)}
         </p>
       </div>
+
+      {/* Alerte incohérence */}
+      {!data.coherenceOk && (
+        <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <div>
+              <p className="text-red-400 font-semibold text-sm">Incohérence mathématique</p>
+              <p className="text-red-300/80 text-xs mt-1">
+                Écart: {data.ecartCoherence.toFixed(2)} € ({data.ecartCoherencePct.toFixed(2)}%)
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KPI Variation */}
       <div className={`${colors.bg} border ${colors.border} rounded-lg p-4`}>
@@ -145,8 +159,8 @@ function WaterfallCard({
         </div>
       </div>
 
-      {/* WATERFALL EN CASCADE - SVG Custom */}
-      <WaterfallCascade data={data} color={color} />
+      {/* WATERFALL SVG */}
+      <WaterfallSVG data={data} color={color} />
 
       {/* Détails ligne par ligne */}
       <div className="space-y-2">
@@ -183,7 +197,7 @@ function WaterfallCard({
         </div>
       </div>
 
-      {/* Commentaires intelligents */}
+      {/* Commentaires */}
       {comments.length > 0 && (
         <div className="bg-slate-800/50 border border-slate-700/30 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -216,271 +230,231 @@ function WaterfallCard({
           </div>
         </div>
       </div>
-
     </div>
   )
 }
 
 // ============================================
-// COMPOSANT WATERFALL CASCADE EN SVG
+// WATERFALL SVG - ÉCHELLE OPTIMISÉE + GRIS POUR 0
 // ============================================
-function WaterfallCascade({ 
-  data, 
-  color 
-}: { 
+function WaterfallSVG({
+  data,
+  color
+}: {
   data: WaterfallData
-  color: 'cyan' | 'purple' 
+  color: 'cyan' | 'purple'
 }) {
   const baseColor = color === 'cyan' ? '#22d3ee' : '#c084fc'
-  // INVERSION: positif = rouge (coût), négatif = vert (économie), zéro = gris
-  const positiveColor = '#ef4444' // Rouge pour augmentation de coût
-  const negativeColor = '#10b981' // Vert pour diminution de coût
-  const neutralColor = '#64748b'  // Gris pour zéro
-
-  // Fonction pour obtenir la couleur selon la valeur
-  const getEffectColor = (value: number) => {
-    if (value === 0) return neutralColor
-    return value > 0 ? positiveColor : negativeColor
-  }
-
-  // AMÉLIORATION: Calcul d'échelle dynamique pour mieux voir les effets
-  const totalVariation = Math.abs(data.effetPrix) + Math.abs(data.effetVolume)
-  const baseMin = Math.min(data.masseSalarialeM1, data.masseSalarialeM)
   
-  // Échelle adaptative : on démarre à 80% de la base min pour voir les effets
-  const min = baseMin * 0.8
-  const max = Math.max(
+  // Fonction pour obtenir couleur selon valeur (AVEC GRIS POUR 0)
+  const getColor = (value: number) => {
+    if (value === 0) return '#64748b'  // Gris slate-500
+    return value > 0 ? '#ef4444' : '#10b981'  // Rouge ou Vert
+  }
+  
+  const getTextColor = (value: number) => {
+    if (value === 0) return '#94a3b8'  // Gris clair
+    return value > 0 ? '#fca5a5' : '#6ee7b7'  // Rouge clair ou Vert clair
+  }
+  
+  // Dimensions
+  const WIDTH = 600
+  const HEIGHT = 350
+  const TOP_MARGIN = 50
+  const BOTTOM_MARGIN = 60
+  const BAR_WIDTH = 110
+  const GAP = 25
+  
+  // Positions X
+  const x1 = 40
+  const x2 = x1 + BAR_WIDTH + GAP
+  const x3 = x2 + BAR_WIDTH + GAP
+  const x4 = x3 + BAR_WIDTH + GAP
+  
+  // ✅ ÉCHELLE OPTIMISÉE - Partir de 80% du minimum pour mieux voir les bases
+  const values = [
     data.masseSalarialeM1,
     data.masseSalarialeM1 + data.effetPrix,
     data.masseSalarialeM1 + data.effetPrix + data.effetVolume,
     data.masseSalarialeM
-  ) * 1.05 // +5% pour l'espace du label
+  ]
+  const minVal = Math.min(...values) * 0.80  // 80% au lieu de 95%
+  const maxVal = Math.max(...values) * 1.05
+  const range = maxVal - minVal
   
-  const range = max - min
+  const toY = (value: number) => {
+    return TOP_MARGIN + (HEIGHT * (1 - (value - minVal) / range))
+  }
   
-  const HEIGHT = 260 // Augmenté de 220 à 260
-  const TOP_MARGIN = 40 // Augmenté de 35 à 40
-  const GAP = 45 // Augmenté de 40 à 45
-  const BAR_WIDTH = 75 // Augmenté de 65 à 75
-
-  // Fonction pour convertir une valeur en position Y
-  const toY = (value: number) => TOP_MARGIN + (HEIGHT - ((value - min) / range * HEIGHT))
-
-  // Positions des barres
-  const base1Y = toY(data.masseSalarialeM1)
-  const base1Height = (HEIGHT + TOP_MARGIN) - base1Y
-
+  // Calculs positions
+  const y1 = toY(data.masseSalarialeM1)
+  const h1 = (TOP_MARGIN + HEIGHT) - y1
+  
   const afterPrix = data.masseSalarialeM1 + data.effetPrix
-  const prixY = toY(afterPrix)
-  const prixStartY = toY(data.masseSalarialeM1)
-  const prixHeight = Math.abs(prixStartY - prixY)
-
+  const y2 = toY(afterPrix)
+  const y2Start = toY(data.masseSalarialeM1)
+  const h2 = Math.abs(y2 - y2Start)
+  
   const afterVolume = afterPrix + data.effetVolume
-  const volumeY = toY(afterVolume)
-  const volumeStartY = toY(afterPrix)
-  const volumeHeight = Math.abs(volumeStartY - volumeY)
-
-  const baseMY = toY(data.masseSalarialeM)
-  const baseMHeight = (HEIGHT + TOP_MARGIN) - baseMY
-
-  const totalWidth = (BAR_WIDTH + GAP) * 3 + BAR_WIDTH
+  const y3 = toY(afterVolume)
+  const y3Start = toY(afterPrix)
+  const h3 = Math.abs(y3 - y3Start)
+  
+  const y4 = toY(data.masseSalarialeM)
+  const h4 = (TOP_MARGIN + HEIGHT) - y4
 
   return (
-    <div className="bg-slate-950/30 rounded-lg p-6 border border-slate-700/20">
+    <div className="bg-gradient-to-br from-slate-900/80 to-slate-800/60 rounded-xl p-6 border border-slate-700/30 shadow-xl">
       <svg 
-        viewBox={`0 0 ${totalWidth} ${HEIGHT + TOP_MARGIN + 45}`} 
-        className="w-full h-80"
-        preserveAspectRatio="xMidYMid meet"
+        viewBox={`0 0 ${WIDTH} ${HEIGHT + TOP_MARGIN + BOTTOM_MARGIN}`}
+        className="w-full"
+        style={{ height: '420px' }}
       >
-        {/* Grille horizontale légère (SANS axe Y) */}
-        {[0.25, 0.5, 0.75].map((ratio, i) => {
+        
+        {/* Grille avec lignes horizontales subtiles */}
+        {[0.2, 0.4, 0.6, 0.8].map((ratio, i) => {
           const y = TOP_MARGIN + (ratio * HEIGHT)
           return (
             <line 
               key={i}
-              x1={0} 
-              y1={y} 
-              x2={totalWidth} 
-              y2={y} 
+              x1={20} y1={y} x2={WIDTH - 20} y2={y}
               stroke="#1e293b" 
-              strokeWidth={0.5}
-              strokeDasharray="4 2"
-              opacity={0.3}
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              opacity={0.2}
             />
           )
         })}
 
-        {/* Barre 1: Base M-1 */}
+        {/* Base M-1 */}
         <g>
           <rect
-            x={0}
-            y={base1Y}
-            width={BAR_WIDTH}
-            height={base1Height}
+            x={x1} y={y1}
+            width={BAR_WIDTH} height={h1}
             fill={baseColor}
-            opacity={0.9}
-            rx={4}
+            opacity={0.95}
+            rx={8}
           />
-          {/* Montant AU-DESSUS */}
           <text 
-            x={BAR_WIDTH / 2} 
-            y={base1Y - 12} 
-            textAnchor="middle" 
-            fill="#e2e8f0" 
-            fontSize="14"
-            fontWeight="700"
+            x={x1 + BAR_WIDTH / 2} y={y1 - 12}
+            textAnchor="middle" fill="#f1f5f9" fontSize="17" fontWeight="800"
           >
-            {formatEuros(data.masseSalarialeM1 / 1000, false, true)}k
+            {formatEuros(data.masseSalarialeM1, false, true)}
           </text>
-          {/* Label en bas */}
           <text 
-            x={BAR_WIDTH / 2} 
-            y={HEIGHT + TOP_MARGIN + 25} 
-            textAnchor="middle" 
-            fill="#94a3b8" 
-            fontSize="12"
-            fontWeight="600"
+            x={x1 + BAR_WIDTH / 2} y={HEIGHT + TOP_MARGIN + 35}
+            textAnchor="middle" fill="#cbd5e1" fontSize="15" fontWeight="700"
           >
             Base M-1
           </text>
         </g>
 
-        {/* Connexion 1→2 */}
+        {/* Connecteur 1→2 */}
         <line
-          x1={BAR_WIDTH}
-          y1={prixStartY}
-          x2={BAR_WIDTH + GAP}
-          y2={prixStartY}
-          stroke={getEffectColor(data.effetPrix)}
-          strokeWidth={2}
-          strokeDasharray="4 2"
-          opacity={0.4}
+          x1={x1 + BAR_WIDTH} y1={y2Start}
+          x2={x2} y2={y2Start}
+          stroke={getColor(data.effetPrix)}
+          strokeWidth={3}
+          strokeDasharray="6 4"
+          opacity={0.6}
         />
 
-        {/* Barre 2: Effet Prix */}
+        {/* Prix */}
         <g>
           <rect
-            x={BAR_WIDTH + GAP}
-            y={Math.min(prixY, prixStartY)}
+            x={x2}
+            y={Math.min(y2, y2Start)}
             width={BAR_WIDTH}
-            height={Math.max(prixHeight, 4)} // Min 4px pour visibilité
-            fill={getEffectColor(data.effetPrix)}
-            opacity={0.9}
-            rx={4}
+            height={Math.max(h2, 6)}
+            fill={getColor(data.effetPrix)}
+            opacity={0.95}
+            rx={8}
           />
-          {/* Montant AU-DESSUS */}
           <text 
-            x={BAR_WIDTH + GAP + BAR_WIDTH / 2} 
-            y={Math.min(prixY, prixStartY) - 12} 
-            textAnchor="middle" 
-            fill={data.effetPrix === 0 ? '#94a3b8' : (data.effetPrix > 0 ? '#fca5a5' : '#6ee7b7')}
-            fontSize="14"
-            fontWeight="700"
+            x={x2 + BAR_WIDTH / 2}
+            y={Math.min(y2, y2Start) - 12}
+            textAnchor="middle"
+            fill={getTextColor(data.effetPrix)}
+            fontSize="17"
+            fontWeight="800"
           >
-            {data.effetPrix === 0 ? '0' : formatEuros(data.effetPrix / 1000, true, true) + 'k'}
+            {data.effetPrix === 0 ? '0 €' : formatEuros(data.effetPrix, true, true)}
           </text>
-          {/* Label en bas */}
           <text 
-            x={BAR_WIDTH + GAP + BAR_WIDTH / 2} 
-            y={HEIGHT + TOP_MARGIN + 25} 
-            textAnchor="middle" 
-            fill="#94a3b8" 
-            fontSize="12"
-            fontWeight="600"
+            x={x2 + BAR_WIDTH / 2} y={HEIGHT + TOP_MARGIN + 35}
+            textAnchor="middle" fill="#cbd5e1" fontSize="15" fontWeight="700"
           >
             Prix
           </text>
         </g>
 
-        {/* Connexion 2→3 */}
+        {/* Connecteur 2→3 */}
         <line
-          x1={BAR_WIDTH + GAP + BAR_WIDTH}
-          y1={volumeStartY}
-          x2={BAR_WIDTH + GAP + BAR_WIDTH + GAP}
-          y2={volumeStartY}
-          stroke={getEffectColor(data.effetVolume)}
-          strokeWidth={2}
-          strokeDasharray="4 2"
-          opacity={0.4}
+          x1={x2 + BAR_WIDTH} y1={y3Start}
+          x2={x3} y2={y3Start}
+          stroke={getColor(data.effetVolume)}
+          strokeWidth={3}
+          strokeDasharray="6 4"
+          opacity={0.6}
         />
 
-        {/* Barre 3: Effet Volume */}
+        {/* Volume */}
         <g>
           <rect
-            x={(BAR_WIDTH + GAP) * 2}
-            y={Math.min(volumeY, volumeStartY)}
+            x={x3}
+            y={Math.min(y3, y3Start)}
             width={BAR_WIDTH}
-            height={Math.max(volumeHeight, 4)} // Min 4px pour visibilité
-            fill={getEffectColor(data.effetVolume)}
-            opacity={0.9}
-            rx={4}
+            height={Math.max(h3, 6)}
+            fill={getColor(data.effetVolume)}
+            opacity={0.95}
+            rx={8}
           />
-          {/* Montant AU-DESSUS */}
           <text 
-            x={(BAR_WIDTH + GAP) * 2 + BAR_WIDTH / 2} 
-            y={Math.min(volumeY, volumeStartY) - 12} 
-            textAnchor="middle" 
-            fill={data.effetVolume === 0 ? '#94a3b8' : (data.effetVolume > 0 ? '#fca5a5' : '#6ee7b7')}
-            fontSize="14"
-            fontWeight="700"
+            x={x3 + BAR_WIDTH / 2}
+            y={Math.min(y3, y3Start) - 12}
+            textAnchor="middle"
+            fill={getTextColor(data.effetVolume)}
+            fontSize="17"
+            fontWeight="800"
           >
-            {data.effetVolume === 0 ? '0' : formatEuros(data.effetVolume / 1000, true, true) + 'k'}
+            {data.effetVolume === 0 ? '0 €' : formatEuros(data.effetVolume, true, true)}
           </text>
-          {/* Label en bas */}
           <text 
-            x={(BAR_WIDTH + GAP) * 2 + BAR_WIDTH / 2} 
-            y={HEIGHT + TOP_MARGIN + 25} 
-            textAnchor="middle" 
-            fill="#94a3b8" 
-            fontSize="12"
-            fontWeight="600"
+            x={x3 + BAR_WIDTH / 2} y={HEIGHT + TOP_MARGIN + 35}
+            textAnchor="middle" fill="#cbd5e1" fontSize="15" fontWeight="700"
           >
             Volume
           </text>
         </g>
 
-        {/* Connexion 3→4 */}
+        {/* Connecteur 3→4 */}
         <line
-          x1={(BAR_WIDTH + GAP) * 2 + BAR_WIDTH}
-          y1={baseMY}
-          x2={(BAR_WIDTH + GAP) * 3}
-          y2={baseMY}
+          x1={x3 + BAR_WIDTH} y1={y4}
+          x2={x4} y2={y4}
           stroke={baseColor}
-          strokeWidth={2}
-          strokeDasharray="4 2"
-          opacity={0.4}
+          strokeWidth={3}
+          strokeDasharray="6 4"
+          opacity={0.6}
         />
 
-        {/* Barre 4: Base M */}
+        {/* Base M */}
         <g>
           <rect
-            x={(BAR_WIDTH + GAP) * 3}
-            y={baseMY}
-            width={BAR_WIDTH}
-            height={baseMHeight}
+            x={x4} y={y4}
+            width={BAR_WIDTH} height={h4}
             fill={baseColor}
-            opacity={0.9}
-            rx={4}
+            opacity={0.95}
+            rx={8}
           />
-          {/* Montant AU-DESSUS */}
           <text 
-            x={(BAR_WIDTH + GAP) * 3 + BAR_WIDTH / 2} 
-            y={baseMY - 12} 
-            textAnchor="middle" 
-            fill="#e2e8f0" 
-            fontSize="14"
-            fontWeight="700"
+            x={x4 + BAR_WIDTH / 2} y={y4 - 12}
+            textAnchor="middle" fill="#f1f5f9" fontSize="17" fontWeight="800"
           >
-            {formatEuros(data.masseSalarialeM / 1000, false, true)}k
+            {formatEuros(data.masseSalarialeM, false, true)}
           </text>
-          {/* Label en bas */}
           <text 
-            x={(BAR_WIDTH + GAP) * 3 + BAR_WIDTH / 2} 
-            y={HEIGHT + TOP_MARGIN + 25} 
-            textAnchor="middle" 
-            fill="#94a3b8" 
-            fontSize="12"
-            fontWeight="600"
+            x={x4 + BAR_WIDTH / 2} y={HEIGHT + TOP_MARGIN + 35}
+            textAnchor="middle" fill="#cbd5e1" fontSize="15" fontWeight="700"
           >
             Base M
           </text>
@@ -492,172 +466,40 @@ function WaterfallCascade({
 }
 
 // ============================================
-// GÉNÉRATION COMMENTAIRES INTELLIGENTS
+// GÉNÉRATION COMMENTAIRES
 // ============================================
 function generateComments(data: WaterfallData): string[] {
   const comments: string[] = []
 
-  // ============================================
-  // PHASE 1: DÉTECTION DES RUBRIQUES EXCEPTIONNELLES
-  // Logique : comparer M vs M-1 (ou N-1), seule la DIFFÉRENCE compte
-  // ============================================
+  if (!data.coherenceOk) {
+    comments.push(
+      `⚠️ Incohérence mathématique (écart ${data.ecartCoherencePct.toFixed(2)}%)`
+    )
+  }
+
   const primesM = data.primesExceptionnellesM || 0
-  const primesM1 = data.primesExceptionnellesM1 || 0
-  const diffPrimes = primesM - primesM1
-  
-  // Ratio par rapport à la masse actuelle
   const primesRatioM = primesM / data.masseSalarialeM
-  const primesRatioM1 = primesM1 / data.masseSalarialeM1
   
-  // Détecter si 13ème mois UNIQUEMENT si présent dans M mais pas dans M-1
-  // OU si différence significative (>20%)
-  const is13eMoisNouveau = primesRatioM > 0.05 && primesRatioM1 < 0.05
-  const diffPrimesSignificative = Math.abs(diffPrimes) > 10000 && Math.abs(diffPrimes) / Math.max(primesM1, 1) > 0.2
-  
-  let variationExpliqueeParPrimes = 0
-  
-  if (is13eMoisNouveau) {
-    // Cas 1: 13ème mois versé cette période mais pas la précédente
+  if (primesRatioM > 0.05) {
     comments.push(
-      `13ème mois versé : ${formatEuros(primesM)} (absent sur période précédente)`
+      `13ème mois ou primes: ${formatEuros(primesM)} (impacte effet prix)`
     )
-    variationExpliqueeParPrimes = primesM
-  } else if (diffPrimesSignificative && primesRatioM > 0.05) {
-    // Cas 2: 13ème mois présent dans les deux périodes MAIS différence significative
-    if (diffPrimes > 0) {
-      comments.push(
-        `Prime 13ème mois en hausse : ${formatEuros(primesM)} vs ${formatEuros(primesM1)} (${formatEuros(diffPrimes, true)})`
-      )
-    } else {
-      comments.push(
-        `Prime 13ème mois en baisse : ${formatEuros(primesM)} vs ${formatEuros(primesM1)} (${formatEuros(diffPrimes, true)})`
-      )
-    }
-    variationExpliqueeParPrimes = Math.abs(diffPrimes)
-  } else if (primesRatioM > 0.05 && primesRatioM1 > 0.05 && Math.abs(diffPrimes) < 10000) {
-    // Cas 3: 13ème mois présent dans les deux périodes, différence non significative
-    // → NE PAS mentionner, c'est normal et récurrent
-    variationExpliqueeParPrimes = 0
   }
 
-  // ============================================
-  // PHASE 2: ANALYSE DE L'EFFET PRIX
-  // Exclure la part déjà expliquée par les primes
-  // ============================================
-  const effetPrixResiduel = Math.abs(data.effetPrix) - variationExpliqueeParPrimes
-  
-  if (variationExpliqueeParPrimes > 0 && effetPrixResiduel > 5000) {
-    // Si primes exceptionnelles expliquent une partie, analyser le résiduel
+  if (Math.abs(data.effetPrix) > Math.abs(data.effetVolume) * 2 && Math.abs(data.effetPrix) > 5000) {
     comments.push(
-      `Effet Prix résiduel de ${formatEuros(effetPrixResiduel)} : ${
-        data.effetPrix > 0 
-          ? 'augmentations individuelles, promotions ou recrutements à salaires supérieurs'
-          : 'diminutions salariales ou départs de profils coûteux'
-      }`
+      `Effet Prix dominant (${formatEuros(data.effetPrix, true)})`
     )
-  } else if (Math.abs(data.effetPrix) > Math.abs(data.effetVolume) * 1.5 && Math.abs(data.effetPrix) > 5000) {
-    // Effet Prix dominant (pas déjà expliqué par primes)
-    if (data.effetPrix > 0) {
-      comments.push(
-        `Effet Prix dominant (+${formatEuros(Math.abs(data.effetPrix))}) : augmentations salariales significatives (revalorisations, promotions ou recrutements à salaires supérieurs)`
-      )
-    } else {
-      comments.push(
-        `Effet Prix négatif (${formatEuros(data.effetPrix)}) : diminutions salariales (départs de profils seniors, gel des augmentations ou renégociations)`
-      )
-    }
+  } else if (Math.abs(data.effetVolume) > Math.abs(data.effetPrix) * 2 && Math.abs(data.effetVolume) > 5000) {
+    const etpVar = data.etpM - data.etpM1
+    comments.push(
+      `Effet Volume dominant (${formatEuros(data.effetVolume, true)}) : ${Math.abs(etpVar).toFixed(1)} ETP`
+    )
   }
 
-  // ============================================
-  // PHASE 3: ANALYSE DE L'EFFET VOLUME
-  // ============================================
-  const etpVariation = data.etpM - data.etpM1
-  
-  if (Math.abs(data.effetVolume) > Math.abs(data.effetPrix) * 1.5 && Math.abs(data.effetVolume) > 5000) {
-    // Effet Volume dominant
-    if (data.effetVolume > 0) {
-      comments.push(
-        `Effet Volume dominant (+${formatEuros(Math.abs(data.effetVolume))}) : embauches nettes de ${Math.abs(etpVariation).toFixed(1)} ETP`
-      )
-    } else {
-      comments.push(
-        `Effet Volume négatif (${formatEuros(data.effetVolume)}) : départs nets de ${Math.abs(etpVariation).toFixed(1)} ETP`
-      )
-    }
-  } else if (Math.abs(etpVariation) > 0.5) {
-    // Variation d'effectif notable mais pas dominante
-    if (etpVariation > 0) {
-      comments.push(
-        `${etpVariation.toFixed(1)} ETP supplémentaires (embauches ou passages temps partiel → temps plein)`
-      )
-    } else {
-      comments.push(
-        `${Math.abs(etpVariation).toFixed(1)} ETP en moins (départs ou passages temps plein → temps partiel)`
-      )
-    }
-  }
-
-  // ============================================
-  // PHASE 4: ANALYSE GLOBALE DE LA VARIATION
-  // ============================================
   if (Math.abs(data.variationPct) > 30) {
-    if (is13eMoisNouveau) {
-      comments.push(
-        `⚠️ Variation exceptionnelle de ${Math.abs(data.variationPct).toFixed(1)}% : largement expliquée par le versement du 13ème mois`
-      )
-    } else if (variationExpliqueeParPrimes > 0) {
-      comments.push(
-        `⚠️ Variation exceptionnelle de ${Math.abs(data.variationPct).toFixed(1)}% : partiellement expliquée par la hausse des primes, reste à analyser`
-      )
-    } else {
-      comments.push(
-        `⚠️ Variation exceptionnelle de ${Math.abs(data.variationPct).toFixed(1)}%, nécessite une analyse approfondie des causes`
-      )
-    }
-  } else if (Math.abs(data.variationPct) < 3) {
     comments.push(
-      `Masse salariale stable (${Math.abs(data.variationPct).toFixed(1)}% de variation), cohérent avec une activité régulière`
-    )
-  }
-
-  // ============================================
-  // PHASE 5: ANALYSE DU COÛT MOYEN
-  // ============================================
-  const coutMoyenVariation = ((data.coutMoyenM - data.coutMoyenM1) / data.coutMoyenM1) * 100
-  
-  if (Math.abs(coutMoyenVariation) > 5 && !is13eMoisNouveau) {
-    // Ne mentionner que si pas déjà expliqué par un 13ème mois nouveau
-    if (coutMoyenVariation > 0) {
-      comments.push(
-        `Coût moyen par ETP en hausse de ${coutMoyenVariation.toFixed(1)}% : ${
-          etpVariation < 0 
-            ? 'départs de profils juniors ou maintien des seniors'
-            : 'recrutements de profils seniors ou augmentations générales'
-        }`
-      )
-    } else {
-      comments.push(
-        `Coût moyen par ETP en baisse de ${Math.abs(coutMoyenVariation).toFixed(1)}% : ${
-          etpVariation > 0
-            ? 'recrutements de profils juniors'
-            : 'départs de profils seniors'
-        }`
-      )
-    }
-  }
-
-  // ============================================
-  // PHASE 6: MIX PRIX/VOLUME ÉQUILIBRÉ
-  // ============================================
-  if (
-    Math.abs(data.effetPrix) > 1000 && 
-    Math.abs(data.effetVolume) > 1000 &&
-    Math.abs(data.effetPrix / data.effetVolume) < 2 &&
-    Math.abs(data.effetVolume / data.effetPrix) < 2 &&
-    !is13eMoisNouveau
-  ) {
-    comments.push(
-      `Variation équilibrée entre Effet Prix (${formatEuros(data.effetPrix, true)}) et Effet Volume (${formatEuros(data.effetVolume, true)})`
+      `⚠️ Variation exceptionnelle de ${Math.abs(data.variationPct).toFixed(1)}%`
     )
   }
 

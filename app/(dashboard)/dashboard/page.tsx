@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Building2, Calendar, ChevronDown, Sparkles, Brain,
-  AlertTriangle, Zap, BarChart3, X, RefreshCw, Download
+  AlertTriangle, Zap, BarChart3, X, RefreshCw
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import ReactDOM from 'react-dom'
@@ -16,7 +16,6 @@ import { CyberWorkforceSection } from '@/components/dashboard/CyberWorkforceSect
 import { CyberPayrollSection } from '@/components/dashboard/CyberPayrollSection'
 import { CyberAbsenceSection } from '@/components/dashboard/CyberAbsenceSection'
 import { CyberDemographicsSection } from '@/components/dashboard/CyberDemographicsSection'
-import { ExportBuilder } from '@/components/dashboard/ExportBuilder'
 import type { Company, Establishment } from '@/lib/types/dashboard'
 
 const INIT_TIMEOUT_MS = 15000
@@ -27,7 +26,6 @@ export default function CyberDashboard() {
   const [periods, setPeriods] = useState<string[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState<string>('')
   const [showPeriodSelector, setShowPeriodSelector] = useState(false)
-  const [showExport, setShowExport] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isTimedOut, setIsTimedOut] = useState(false)
@@ -37,7 +35,6 @@ export default function CyberDashboard() {
   const mountedRef = useRef(true)
   const initTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // ✅ FIX: Gérer la réinitialisation lors du retour sur la page
   const [isInitialized, setIsInitialized] = useState(false)
 
   const establishmentId = useMemo(() => 
@@ -45,7 +42,6 @@ export default function CyberDashboard() {
     [selectedEstablishment?.id]
   )
 
-  // ✅ FIX: Seulement charger KPI quand tout est prêt
   const shouldFetchKPI = isInitialized && !initialLoading && !!establishmentId && !!selectedPeriod
   
   const { data: kpiData, loading: kpiLoading, error: kpiError } = useOptimizedKPIData(
@@ -87,7 +83,6 @@ export default function CyberDashboard() {
     }
   }, [supabase, router])
 
-  // ✅ FIX: Réinitialisation complète à chaque montage du composant
   useEffect(() => {
     mountedRef.current = true
     
@@ -152,7 +147,6 @@ export default function CyberDashboard() {
           clearTimeout(initTimeoutRef.current)
         }
         
-        // ✅ FIX: Marquer comme initialisé
         setIsInitialized(true)
 
       } catch (err) {
@@ -173,7 +167,7 @@ export default function CyberDashboard() {
         clearTimeout(initTimeoutRef.current)
       }
     }
-  }, []) // ✅ Pas de dépendances - se lance à chaque montage
+  }, [])
 
   const handlePeriodChange = useCallback((newPeriod: string) => {
     setSelectedPeriod(newPeriod)
@@ -266,6 +260,7 @@ export default function CyberDashboard() {
               <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
                 Dashboard Analytics
               </h1>
+              
               <p className="text-slate-400 text-sm flex items-center gap-2 mt-1">
                 <Building2 size={14} />
                 {company?.nom || 'Chargement...'}
@@ -291,15 +286,15 @@ export default function CyberDashboard() {
               </motion.button>
             </div>
 
-            {/* Export button */}
+            {/* Visions button */}
             <motion.button
-              onClick={() => setShowExport(true)}
-              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-xl font-semibold shadow-lg hover:shadow-purple-500/50 transition-all flex items-center gap-2"
+              onClick={() => router.push('/visions')}
+              className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-xl font-semibold shadow-lg hover:shadow-cyan-500/50 transition-all flex items-center gap-2"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Download size={18} />
-              Exporter
+              <Sparkles size={18} />
+              Mes Visions
             </motion.button>
           </div>
         </div>
@@ -514,14 +509,6 @@ export default function CyberDashboard() {
           </div>
         </motion.div>
       </div>
-
-      {/* Export Modal */}
-      <ExportBuilder
-        isOpen={showExport}
-        onClose={() => setShowExport(false)}
-        period={selectedPeriod}
-        establishmentName={selectedEstablishment?.nom || ''}
-      />
     </div>
   )
 }

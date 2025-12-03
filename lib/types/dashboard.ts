@@ -177,3 +177,9 @@ export interface DualWaterfallData {
   hasMonthBefore: boolean
   hasYearBefore: boolean
 }
+export interface WaterfallData {
+  effetPrix: number
+  effetVolume: number
+  variation: number
+  variationPct: number
+}

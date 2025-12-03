@@ -1,0 +1,58 @@
+/* styles/export.css */
+/* Styles optimisés pour l'export PDF/PNG */
+
+/* Mode export global */
+.export-mode {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.export-mode * {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Force les backgrounds */
+.export-mode [class*="bg-"] {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+/* Force les gradients */
+.export-mode [class*="gradient"] {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+/* Optimisation des canvas (graphiques) */
+.export-mode canvas {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+}
+
+/* Éviter les coupures de page */
+.export-mode .kpi-card,
+.export-mode .chart-container {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+/* Désactiver les animations en mode export */
+.export-mode * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Styles d'impression */
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+  }
+  
+  .export-mode {
+    margin: 10mm;
+  }
+}

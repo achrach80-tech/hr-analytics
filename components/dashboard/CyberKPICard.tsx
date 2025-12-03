@@ -44,7 +44,7 @@ export const CyberKPICard: React.FC<CyberKPICardProps> = React.memo(({
   title, 
   value, 
   format, 
-  icon: Icon, 
+  icon: IconComponent,  // ✅ RENOMMER pour éviter confusion avec balise <Icon>
   gradient, 
   alert = false,
   subtitle,
@@ -76,10 +76,10 @@ export const CyberKPICard: React.FC<CyberKPICardProps> = React.memo(({
       transition={{ duration: 0.4, ease: "easeOut" }}
       className={`group relative overflow-hidden rounded-2xl backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] border border-slate-700/50 bg-gradient-to-br from-slate-900/60 to-slate-800/40 ${isLarge ? 'p-8' : 'p-6'}`}
     >
-      {/* Background gradient - DERRIÈRE */}
+      {/* Background gradient */}
       <div className={`absolute inset-0 opacity-5 group-hover:opacity-10 transition-opacity duration-300 ${gradient} -z-10`} />
       
-      {/* Alert indicator - DEVANT */}
+      {/* Alert indicator */}
       {alert && (
         <div className="absolute top-4 right-4 z-20">
           <div className="relative">
@@ -89,7 +89,7 @@ export const CyberKPICard: React.FC<CyberKPICardProps> = React.memo(({
         </div>
       )}
       
-      {/* Evolution badges M-1 et N-1 - DEVANT */}
+      {/* Evolution badges M-1 et N-1 */}
       {(evolutionM1 !== undefined || evolutionN1 !== undefined) && (
         <div className="absolute top-2 right-2 flex flex-col gap-1 z-20">
           {evolutionM1 !== undefined && (
@@ -123,7 +123,7 @@ export const CyberKPICard: React.FC<CyberKPICardProps> = React.memo(({
         </div>
       )}
 
-      {/* Evolution badge ancien format - DEVANT */}
+      {/* Evolution badge ancien format */}
       {evolution && !evolutionM1 && !evolutionN1 && (
         <div className={`absolute top-2 right-2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-lg backdrop-blur-md border ${
           evolution.value === 0 
@@ -139,7 +139,7 @@ export const CyberKPICard: React.FC<CyberKPICardProps> = React.memo(({
         </div>
       )}
       
-      {/* Content principal - DEVANT */}
+      {/* Content principal */}
       <div className="relative z-10">
         <div className="flex items-start justify-between mb-4">
           <motion.div 
@@ -149,7 +149,8 @@ export const CyberKPICard: React.FC<CyberKPICardProps> = React.memo(({
             whileHover={{ rotate: 360 }}
             transition={{ duration: 0.6 }}
           >
-            <Icon size={isLarge ? 26 : 22} className="text-white drop-shadow-lg" />
+            {/* ✅ FIX : Utiliser IconComponent directement */}
+            <IconComponent size={isLarge ? 26 : 22} className="text-white drop-shadow-lg" />
           </motion.div>
         </div>
         

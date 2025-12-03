@@ -1,17 +1,15 @@
 /**
- * 🌊 WATERFALL DATA HOOK v4.2
+ * 🌊 WATERFALL DATA HOOK v5.1 - PRIX/VOLUME UNIQUEMENT
  * 
- * Hook React pour récupérer et calculer les données du double waterfall
- * Affiche 2 waterfalls : vs M-1 (mois précédent) ET vs N-1 (année précédente)
+ * ✅ FORMULES CORRECTES SANS MIX:
  * 
- * ✅ CORRECTIONS v4.2:
- * - Validation stricte des données Supabase
- * - Logs détaillés pour debugging
- * - Recalcul automatique amélioré
- * - Gestion erreurs robuste
+ * Effet Prix    = (Coût Moyen M - Coût Moyen M-1) × ETP M
+ * Effet Volume  = (ETP M - ETP M-1) × Coût Moyen M-1
+ * 
+ * Vérification: Prix + Volume = Variation Totale ✓
  * 
  * @module useWaterfallData
- * @version 4.2
+ * @version 5.1
  */
 
 'use client'
@@ -28,7 +26,7 @@ interface UseWaterfallDataResult {
 }
 
 /**
- * Hook Waterfall v4.2 - Double waterfall avec validation stricte
+ * Hook Waterfall v5.1 - Prix/Volume uniquement (sans Mix)
  */
 export function useWaterfallData(
   establishmentId: string,
@@ -41,7 +39,14 @@ export function useWaterfallData(
   const supabase = createClient()
 
   /**
-   * Calcule les effets Prix/Volume avec validation stricte
+   * ✅ FORMULES CORRECTES Prix/Volume (SANS Mix)
+   * 
+   * Ces formules garantissent que:
+   * effetPrix + effetVolume = variation
+   * 
+   * IMPORTANT: 
+   * - Effet Prix utilise ETP M (période courante)
+   * - Effet Volume utilise Coût Moyen M-1 (période référence)
    */
   const calculateEffects = (
     masseM: number,
@@ -49,35 +54,72 @@ export function useWaterfallData(
     masseM1: number,
     etpM1: number
   ): { effetPrix: number; effetVolume: number } => {
-    // Validation entrées
+    
+    // ============================================
+    // VALIDATION DES ENTRÉES
+    // ============================================
     if (etpM1 === 0 || etpM === 0) {
       console.warn('⚠️ calculateEffects: ETP = 0, impossible de calculer')
       return { effetPrix: 0, effetVolume: 0 }
     }
     
     if (masseM < 0 || masseM1 < 0 || etpM < 0 || etpM1 < 0) {
-      console.error('❌ calculateEffects: Valeurs négatives détectées!')
+      console.error('❌ calculateEffects: Valeurs négatives détectées!', {
+        masseM, masseM1, etpM, etpM1
+      })
       return { effetPrix: 0, effetVolume: 0 }
     }
     
-    // Calcul coûts moyens
+    // ============================================
+    // CALCUL DES COÛTS MOYENS
+    // ============================================
     const coutMoyenM = masseM / etpM
     const coutMoyenM1 = masseM1 / etpM1
     
-    // Formules v2.4
-    const effetPrix = (coutMoyenM - coutMoyenM1) * etpM1
-    const effetVolume = (etpM - etpM1) * coutMoyenM
+    // ============================================
+    // FORMULES CORRECTES (SANS MIX)
+    // ============================================
+    // Effet Prix: changement de coût moyen × effectif COURANT
+    const effetPrix = (coutMoyenM - coutMoyenM1) * etpM
     
-    console.log('🧮 Recalcul Effets:', {
+    // Effet Volume: changement d'effectif × coût moyen RÉFÉRENCE
+    const effetVolume = (etpM - etpM1) * coutMoyenM1
+    
+    // ============================================
+    // VALIDATION MATHÉMATIQUE
+    // ============================================
+    const variation = masseM - masseM1
+    const sommeEffets = effetPrix + effetVolume
+    const ecart = Math.abs(variation - sommeEffets)
+    const ecartPct = Math.abs(variation) > 0 ? (ecart / Math.abs(variation)) * 100 : 0
+    
+    console.log('🧮 Calcul Effets Prix/Volume (sans Mix):', {
       masseM: masseM.toFixed(2),
       masseM1: masseM1.toFixed(2),
       etpM: etpM.toFixed(2),
       etpM1: etpM1.toFixed(2),
       coutMoyenM: coutMoyenM.toFixed(2),
       coutMoyenM1: coutMoyenM1.toFixed(2),
+      '---': '---',
       effetPrix: effetPrix.toFixed(2),
-      effetVolume: effetVolume.toFixed(2)
+      effetVolume: effetVolume.toFixed(2),
+      sommeEffets: sommeEffets.toFixed(2),
+      '---2': '---',
+      variation: variation.toFixed(2),
+      ecart: ecart.toFixed(2),
+      ecartPct: ecartPct.toFixed(4) + '%',
+      coherence: ecartPct < 0.01 ? '✅ OK' : '❌ ERREUR'
     })
+    
+    // Alerte si incohérence
+    if (ecartPct > 0.01) {
+      console.error('❌ INCOHÉRENCE MATHÉMATIQUE!', {
+        variation_attendue: variation.toFixed(2),
+        somme_effets_calculee: sommeEffets.toFixed(2),
+        ecart_absolu: ecart.toFixed(2),
+        ecart_pourcentage: ecartPct.toFixed(2) + '%'
+      })
+    }
     
     return {
       effetPrix: Math.round(effetPrix * 100) / 100,
@@ -86,7 +128,7 @@ export function useWaterfallData(
   }
 
   /**
-   * Construit un objet WaterfallData avec validation
+   * Construit un objet WaterfallData avec validation stricte
    */
   const buildWaterfallData = (
     snapshotM: any,
@@ -96,95 +138,73 @@ export function useWaterfallData(
   ): WaterfallData => {
     
     // ============================================
-    // EXTRACTION ET VALIDATION DES DONNÉES
+    // EXTRACTION DES DONNÉES
     // ============================================
     const masseM = parseFloat(snapshotM.masse_salariale_brute) || 0
     const etpM = parseFloat(snapshotM.etp_fin_mois) || 0
     const massePrevious = parseFloat(snapshotPrevious.masse_salariale_brute) || 0
     const etpPrevious = parseFloat(snapshotPrevious.etp_fin_mois) || 0
     
-    console.log('🔍 Données Extraites:', {
-      periode_m: periodLabel,
-      periode_previous: previousLabel,
+    console.log('🔍 Données Période:', {
+      periode_courante: periodLabel,
+      periode_precedente: previousLabel,
       masseM,
       etpM,
       massePrevious,
       etpPrevious
     })
     
-    // Validation: détecter valeurs aberrantes
+    // ============================================
+    // VALIDATION
+    // ============================================
     if (masseM <= 0 || massePrevious <= 0) {
-      console.error('❌ ERREUR: Masse salariale <= 0 détectée!')
+      console.error('❌ ERREUR: Masse salariale <= 0!')
     }
     
     if (etpM <= 0 || etpPrevious <= 0) {
-      console.error('❌ ERREUR: ETP <= 0 détecté!')
+      console.error('❌ ERREUR: ETP <= 0!')
     }
     
-    // Récupérer les effets stockés en DB
-    let effetPrix = parseFloat(snapshotM.effet_prix) || 0
-    let effetVolume = parseFloat(snapshotM.effet_volume) || 0
-    let recalculated = false
-    
-    console.log('📊 Effets stockés en DB:', {
-      effet_prix: effetPrix,
-      effet_volume: effetVolume
-    })
-    
     // ============================================
-    // RECALCUL AUTOMATIQUE si effets = 0 mais variation existe
+    // RECALCUL SYSTÉMATIQUE AVEC FORMULES CORRECTES
     // ============================================
     const variation = masseM - massePrevious
     
-    // Condition recalcul: variation > 100€ ET (effet_prix = 0 OU effet_volume = 0)
-    // ⚠️ Important: on recalcule même si UN SEUL effet est à 0
-    if (Math.abs(variation) > 100 && (effetPrix === 0 || effetVolume === 0)) {
-      console.warn('⚠️ RECALCUL AUTOMATIQUE DÉCLENCHÉ', {
-        raison: 'Effets manquants ou nuls en DB',
-        variation: variation.toFixed(2),
-        effet_prix_db: effetPrix,
-        effet_volume_db: effetVolume
-      })
-      
-      const calculated = calculateEffects(masseM, etpM, massePrevious, etpPrevious)
-      effetPrix = calculated.effetPrix
-      effetVolume = calculated.effetVolume
-      recalculated = true
-      
-      console.log('✅ Recalcul terminé:', {
-        nouveau_effet_prix: effetPrix,
-        nouveau_effet_volume: effetVolume
-      })
-    }
+    console.log('🔄 Recalcul automatique avec formules v5.1 (Prix/Volume uniquement)...')
     
-    // Calculs dérivés
-    const coutMoyenM = etpM > 0 ? masseM / etpM : 0
-    const coutMoyenPrevious = etpPrevious > 0 ? massePrevious / etpPrevious : 0
-    const variationPct = massePrevious > 0 ? (variation / massePrevious) * 100 : 0
+    const { effetPrix, effetVolume } = calculateEffects(
+      masseM,
+      etpM,
+      massePrevious,
+      etpPrevious
+    )
     
     // ============================================
-    // VALIDATION COHÉRENCE MATHÉMATIQUE
+    // VALIDATION FINALE
     // ============================================
     const sommeEffets = effetPrix + effetVolume
-    const ecartCoherence = Math.abs(variation - sommeEffets)
-    const ecartCoherencePct = variation !== 0 ? (ecartCoherence / Math.abs(variation)) * 100 : 0
-    const coherenceOk = ecartCoherencePct < 1
+    const ecart = Math.abs(variation - sommeEffets)
+    const ecartPct = Math.abs(variation) > 0 ? (ecart / Math.abs(variation)) * 100 : 0
+    const coherenceOk = ecartPct < 0.01 // Tolérance 0.01%
     
     if (!coherenceOk) {
-      console.error('❌ INCOHÉRENCE MATHÉMATIQUE DÉTECTÉE!', {
+      console.error('❌ VALIDATION ÉCHOUÉE!', {
         periode: periodLabel,
         variation_reelle: variation.toFixed(2),
         somme_effets: sommeEffets.toFixed(2),
-        ecart: ecartCoherence.toFixed(2),
-        ecart_pct: ecartCoherencePct.toFixed(2) + '%',
-        message: 'La somme Prix + Volume ne correspond pas à la variation!'
+        ecart: ecart.toFixed(2),
+        ecart_pct: ecartPct.toFixed(4) + '%'
       })
     } else {
-      console.log('✅ Cohérence mathématique validée', {
-        ecart: ecartCoherence.toFixed(2),
-        ecart_pct: ecartCoherencePct.toFixed(4) + '%'
-      })
+      console.log('✅ Validation réussie (écart < 0.01%)')
     }
+    
+    // ============================================
+    // CONSTRUCTION DU RÉSULTAT
+    // ============================================
+    const coutMoyenM = etpM > 0 ? masseM / etpM : 0
+    const coutMoyenPrevious = etpPrevious > 0 ? massePrevious / etpPrevious : 0
+    const variationPct = massePrevious > 0 ? (variation / massePrevious) * 100 : 0
     
     return {
       periodeCourante: periodLabel,
@@ -196,6 +216,7 @@ export function useWaterfallData(
       
       effetPrix: Math.round(effetPrix * 100) / 100,
       effetVolume: Math.round(effetVolume * 100) / 100,
+      
       variation: Math.round(variation * 100) / 100,
       variationPct: Math.round(variationPct * 100) / 100,
       
@@ -207,16 +228,16 @@ export function useWaterfallData(
       primesExceptionnellesM1: Math.round((parseFloat(snapshotPrevious.primes_exceptionnelles_total) || 0) * 100) / 100,
       
       coherenceOk,
-      ecartCoherence: Math.round(ecartCoherence * 100) / 100,
-      ecartCoherencePct: Math.round(ecartCoherencePct * 100) / 100,
+      ecartCoherence: Math.round(ecart * 100) / 100,
+      ecartCoherencePct: Math.round(ecartPct * 10000) / 10000,
       
-      recalculated
+      recalculated: true
     }
   }
 
   const fetchData = async () => {
     if (!establishmentId || !period) {
-      console.warn('⚠️ useWaterfallData: Paramètres manquants', { establishmentId, period })
+      console.warn('⚠️ useWaterfallData: Paramètres manquants')
       setLoading(false)
       return
     }
@@ -239,11 +260,11 @@ export function useWaterfallData(
       yearBeforeDate.setFullYear(yearBeforeDate.getFullYear() - 1)
       const yearBefore = yearBeforeDate.toISOString().substring(0, 7) + '-01'
 
-      console.group('🌊 TALVIO - Waterfall v4.2 (Validation Stricte)')
+      console.group('🌊 WATERFALL v5.1 - PRIX/VOLUME UNIQUEMENT')
       console.log('🏢 Établissement:', establishmentId)
-      console.log('📅 Période courante:', normalizedPeriod)
-      console.log('📅 M-1 (mois précédent):', monthBefore)
-      console.log('📅 N-1 (année précédente):', yearBefore)
+      console.log('📅 Période M:', normalizedPeriod)
+      console.log('📅 Période M-1:', monthBefore)
+      console.log('📅 Période N-1:', yearBefore)
 
       // ============================================
       // REQUÊTE SUPABASE
@@ -254,8 +275,6 @@ export function useWaterfallData(
           periode,
           masse_salariale_brute,
           etp_fin_mois,
-          effet_prix,
-          effet_volume,
           primes_exceptionnelles_total
         `)
         .eq('etablissement_id', establishmentId)
@@ -266,34 +285,33 @@ export function useWaterfallData(
       }
       
       if (!snapshots || snapshots.length === 0) {
-        throw new Error(`Aucune donnée trouvée pour l'établissement ${establishmentId} sur la période ${normalizedPeriod}`)
+        throw new Error(`Aucune donnée pour ${establishmentId} sur ${normalizedPeriod}`)
       }
 
       console.log('📦 Snapshots récupérés:', snapshots.length)
 
-      // Recherche des snapshots
       const snapshotCurrent = snapshots.find(s => s.periode === normalizedPeriod)
       const snapshotMonthBefore = snapshots.find(s => s.periode === monthBefore)
       const snapshotYearBefore = snapshots.find(s => s.periode === yearBefore)
 
       if (!snapshotCurrent) {
-        throw new Error(`Snapshot manquant pour la période courante ${normalizedPeriod}`)
+        throw new Error(`Snapshot manquant pour ${normalizedPeriod}`)
       }
 
-      console.log('📊 Disponibilité Snapshots:', {
+      console.log('📊 Disponibilité:', {
         M: snapshotCurrent ? '✅' : '❌',
         'M-1': snapshotMonthBefore ? '✅' : '❌',
         'N-1': snapshotYearBefore ? '✅' : '❌'
       })
 
       // ============================================
-      // CONSTRUCTION DES WATERFALLS
+      // CONSTRUCTION WATERFALLS
       // ============================================
       let vsMonthBefore: WaterfallData | null = null
       let vsYearBefore: WaterfallData | null = null
 
       if (snapshotMonthBefore) {
-        console.log('\n--- Construction Waterfall vs M-1 ---')
+        console.log('\n--- Waterfall vs M-1 ---')
         vsMonthBefore = buildWaterfallData(
           snapshotCurrent,
           snapshotMonthBefore,
@@ -301,18 +319,16 @@ export function useWaterfallData(
           monthBefore
         )
         
-        console.log('✅ Waterfall M-1:', {
-          effet_prix: vsMonthBefore.effetPrix,
-          effet_volume: vsMonthBefore.effetVolume,
+        console.log('✅ Résultat M-1:', {
+          effetPrix: vsMonthBefore.effetPrix,
+          effetVolume: vsMonthBefore.effetVolume,
           variation: vsMonthBefore.variation,
-          recalculated: vsMonthBefore.recalculated ? '🔄 OUI' : '📊 Non (DB)'
+          coherence: vsMonthBefore.coherenceOk ? '✅' : '❌'
         })
-      } else {
-        console.warn('⚠️ Snapshot M-1 indisponible')
       }
 
       if (snapshotYearBefore) {
-        console.log('\n--- Construction Waterfall vs N-1 ---')
+        console.log('\n--- Waterfall vs N-1 ---')
         vsYearBefore = buildWaterfallData(
           snapshotCurrent,
           snapshotYearBefore,
@@ -320,19 +336,16 @@ export function useWaterfallData(
           yearBefore
         )
         
-        console.log('✅ Waterfall N-1:', {
-          effet_prix: vsYearBefore.effetPrix,
-          effet_volume: vsYearBefore.effetVolume,
+        console.log('✅ Résultat N-1:', {
+          effetPrix: vsYearBefore.effetPrix,
+          effetVolume: vsYearBefore.effetVolume,
           variation: vsYearBefore.variation,
-          recalculated: vsYearBefore.recalculated ? '🔄 OUI' : '📊 Non (DB)'
+          coherence: vsYearBefore.coherenceOk ? '✅' : '❌'
         })
-      } else {
-        console.warn('⚠️ Snapshot N-1 indisponible (historique < 12 mois)')
       }
 
       console.groupEnd()
 
-      // Mise à jour state
       setData({
         vsMonthBefore,
         vsYearBefore,
@@ -342,7 +355,7 @@ export function useWaterfallData(
 
     } catch (err) {
       console.error('❌ Erreur waterfall:', err)
-      setError(err instanceof Error ? err.message : 'Erreur de chargement des données waterfall')
+      setError(err instanceof Error ? err.message : 'Erreur waterfall')
       setData(null)
     } finally {
       setLoading(false)
