@@ -27,9 +27,11 @@ export interface VisionItem {
   config?: Record<string, any>
 }
 
+// ✅ Support de 2 formats : Grid (ancien) et Sections (nouveau)
 export interface VisionLayout {
-  gridCols: number  // Défaut: 4
-  items: VisionItem[]
+  gridCols?: number      // Format Grid (ancien)
+  items?: VisionItem[]   // Format Grid (ancien)
+  sections?: string[]    // ✅ Format Sections (nouveau) : ['workforce', 'payroll', 'absences', 'demographics']
 }
 
 export interface SavedVision {
@@ -488,6 +490,21 @@ export function validateVisionLayout(layout: VisionLayout): {
 } {
   const errors: string[] = []
 
+  // ✅ Support du format simple (sections)
+  if (layout.sections) {
+    if (!Array.isArray(layout.sections)) {
+      errors.push('sections doit être un tableau')
+    } else if (layout.sections.length === 0) {
+      errors.push('La vision doit contenir au moins 1 section')
+    }
+    
+    return {
+      valid: errors.length === 0,
+      errors
+    }
+  }
+
+  // Format ancien (grid)
   if (!layout.gridCols || layout.gridCols < 1 || layout.gridCols > 4) {
     errors.push('gridCols doit être entre 1 et 4')
   }
@@ -496,26 +513,28 @@ export function validateVisionLayout(layout: VisionLayout): {
     errors.push('items doit être un tableau')
   }
 
-  if (layout.items.length === 0) {
+  if (layout.items && layout.items.length === 0) {
     errors.push('La vision doit contenir au moins 1 item')
   }
 
   // Vérifier chevauchements
-  const occupied: Set<string> = new Set()
-  for (const item of layout.items) {
-    for (let r = item.position.row; r < item.position.row + item.size.rows; r++) {
-      for (let c = item.position.col; c < item.position.col + item.size.cols; c++) {
-        const key = `${r},${c}`
-        if (occupied.has(key)) {
-          errors.push(`Chevauchement détecté à la position ${key}`)
+  if (layout.items) {
+    const occupied: Set<string> = new Set()
+    for (const item of layout.items) {
+      for (let r = item.position.row; r < item.position.row + item.size.rows; r++) {
+        for (let c = item.position.col; c < item.position.col + item.size.cols; c++) {
+          const key = `${r},${c}`
+          if (occupied.has(key)) {
+            errors.push(`Chevauchement détecté à la position ${key}`)
+          }
+          occupied.add(key)
         }
-        occupied.add(key)
       }
-    }
 
-    // Vérifier limites
-    if (item.position.col + item.size.cols > layout.gridCols) {
-      errors.push(`Item ${item.id} dépasse la grille`)
+      // Vérifier limites
+      if (layout.gridCols && item.position.col + item.size.cols > layout.gridCols) {
+        errors.push(`Item ${item.id} dépasse la grille`)
+      }
     }
   }
 

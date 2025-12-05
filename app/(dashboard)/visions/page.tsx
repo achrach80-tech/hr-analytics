@@ -1,79 +1,137 @@
+// app/(dashboard)/visions/page.tsx
+// Liste des visions enregistrées
+
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Plus, Sparkles, FileText, Download, ArrowLeft } from 'lucide-react'
+import { 
+  Plus, Eye, Calendar, FileDown, Star, Edit2, 
+  Trash2, Copy, Sparkles, AlertCircle
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { visionsApi } from '@/lib/api/visions'
+import type { SavedVision } from '@/lib/types/visions'
 
 export default function VisionsPage() {
   const router = useRouter()
-  const [etablissementId, setEtablissementId] = useState<string | null>(null)
-  const [visions, setVisions] = useState<any[]>([])
+  const supabase = createClient()
+
+  const [visions, setVisions] = useState<SavedVision[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [etablissementId, setEtablissementId] = useState<string>('')
 
+  // Charger établissement
   useEffect(() => {
-    const loadData = async () => {
+    const loadEstablishment = async () => {
+      const sessionStr = localStorage.getItem('company_session')
+      if (!sessionStr) {
+        router.push('/login')
+        return
+      }
+
+      const session = JSON.parse(sessionStr)
+      
+      const { data: etablissements } = await supabase
+        .from('etablissements')
+        .select('id')
+        .eq('entreprise_id', session.company_id)
+        .limit(1)
+
+      if (etablissements && etablissements.length > 0) {
+        setEtablissementId(etablissements[0].id)
+      }
+    }
+
+    loadEstablishment()
+  }, [supabase, router])
+
+  // Charger visions
+  useEffect(() => {
+    if (!etablissementId) return
+
+    const loadVisions = async () => {
       try {
-        const supabase = createClient()
-        
-        // Get etablissement from localStorage (token-based auth)
-        const sessionStr = localStorage.getItem('company_session')
-        if (!sessionStr) {
-          router.push('/login')
-          return
-        }
-
-        const session = JSON.parse(sessionStr)
-        
-        // Get first etablissement
-        const { data: etablissements } = await supabase
-          .from('etablissements')
-          .select('id')
-          .eq('entreprise_id', session.company_id)
-          .limit(1)
-
-        if (etablissements && etablissements.length > 0) {
-          const estabId = etablissements[0].id
-          setEtablissementId(estabId)
-
-          // Load visions (OPTIONAL - can be empty)
-          const { data: visionsData } = await supabase
-            .from('visions')
-            .select('*')
-            .eq('etablissement_id', estabId)
-            .order('created_at', { ascending: false })
-
-          setVisions(visionsData || [])
-        }
+        setLoading(true)
+        const data = await visionsApi.getVisions(etablissementId)
+        setVisions(data)
       } catch (err) {
-        console.error('Error loading visions:', err)
+        console.error('Erreur chargement visions:', err)
+        setError('Erreur de chargement')
       } finally {
         setLoading(false)
       }
     }
 
-    loadData()
-  }, [router])
+    loadVisions()
+  }, [etablissementId])
 
-  const handleBack = () => {
-    router.push('/dashboard')
+  const handleDelete = async (visionId: string, nom: string) => {
+    if (!confirm(`Supprimer "${nom}" ?`)) return
+
+    try {
+      await visionsApi.deleteVision(visionId)
+      setVisions(prev => prev.filter(v => v.id !== visionId))
+    } catch (error) {
+      alert('Erreur lors de la suppression')
+    }
   }
 
-  const handleCreate = () => {
-    router.push('/visions/new')
+  const handleDuplicate = async (visionId: string) => {
+    try {
+      const duplicated = await visionsApi.duplicateVision(visionId)
+      if (duplicated) {
+        setVisions(prev => [duplicated, ...prev])
+      }
+    } catch (error) {
+      alert('Erreur lors de la duplication')
+    }
+  }
+
+  const handleToggleDefault = async (visionId: string) => {
+    try {
+      await visionsApi.setDefaultVision(visionId, etablissementId)
+      
+      // Mettre à jour l'état local
+      setVisions(prev => prev.map(v => ({
+        ...v,
+        isDefault: v.id === visionId
+      })))
+    } catch (error) {
+      alert('Erreur lors de la mise à jour')
+    }
+  }
+
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
+  const getSectionsCount = (vision: SavedVision) => {
+    if (vision.layout?.sections) {
+      return vision.layout.sections.length
+    }
+    if (vision.layout?.items) {
+      return vision.layout.items.length
+    }
+    return 0
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-center h-64">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-slate-400">Chargement...</p>
-            </div>
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4" />
+          <p className="text-slate-400">Chargement...</p>
         </div>
       </div>
     )
@@ -82,156 +140,213 @@ export default function VisionsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
       <div className="max-w-7xl mx-auto">
+        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <button
-            onClick={handleBack}
-            className="flex items-center gap-2 text-slate-400 hover:text-white mb-4 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Retour au dashboard
-          </button>
-
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-purple-500 rounded-xl flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-white">
-                  Mes Visions
-                </h1>
-                <p className="text-slate-400 text-sm">
-                  Créez vos dashboards personnalisés
-                </p>
-              </div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent mb-2">
+                Mes Visions
+              </h1>
+              <p className="text-slate-400">
+                Créez et gérez vos exports personnalisés du Dashboard
+              </p>
             </div>
-
-            <button
-              onClick={handleCreate}
-              className="flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg shadow-cyan-500/25"
+            <motion.button
+              onClick={() => router.push('/visions/new')}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-500 text-white rounded-xl font-semibold shadow-lg hover:shadow-cyan-500/50 transition-all"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               <Plus className="w-5 h-5" />
               Créer une vision
-            </button>
+            </motion.button>
           </div>
-        </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"
-        >
-          <div className="bg-gradient-to-br from-slate-900/80 to-slate-800/60 rounded-xl border border-slate-700/50 p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-cyan-500/10 rounded-lg flex items-center justify-center">
-                <FileText className="w-5 h-5 text-cyan-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">
-                  {visions.length}
-                </p>
-                <p className="text-sm text-slate-400">
-                  Vision{visions.length > 1 ? 's' : ''} créée{visions.length > 1 ? 's' : ''}
-                </p>
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-4 mt-6">
+            <div className="bg-slate-900/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
+                  <Eye className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Visions créées</p>
+                  <p className="text-2xl font-bold text-white">{visions.length}</p>
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-slate-900/80 to-slate-800/60 rounded-xl border border-slate-700/50 p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-purple-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">
-                  {visions.reduce((sum, v) => sum + (v.layout?.items?.length || 0), 0)}
-                </p>
-                <p className="text-sm text-slate-400">Items au total</p>
+            <div className="bg-slate-900/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                  <FileDown className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Exports réalisés</p>
+                  <p className="text-2xl font-bold text-white">
+                    {visions.reduce((sum, v) => sum + (v.exportCount || 0), 0)}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-slate-900/80 to-slate-800/60 rounded-xl border border-slate-700/50 p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center">
-                <Download className="w-5 h-5 text-amber-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">
-                  {visions.reduce((sum, v) => sum + (v.export_count || 0), 0)}
-                </p>
-                <p className="text-sm text-slate-400">Exports réalisés</p>
+            <div className="bg-slate-900/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                  <Star className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Vision par défaut</p>
+                  <p className="text-2xl font-bold text-white">
+                    {visions.filter(v => v.isDefault).length}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </motion.div>
 
-        {visions.length === 0 ? (
+        {/* Liste des visions */}
+        {error ? (
+          <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-8 text-center">
+            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+            <h3 className="text-lg font-bold text-white mb-2">Erreur</h3>
+            <p className="text-red-300">{error}</p>
+          </div>
+        ) : visions.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
-            className="bg-gradient-to-br from-slate-900/80 to-slate-800/60 rounded-xl border border-slate-700/50 p-12 text-center"
+            className="bg-slate-900/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-12 text-center"
           >
-            <div className="w-16 h-16 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="w-8 h-8 text-cyan-400" />
+            <div className="w-20 h-20 bg-gradient-to-br from-cyan-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Sparkles className="w-10 h-10 text-white" />
             </div>
-            <h3 className="text-xl font-bold text-white mb-2">
-              Aucune vision créée
-            </h3>
-            <p className="text-slate-400 mb-6 max-w-md mx-auto">
-              Créez votre première vision personnalisée from scratch.
-              Choisissez les KPIs et graphiques qui vous intéressent !
+            <h2 className="text-2xl font-bold text-white mb-2">
+              Aucune vision pour le moment
+            </h2>
+            <p className="text-slate-400 mb-6">
+              Créez votre première vision pour exporter vos KPIs Dashboard
             </p>
-            <button
-              onClick={handleCreate}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200"
+            <motion.button
+              onClick={() => router.push('/visions/new')}
+              className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-purple-500 text-white rounded-xl font-semibold inline-flex items-center gap-2"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               <Plus className="w-5 h-5" />
               Créer ma première vision
-            </button>
+            </motion.button>
           </motion.div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {visions.map((vision, index) => (
-              <motion.div
-                key={vision.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 + index * 0.05 }}
-                className="bg-gradient-to-br from-slate-900/80 to-slate-800/60 rounded-xl border border-slate-700/50 p-6 cursor-pointer hover:border-cyan-500/50 transition-all"
-                onClick={() => router.push(`/visions/${vision.id}`)}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-white mb-1">
-                      {vision.nom}
-                    </h3>
-                    <p className="text-sm text-slate-400">
-                      {vision.description || 'Aucune description'}
-                    </p>
-                  </div>
-                  {vision.is_default && (
-                    <span className="px-2 py-1 bg-cyan-500/20 text-cyan-400 text-xs rounded-lg">
-                      Par défaut
-                    </span>
-                  )}
-                </div>
+          <div className="grid gap-4">
+            {visions.map((vision, index) => {
+              const isDefault = vision.isDefault
+              const sectionsCount = getSectionsCount(vision)
 
-                <div className="flex items-center gap-4 text-sm text-slate-500">
-                  <span>{vision.layout?.items?.length || 0} items</span>
-                  <span>•</span>
-                  <span>{vision.view_count || 0} vues</span>
-                  <span>•</span>
-                  <span>{vision.export_count || 0} exports</span>
-                </div>
-              </motion.div>
-            ))}
+              return (
+                <motion.div
+                  key={vision.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="bg-slate-900/50 backdrop-blur-sm rounded-xl border border-slate-700/50 p-6 hover:border-cyan-500/50 transition-all group"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-xl font-bold text-white group-hover:text-cyan-400 transition-colors">
+                          {vision.nom}
+                        </h3>
+                        {isDefault && (
+                          <span className="px-2 py-1 bg-cyan-500/10 text-cyan-400 text-xs font-bold rounded-full border border-cyan-500/20">
+                            PAR DÉFAUT
+                          </span>
+                        )}
+                      </div>
+                      {vision.description && (
+                        <p className="text-slate-400 text-sm mb-4">{vision.description}</p>
+                      )}
+                      <div className="flex items-center gap-6 text-sm text-slate-500">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          Créée le {formatDate(vision.createdAt)}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Eye className="w-4 h-4" />
+                          {sectionsCount} section{sectionsCount > 1 ? 's' : ''}
+                        </div>
+                        {vision.exportCount > 0 && (
+                          <div className="flex items-center gap-2">
+                            <FileDown className="w-4 h-4" />
+                            {vision.exportCount} export{vision.exportCount > 1 ? 's' : ''}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2">
+                      <motion.button
+                        onClick={() => router.push(`/visions/${vision.id}`)}
+                        className="p-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg hover:shadow-lg hover:shadow-cyan-500/50 transition-all"
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        title="Voir"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </motion.button>
+
+                      <motion.button
+                        onClick={() => handleToggleDefault(vision.id)}
+                        className={`p-2 rounded-lg transition-all ${
+                          isDefault
+                            ? 'bg-cyan-500/20 text-cyan-400'
+                            : 'bg-slate-800 text-slate-400 hover:text-cyan-400'
+                        }`}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        title={isDefault ? 'Retirer par défaut' : 'Définir par défaut'}
+                      >
+                        <Star className="w-4 h-4" fill={isDefault ? 'currentColor' : 'none'} />
+                      </motion.button>
+
+                      <motion.button
+                        onClick={() => router.push(`/visions/${vision.id}/edit`)}
+                        className="p-2 bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-all"
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        title="Modifier"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </motion.button>
+
+                      <motion.button
+                        onClick={() => handleDuplicate(vision.id)}
+                        className="p-2 bg-slate-800 text-slate-400 hover:text-green-400 rounded-lg transition-all"
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        title="Dupliquer"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </motion.button>
+
+                      <motion.button
+                        onClick={() => handleDelete(vision.id, vision.nom)}
+                        className="p-2 bg-slate-800 text-slate-400 hover:text-red-400 rounded-lg transition-all"
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        title="Supprimer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </motion.button>
+                    </div>
+                  </div>
+                </motion.div>
+              )
+            })}
           </div>
         )}
       </div>

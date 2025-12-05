@@ -1,18 +1,14 @@
 // lib/hooks/useExport.ts
-// Version FINALE sans erreur TypeScript - Contournement du problème scale
-
 import { useState } from 'react'
-import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import { visionsApi } from '@/lib/api/visions'
 
 export type ExportFormat = 'pdf' | 'png'
-export type ExportQuality = 'standard' | 'high' | 'ultra'
+export type ExportQuality = 'presentation' | 'print'
 
 export interface ExportOptions {
   format: ExportFormat
   quality: ExportQuality
-  includeHeader?: boolean
-  includeFooter?: boolean
 }
 
 export interface ExportProgress {
@@ -42,39 +38,51 @@ export function useExport() {
       const element = document.getElementById(elementId)
       if (!element) throw new Error('Élément introuvable')
 
-      setProgress({ status: 'capturing', message: 'Capture en cours...', progress: 40 })
-
-      // Calculer le scale selon la qualité
-      const scale = options.quality === 'ultra' ? 3 : options.quality === 'high' ? 2 : 1.5
-
-      // Capturer SANS scale dans les options (évite l'erreur TS)
-      // On va appliquer le scale après sur le canvas
-      const canvas = await html2canvas(element, {
-        useCORS: true,
-        allowTaint: false,
-        background: '#0f172a',
-        logging: false,
-        // PAS de scale ici pour éviter l'erreur TypeScript
-      })
-
-      // Appliquer le scale manuellement si besoin
-      let finalCanvas = canvas
-      if (scale > 1) {
-        finalCanvas = scaleCanvas(canvas, scale)
+      // Trouver les sections
+      const sections = element.querySelectorAll('.export-section')
+      if (sections.length === 0) {
+        throw new Error('Aucune section trouvée')
       }
 
-      setProgress({ status: 'generating', message: 'Génération du fichier...', progress: 70 })
+      setProgress({ status: 'capturing', message: 'Capture haute résolution...', progress: 30 })
+
+      // Configuration selon qualité
+      const config = options.quality === 'presentation' 
+        ? { width: 1920, scale: 2 } 
+        : { width: 2400, scale: 3 }
+
+      const images: string[] = []
+
+      // Capturer chaque section
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i] as HTMLElement
+        
+        setProgress({
+          status: 'capturing',
+          message: `Capture section ${i + 1}/${sections.length}...`,
+          progress: 30 + Math.floor((i / sections.length) * 40)
+        })
+
+        const imageData = await captureSectionHighRes(section, config.width, config.scale)
+        images.push(imageData)
+
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
+      setProgress({ status: 'generating', message: 'Génération fichier...', progress: 75 })
 
       if (options.format === 'pdf') {
-        await generatePDF(finalCanvas, filename)
+        await generatePDF(images, filename)
       } else {
-        await generatePNG(finalCanvas, filename)
+        await generatePNGArchive(images, filename)
       }
 
-      setProgress({ status: 'generating', message: 'Téléchargement...', progress: 90 })
-
       if (visionId) {
-        await incrementExportCount(visionId)
+        try {
+          await visionsApi.incrementExportCount(visionId)
+        } catch (e) {
+          console.warn('Track export failed:', e)
+        }
       }
 
       setProgress({ status: 'success', message: 'Export réussi !', progress: 100 })
@@ -88,7 +96,7 @@ export function useExport() {
       console.error('Export error:', error)
       setProgress({
         status: 'error',
-        message: 'Erreur lors de l\'export',
+        message: error instanceof Error ? error.message : 'Erreur export',
         progress: 0,
       })
       setTimeout(() => setIsExporting(false), 3000)
@@ -98,64 +106,184 @@ export function useExport() {
   return { exportElement, isExporting, progress }
 }
 
-// Fonction pour scaler un canvas manuellement
-function scaleCanvas(originalCanvas: HTMLCanvasElement, scale: number): HTMLCanvasElement {
-  const scaledCanvas = document.createElement('canvas')
-  scaledCanvas.width = originalCanvas.width * scale
-  scaledCanvas.height = originalCanvas.height * scale
+// Capture section avec rendu haute résolution
+async function captureSectionHighRes(
+  section: HTMLElement,
+  targetWidth: number,
+  scale: number
+): Promise<string> {
+  // Import dynamique html2canvas
+  const html2canvas = (await import('html2canvas')).default
+
+  // Créer un clone de la section
+  const clone = section.cloneNode(true) as HTMLElement
   
-  const ctx = scaledCanvas.getContext('2d')
-  if (!ctx) return originalCanvas
+  // Container temporaire hors viewport
+  const container = document.createElement('div')
+  container.style.cssText = `
+    position: fixed;
+    top: -10000px;
+    left: 0;
+    width: ${targetWidth}px;
+    background: #0f172a;
+    padding: 40px;
+    box-sizing: border-box;
+    z-index: -1000;
+  `
   
-  ctx.scale(scale, scale)
-  ctx.drawImage(originalCanvas, 0, 0)
-  
-  return scaledCanvas
+  container.appendChild(clone)
+  document.body.appendChild(container)
+
+  // Attendre rendu complet
+  await new Promise(resolve => setTimeout(resolve, 200))
+
+  // Forcer tous les styles inline
+  forceInlineStyles(clone)
+
+  try {
+    // Capturer avec html2canvas - utiliser 'as any' pour éviter erreurs TypeScript
+    const tempCanvas = await html2canvas(container, {
+      backgroundColor: '#0f172a',
+      useCORS: true,
+      allowTaint: false,
+      logging: false,
+      width: targetWidth,
+      height: container.scrollHeight
+    } as any)
+
+    // Créer canvas haute résolution
+    const canvas = document.createElement('canvas')
+    canvas.width = targetWidth * scale
+    canvas.height = container.scrollHeight * scale
+
+    const ctx = canvas.getContext('2d', { alpha: false })
+    if (!ctx) throw new Error('Canvas context failed')
+
+    // Background
+    ctx.fillStyle = '#0f172a'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    // Dessiner avec scale
+    ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height)
+
+    return canvas.toDataURL('image/png', 1.0)
+
+  } finally {
+    // Nettoyer
+    document.body.removeChild(container)
+  }
 }
 
-async function generatePDF(canvas: HTMLCanvasElement, filename: string): Promise<void> {
-  const imgData = canvas.toDataURL('image/png', 1.0)
+// Forcer tous les styles computed en inline
+function forceInlineStyles(element: HTMLElement): void {
+  const elements = [element, ...Array.from(element.querySelectorAll('*'))]
   
+  elements.forEach(el => {
+    if (!(el instanceof HTMLElement)) return
+    
+    const computed = window.getComputedStyle(el)
+    
+    // Styles critiques à préserver
+    const critical = [
+      'background-color',
+      'background-image',
+      'background-size',
+      'background-position',
+      'background-repeat',
+      'color',
+      'font-size',
+      'font-weight',
+      'font-family',
+      'padding',
+      'margin',
+      'border',
+      'border-radius',
+      'border-color',
+      'width',
+      'height',
+      'display',
+      'flex-direction',
+      'align-items',
+      'justify-content',
+      'gap',
+      'text-align'
+    ]
+    
+    critical.forEach(prop => {
+      const value = computed.getPropertyValue(prop)
+      if (value && value !== 'none' && value !== 'auto' && value !== 'rgba(0, 0, 0, 0)') {
+        el.style.setProperty(prop, value, 'important')
+      }
+    })
+
+    // Forcer préservation couleurs
+    el.style.setProperty('-webkit-print-color-adjust', 'exact', 'important')
+    el.style.setProperty('print-color-adjust', 'exact', 'important')
+    el.style.setProperty('color-adjust', 'exact', 'important')
+  })
+}
+
+// Générer PDF optimisé PowerPoint (16:9)
+async function generatePDF(images: string[], filename: string): Promise<void> {
   const pdf = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
-    format: 'a4',
+    format: [297, 167] // 16:9 ratio
   })
 
   const pageWidth = 297
-  const margin = 10
-  const imgWidth = pageWidth - margin * 2
-  const imgHeight = (canvas.height * imgWidth) / canvas.width
+  const pageHeight = 167
 
-  pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight)
+  for (let i = 0; i < images.length; i++) {
+    if (i > 0) pdf.addPage()
+
+    const img = new Image()
+    await new Promise((resolve, reject) => {
+      img.onload = resolve
+      img.onerror = reject
+      img.src = images[i]
+    })
+
+    // Calculer dimensions pour remplir la page
+    const imgRatio = img.width / img.height
+    const pageRatio = pageWidth / pageHeight
+
+    let imgWidth = pageWidth
+    let imgHeight = pageHeight
+    let xOffset = 0
+    let yOffset = 0
+
+    if (imgRatio > pageRatio) {
+      // Image plus large
+      imgHeight = pageWidth / imgRatio
+      yOffset = (pageHeight - imgHeight) / 2
+    } else {
+      // Image plus haute
+      imgWidth = pageHeight * imgRatio
+      xOffset = (pageWidth - imgWidth) / 2
+    }
+
+    pdf.addImage(images[i], 'PNG', xOffset, yOffset, imgWidth, imgHeight, undefined, 'FAST')
+    
+    // Footer
+    pdf.setFontSize(8)
+    pdf.setTextColor(148, 163, 184)
+    pdf.text(`Section ${i + 1} / ${images.length}`, pageWidth / 2, pageHeight - 5, { align: 'center' })
+  }
+
   pdf.save(`${filename}.pdf`)
 }
 
-async function generatePNG(canvas: HTMLCanvasElement, filename: string): Promise<void> {
-  canvas.toBlob((blob) => {
-    if (!blob) throw new Error('Erreur génération PNG')
-    
-    const url = URL.createObjectURL(blob)
+// Générer PNG séparés (1 image par section)
+async function generatePNGArchive(images: string[], filename: string): Promise<void> {
+  for (let i = 0; i < images.length; i++) {
     const link = document.createElement('a')
-    link.href = url
-    link.download = `${filename}.png`
+    link.href = images[i]
+    link.download = `${filename}_section_${i + 1}.png`
+    document.body.appendChild(link)
     link.click()
+    document.body.removeChild(link)
     
-    URL.revokeObjectURL(url)
-  }, 'image/png', 1.0)
-}
-
-async function incrementExportCount(visionId: string): Promise<void> {
-  try {
-    const token = localStorage.getItem('auth_token')
-    await fetch(`/api/visions/${visionId}/export`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    })
-  } catch (error) {
-    console.error('Erreur analytics:', error)
+    await new Promise(resolve => setTimeout(resolve, 500))
   }
 }
