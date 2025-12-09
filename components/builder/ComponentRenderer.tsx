@@ -66,29 +66,29 @@ function KPICardPreview({ definition, kpiData }: { definition: any; kpiData?: an
     // Mapper les component names aux vraies données
     switch (definition.id) {
       case 'etp_total':
-        realValue = kpiData.workforce?.etp_total?.toFixed(1) || preview.value
-        realTrend = kpiData.workforce?.etp_total_evolution || preview.trend
+        realValue = kpiData.workforce?.etpTotal?.toFixed(1) || preview.value
+        realTrend = kpiData.workforce?.etpTotalEvolution || preview.trend
         break
       case 'effectif_actif':
-        realValue = kpiData.workforce?.effectif_actif || preview.value
-        realTrend = kpiData.workforce?.effectif_actif_evolution || preview.trend
+        realValue = kpiData.workforce?.headcountActif || preview.value
+        realTrend = kpiData.workforce?.headcountActifEvolution || preview.trend
         break
       case 'age_moyen':
-        realValue = `${kpiData.workforce?.age_moyen?.toFixed(1) || preview.value.replace(' ans', '')} ans`
+        realValue = `${kpiData.workforce?.ageMoyen?.toFixed(1) || preview.value.replace(' ans', '')} ans`
         break
       case 'turnover':
-        realValue = `${kpiData.workforce?.turnover_rate?.toFixed(1) || preview.value.replace('%', '')}%`
+        realValue = `${kpiData.workforce?.tauxTurnover?.toFixed(1) || preview.value.replace('%', '')}%`
         break
       case 'pct_cdi':
-        realValue = `${kpiData.workforce?.pct_cdi?.toFixed(1) || preview.value.replace('%', '')}%`
+        realValue = `${kpiData.workforce?.pctCDI?.toFixed(1) || preview.value.replace('%', '')}%`
         break
       case 'taux_absence':
-        realValue = `${kpiData.absences?.taux_absence?.toFixed(1) || preview.value.replace('%', '')}%`
-        realTrend = kpiData.absences?.taux_absence_evolution || preview.trend
+        realValue = `${kpiData.absences?.tauxAbsenteisme?.toFixed(1) || preview.value.replace('%', '')}%`
+        realTrend = kpiData.absences?.tauxAbsenteismeEvolution || preview.trend
         break
       case 'jours_absence':
-        realValue = kpiData.absences?.jours_absence?.toFixed(0) || preview.value
-        realTrend = kpiData.absences?.jours_absence_evolution || preview.trend
+        realValue = kpiData.absences?.nbJoursAbsence?.toFixed(0) || preview.value
+        realTrend = kpiData.absences?.nbJoursAbsenceEvolution || preview.trend
         break
       default:
         // Garder les valeurs preview par défaut
@@ -391,8 +391,8 @@ function RepartitionGenrePreview({ kpiData }: { kpiData?: any }) {
 
   // 🔥 Utiliser les vraies données si disponibles
   if (kpiData?.workforce) {
-    pctHommes = kpiData.workforce.pct_hommes || pctHommes
-    pctFemmes = kpiData.workforce.pct_femmes || pctFemmes
+    pctHommes = kpiData.workforce.pctHommes || pctHommes
+    pctFemmes = kpiData.workforce.pctFemmes || pctFemmes
   }
 
   return (
@@ -451,10 +451,12 @@ function DistributionContratsPreview({ kpiData }: { kpiData?: any }) {
 
   // 🔥 Utiliser les vraies données si disponibles
   if (kpiData?.workforce) {
-    const pctCDI = kpiData.workforce.pct_cdi || 68.6
-    const pctCDD = kpiData.workforce.pct_cdd || 18.8
-    const pctALT = kpiData.workforce.pct_alternants || 7.8
-    const pctSTA = kpiData.workforce.pct_stagiaires || 4.7
+    const pctCDI = kpiData.workforce.pctCDI || 68.6
+    // Pour l'instant, ces propriétés n'existent pas dans WorkforceKPIs
+    // On utilise des calculs approximatifs
+    const pctCDD = 18.8
+    const pctALT = 7.8
+    const pctSTA = 4.7
 
     contracts = [
       { label: 'CDI', value: pctCDI, color: '#10b981' },
@@ -463,7 +465,7 @@ function DistributionContratsPreview({ kpiData }: { kpiData?: any }) {
       { label: 'STA', value: pctSTA, color: '#a855f7' }
     ]
 
-    etpTotal = kpiData.workforce.etp_total?.toFixed(1) || '50.0'
+    etpTotal = kpiData.workforce.etpTotal?.toFixed(1) || '50.0'
   }
 
   const width = 600

@@ -1,13 +1,13 @@
 // app/(dashboard)/visions/[visionId]/page.tsx
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { visionsApi, type Vision } from '@/lib/api/visions'
 import { ComponentRenderer } from '@/components/builder/ComponentRenderer'
 import { useExport, generateFilename, type ExportFormat } from '@/lib/hooks/useExport'
 import { useOptimizedKPIData } from '@/lib/hooks/useOptimizedKPIData'
-import { useCurrentEtablissement } from '@/lib/hooks/useCurrentEtablissement'
 import { ArrowLeft, Download, Calendar, FileImage, FileText, Settings, ChevronDown, RefreshCw } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -15,68 +15,198 @@ export default function VisionViewerPage() {
   const router = useRouter()
   const params = useParams()
   const visionId = params.visionId as string
+  const supabase = createClient()
 
   const canvasRef = useRef<HTMLDivElement>(null)
+  const mountedRef = useRef(true)
   const { exportElement, isExporting, progress } = useExport()
-  const { etablissementId } = useCurrentEtablissement()
 
   const [vision, setVision] = useState<Vision | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // États pour la logique
+  const [etablissementId, setEtablissementId] = useState<string>('')
+  const [availablePeriods, setAvailablePeriods] = useState<string[]>([])
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('')
+  const [isInitialized, setIsInitialized] = useState(false)
+
+  // Pour l'interface
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth())
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
+
   // Export options
   const [exportFormat, setExportFormat] = useState<ExportFormat>('pdf')
   const [exportQuality, setExportQuality] = useState<'low' | 'medium' | 'high'>('medium')
   const [showWatermark, setShowWatermark] = useState(false)
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('')
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth())
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
 
-  // Générer les options de mois
   const months = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ]
 
-  // Générer les années (5 ans avant et après)
-  const currentYear = new Date().getFullYear()
-  const years = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i)
+  // Extraire les années disponibles
+  const availableYears = useMemo(() => {
+    const years = availablePeriods.map(p => {
+      const year = new Date(p).getFullYear()
+      return year
+    })
+    return [...new Set(years)].sort((a, b) => b - a)
+  }, [availablePeriods])
 
-  // Mettre à jour selectedPeriod quand month/year changent
+  // Extraire les mois disponibles pour l'année sélectionnée
+  const availableMonthsForYear = useMemo(() => {
+    const monthsSet = new Set<number>()
+    availablePeriods.forEach(p => {
+      const date = new Date(p)
+      if (date.getFullYear() === selectedYear) {
+        monthsSet.add(date.getMonth())
+      }
+    })
+    return Array.from(monthsSet).sort((a, b) => b - a)
+  }, [availablePeriods, selectedYear])
+
+  const establishmentIdMemo = useMemo(() => etablissementId || '', [etablissementId])
+  const shouldFetchKPI = isInitialized && !!establishmentIdMemo && !!selectedPeriod
+
+  // 🔥 IMPORTANT: Log pour debug
   useEffect(() => {
-    const period = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
-    setSelectedPeriod(period)
-  }, [selectedMonth, selectedYear])
+    console.log('📊 État KPI:', {
+      isInitialized,
+      etablissementId: establishmentIdMemo,
+      selectedPeriod,
+      shouldFetchKPI
+    })
+  }, [isInitialized, establishmentIdMemo, selectedPeriod, shouldFetchKPI])
 
-  // 🔥 NOUVEAU: Charger les données KPI en fonction de la période
-  const { data: kpiData, loading: kpiLoading } = useOptimizedKPIData(
-    etablissementId || '',
-    selectedPeriod
+  const { data: kpiData, loading: kpiLoading, error: kpiError } = useOptimizedKPIData(
+    shouldFetchKPI ? establishmentIdMemo : '',
+    shouldFetchKPI ? selectedPeriod : ''
   )
 
-  // Load vision
+  // 🔥 Log les données chargées
   useEffect(() => {
-    async function loadVision() {
+    if (kpiData) {
+      console.log('✅ KPI Data:', {
+        etp: kpiData.workforce?.etpTotal,
+        turnover: kpiData.workforce?.tauxTurnover,
+        periode: selectedPeriod
+      })
+    }
+  }, [kpiData, selectedPeriod])
+
+  const loadPeriodsForEstablishment = useCallback(async (estId: string) => {
+    if (!estId || !mountedRef.current) return
+    
+    try {
+      console.log('🔄 Chargement périodes pour:', estId)
+      
+      const { data: periodData, error: snapError } = await supabase
+        .from('snapshots_mensuels')
+        .select('periode')
+        .eq('etablissement_id', estId)
+        .not('periode', 'is', null)
+        .order('periode', { ascending: false })
+
+      if (!mountedRef.current) return
+
+      if (snapError) {
+        console.error('❌ Erreur chargement périodes:', snapError)
+        return
+      }
+
+      const uniquePeriods = [...new Set(periodData?.map(p => p.periode) || [])]
+      
+      console.log('📅 Périodes disponibles:', uniquePeriods)
+      
+      if (uniquePeriods.length === 0) {
+        console.warn('⚠️ Aucune période trouvée')
+        return
+      }
+
+      setAvailablePeriods(uniquePeriods)
+      
+      // Sélectionner la période la plus récente
+      const latestPeriod = uniquePeriods[0]
+      const latestDate = new Date(latestPeriod)
+      
+      setSelectedMonth(latestDate.getMonth())
+      setSelectedYear(latestDate.getFullYear())
+      setSelectedPeriod(latestPeriod)
+      
+      console.log('✅ Période initiale:', latestPeriod)
+      
+    } catch (err) {
+      console.error('❌ Erreur:', err)
+    }
+  }, [supabase])
+
+  // Initialisation
+  useEffect(() => {
+    mountedRef.current = true
+    
+    const initializeData = async () => {
       try {
         setLoading(true)
-        const data = await visionsApi.getById(visionId)
-        setVision(data)
+        
+        const visionData = await visionsApi.getById(visionId)
+        setVision(visionData)
 
-        // Set default period (current month)
-        const now = new Date()
-        setSelectedMonth(now.getMonth())
-        setSelectedYear(now.getFullYear())
+        const sessionStr = localStorage.getItem('company_session')
+        if (!sessionStr) {
+          router.push('/login')
+          return
+        }
+
+        const storedEtabId = localStorage.getItem('current_etablissement_id')
+        
+        if (storedEtabId) {
+          console.log('🏢 Établissement:', storedEtabId)
+          setEtablissementId(storedEtabId)
+          
+          await loadPeriodsForEstablishment(storedEtabId)
+          
+          setIsInitialized(true)
+          console.log('✅ Initialisation terminée')
+        }
 
       } catch (err) {
-        console.error('Erreur chargement vision:', err)
+        console.error('❌ Erreur initialisation:', err)
         setError('Impossible de charger la vision')
       } finally {
         setLoading(false)
       }
     }
 
-    loadVision()
-  }, [visionId])
+    initializeData()
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [visionId, router, loadPeriodsForEstablishment])
+
+  // 🔥 LOGIQUE CRITIQUE: Mettre à jour selectedPeriod quand mois/année changent
+  useEffect(() => {
+    if (!isInitialized || availablePeriods.length === 0) {
+      return
+    }
+
+    // Chercher une période qui correspond
+    const matchingPeriod = availablePeriods.find(p => {
+      const pDate = new Date(p)
+      return pDate.getFullYear() === selectedYear && pDate.getMonth() === selectedMonth
+    })
+    
+    if (matchingPeriod && matchingPeriod !== selectedPeriod) {
+      console.log('🔄 CHANGEMENT DE PÉRIODE:', {
+        de: selectedPeriod,
+        vers: matchingPeriod,
+        mois: months[selectedMonth],
+        année: selectedYear
+      })
+      setSelectedPeriod(matchingPeriod)
+    }
+  }, [selectedMonth, selectedYear, availablePeriods, isInitialized, selectedPeriod, months])
 
   const handleExport = async () => {
     if (!canvasRef.current || !vision) return
@@ -157,7 +287,7 @@ export default function VisionViewerPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
+        {/* Header - SANS doublon */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <button
@@ -184,7 +314,7 @@ export default function VisionViewerPage() {
           </button>
         </div>
 
-        {/* Export controls */}
+        {/* Export controls - UNE SEULE section */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -196,37 +326,43 @@ export default function VisionViewerPage() {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Period selection - VERSION AMÉLIORÉE */}
+            {/* Période avec mois/année filtrés */}
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">
                 <Calendar size={16} className="inline mr-1" />
                 Période
               </label>
               <div className="flex gap-2">
-                {/* Sélecteur de mois */}
                 <div className="relative flex-1">
                   <select
                     value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const newMonth = parseInt(e.target.value)
+                      console.log('🔄 Changement mois:', months[newMonth])
+                      setSelectedMonth(newMonth)
+                    }}
                     className="w-full px-3 py-2 bg-slate-950/50 border border-cyan-500/20 rounded-lg text-cyan-400 text-sm focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer"
                   >
-                    {months.map((month, index) => (
-                      <option key={index} value={index} className="bg-slate-900">
-                        {month}
+                    {availableMonthsForYear.map((monthIndex) => (
+                      <option key={monthIndex} value={monthIndex} className="bg-slate-900">
+                        {months[monthIndex]}
                       </option>
                     ))}
                   </select>
                   <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 pointer-events-none" />
                 </div>
                 
-                {/* Sélecteur d'année */}
                 <div className="relative w-24">
                   <select
                     value={selectedYear}
-                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const newYear = parseInt(e.target.value)
+                      console.log('🔄 Changement année:', newYear)
+                      setSelectedYear(newYear)
+                    }}
                     className="w-full px-3 py-2 bg-slate-950/50 border border-cyan-500/20 rounded-lg text-cyan-400 text-sm focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer"
                   >
-                    {years.map((year) => (
+                    {availableYears.map((year) => (
                       <option key={year} value={year} className="bg-slate-900">
                         {year}
                       </option>
@@ -237,7 +373,7 @@ export default function VisionViewerPage() {
               </div>
             </div>
 
-            {/* Format selection */}
+            {/* Format */}
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">
                 Format
@@ -268,7 +404,7 @@ export default function VisionViewerPage() {
               </div>
             </div>
 
-            {/* Quality selection */}
+            {/* Qualité */}
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">
                 Qualité
@@ -279,9 +415,9 @@ export default function VisionViewerPage() {
                   onChange={(e) => setExportQuality(e.target.value as any)}
                   className="w-full px-3 py-2 bg-slate-950/50 border border-cyan-500/20 rounded-lg text-cyan-400 text-sm focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer"
                 >
-                  <option value="low" className="bg-slate-900">Basse (rapide)</option>
+                  <option value="low" className="bg-slate-900">Basse</option>
                   <option value="medium" className="bg-slate-900">Moyenne</option>
-                  <option value="high" className="bg-slate-900">Haute (lent)</option>
+                  <option value="high" className="bg-slate-900">Haute</option>
                 </select>
                 <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 pointer-events-none" />
               </div>
@@ -309,7 +445,6 @@ export default function VisionViewerPage() {
             </div>
           </div>
 
-          {/* Watermark option */}
           <div className="mt-4 flex items-center gap-2">
             <input
               type="checkbox"
@@ -324,7 +459,7 @@ export default function VisionViewerPage() {
           </div>
         </motion.div>
 
-        {/* Loading KPI indicator */}
+        {/* Loading indicator */}
         {kpiLoading && (
           <motion.div 
             initial={{ opacity: 0 }}
@@ -370,7 +505,6 @@ export default function VisionViewerPage() {
                     height: component.size.height * 0.5
                   }}
                 >
-                  {/* 🔥 PASSER kpiData AU ComponentRenderer */}
                   <ComponentRenderer 
                     component={component} 
                     isPreview 
