@@ -1,236 +1,100 @@
+// app/(dashboard)/visions/new/page.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Save, X, Eye, EyeOff, Sparkles } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 import { visionsApi } from '@/lib/api/visions'
-import { VisionItemRenderer } from '@/components/visions/VisionItemRenderer'
+import { useCurrentEtablissement } from '@/lib/hooks/useCurrentEtablissement'
+import { ArrowLeft, Save, Sparkles } from 'lucide-react'
+import { motion } from 'framer-motion'
 
-// Données fictives pour la prévisualisation
-const MOCK_DASHBOARD_DATA = {
-  workforce: {
-    etpTotal: 145.5,
-    etpActif: 142.0,
-    etpInactif: 3.5,
-    variationM1Pct: 2.3,
-    variationN1Pct: 5.8,
-    tauxTurnover: 8.5,
-    entreesMois: 5,
-    sortiesMois: 3,
-    turnoverMensuel: 1.4,
-    effectifMoyen: 145.5,
-    ageGroups: [
-      { range: '<25', hommes: 12, femmes: 8 },
-      { range: '25-35', hommes: 35, femmes: 30 },
-      { range: '35-45', hommes: 28, femmes: 25 },
-      { range: '45-55', hommes: 15, femmes: 12 },
-      { range: '>55', hommes: 8, femmes: 7 }
-    ],
-    seniorityGroups: [
-      { range: '0-1', hommes: 15, femmes: 12 },
-      { range: '1-3', hommes: 25, femmes: 20 },
-      { range: '3-5', hommes: 20, femmes: 18 },
-      { range: '5-10', hommes: 22, femmes: 19 },
-      { range: '>10', hommes: 18, femmes: 16 }
-    ]
-  },
-  payroll: {
-    masseSalariale: 485000,
-    coutMoyen: 3350,
-    variationM1Pct: 1.8,
-    variationN1Pct: 4.2,
-    waterfallM1: null,
-    waterfallN1: null
-  },
-  absences: {
-    tauxAbsenteisme: 4.2,
-    joursAbsences: 156,
-    joursConges: 89
-  },
-  demographics: {
-    ageGroups: [
-      { range: '<25', hommes: 12, femmes: 8 },
-      { range: '25-35', hommes: 35, femmes: 30 },
-      { range: '35-45', hommes: 28, femmes: 25 },
-      { range: '45-55', hommes: 15, femmes: 12 },
-      { range: '>55', hommes: 8, femmes: 7 }
-    ],
-    seniorityGroups: [
-      { range: '0-1', hommes: 15, femmes: 12 },
-      { range: '1-3', hommes: 25, femmes: 20 },
-      { range: '3-5', hommes: 20, femmes: 18 },
-      { range: '5-10', hommes: 22, femmes: 19 },
-      { range: '>10', hommes: 18, femmes: 16 }
-    ]
-  }
-}
-
-// Liste complète des items disponibles
-const ALL_ITEMS = [
-  // KPIs Effectif
-  { id: 'etp_total', type: 'kpi', label: 'ETP Total', category: 'Effectif', size: { rows: 1, cols: 1 } },
-  { id: 'etp_actif', type: 'kpi', label: 'ETP Actif', category: 'Effectif', size: { rows: 1, cols: 1 } },
-  { id: 'etp_inactif', type: 'kpi', label: 'ETP Inactif', category: 'Effectif', size: { rows: 1, cols: 1 } },
-  { id: 'variation_etp_m1', type: 'kpi', label: 'Variation M-1', category: 'Effectif', size: { rows: 1, cols: 1 } },
-  { id: 'variation_etp_n1', type: 'kpi', label: 'Variation N-1', category: 'Effectif', size: { rows: 1, cols: 1 } },
-  { id: 'entrees_mois', type: 'kpi', label: 'Entrées du mois', category: 'Effectif', size: { rows: 1, cols: 1 } },
-  { id: 'sorties_mois', type: 'kpi', label: 'Sorties du mois', category: 'Effectif', size: { rows: 1, cols: 1 } },
-  { id: 'taux_turnover', type: 'kpi', label: 'Taux Turnover', category: 'Effectif', size: { rows: 1, cols: 1 } },
-  { id: 'turnover_mensuel', type: 'kpi', label: 'Turnover Mensuel', category: 'Effectif', size: { rows: 1, cols: 1 } },
-  
-  // KPIs Financier
-  { id: 'masse_salariale', type: 'kpi', label: 'Masse Salariale', category: 'Financier', size: { rows: 1, cols: 1 } },
-  { id: 'cout_moyen', type: 'kpi', label: 'Coût Moyen', category: 'Financier', size: { rows: 1, cols: 1 } },
-  { id: 'variation_masse_m1', type: 'kpi', label: 'Variation Masse M-1', category: 'Financier', size: { rows: 1, cols: 1 } },
-  { id: 'variation_masse_n1', type: 'kpi', label: 'Variation Masse N-1', category: 'Financier', size: { rows: 1, cols: 1 } },
-  
-  // KPIs Absence
-  { id: 'taux_absenteisme', type: 'kpi', label: 'Taux Absentéisme', category: 'Absence', size: { rows: 1, cols: 1 } },
-  { id: 'jours_absences', type: 'kpi', label: 'Jours d\'Absence', category: 'Absence', size: { rows: 1, cols: 1 } },
-  { id: 'jours_conges', type: 'kpi', label: 'Jours de Congés', category: 'Absence', size: { rows: 1, cols: 1 } },
-  
-  // Charts
-  { id: 'pyramide_ages', type: 'chart', label: 'Pyramide des Âges', category: 'Démographie', size: { rows: 2, cols: 2 } },
-  { id: 'pyramide_anciennetes', type: 'chart', label: 'Pyramide des Anciennetés', category: 'Démographie', size: { rows: 2, cols: 2 } },
-  { id: 'waterfall_prix_volume_m1', type: 'chart', label: 'Waterfall Prix/Volume M-1', category: 'Financier', size: { rows: 2, cols: 4 } },
-  { id: 'waterfall_prix_volume_n1', type: 'chart', label: 'Waterfall Prix/Volume N-1', category: 'Financier', size: { rows: 2, cols: 4 } },
+const PRESET_COLORS = [
+  { value: '#06b6d4', label: 'Cyan' },
+  { value: '#8b5cf6', label: 'Violet' },
+  { value: '#10b981', label: 'Vert' },
+  { value: '#f59e0b', label: 'Orange' },
+  { value: '#ef4444', label: 'Rouge' },
+  { value: '#ec4899', label: 'Rose' },
+  { value: '#3b82f6', label: 'Bleu' },
+  { value: '#14b8a6', label: 'Teal' }
 ]
 
-export default function NewVisionPageWYSIWYG() {
+export default function NewVisionPage() {
   const router = useRouter()
-  const [etablissementId, setEtablissementId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  
-  // Tous les items commencent comme visibles
-  const [visibleItems, setVisibleItems] = useState<string[]>(ALL_ITEMS.map(item => item.id))
-  const [editMode, setEditMode] = useState(true)
-  
-  // Formulaire
-  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const { etablissementId, loading: etabLoading, error: etabError } = useCurrentEtablissement()
+
   const [nom, setNom] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#06b6d4')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const loadEtablissement = async () => {
-      try {
-        const sessionStr = localStorage.getItem('company_session')
-        if (!sessionStr) {
-          router.push('/login')
-          return
-        }
-
-        const session = JSON.parse(sessionStr)
-        const supabase = createClient()
-        
-        const { data: etablissements } = await supabase
-          .from('etablissements')
-          .select('id')
-          .eq('entreprise_id', session.company_id)
-          .limit(1)
-
-        if (etablissements && etablissements.length > 0) {
-          setEtablissementId(etablissements[0].id)
-        }
-      } catch (err) {
-        console.error('Error loading etablissement:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadEtablissement()
-  }, [router])
-
-  const removeItem = (itemId: string) => {
-    setVisibleItems(prev => prev.filter(id => id !== itemId))
-  }
-
-  const handleSave = async () => {
-    if (!etablissementId) {
-      alert('Établissement non trouvé')
-      return
-    }
-
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
     if (!nom.trim()) {
-      alert('Le nom est obligatoire')
+      setError('Le nom est requis')
       return
     }
 
-    if (visibleItems.length === 0) {
-      alert('Vous devez garder au moins un élément')
+    if (nom.trim().length < 3) {
+      setError('Le nom doit contenir au moins 3 caractères')
+      return
+    }
+
+    if (!etablissementId) {
+      setError('Établissement non trouvé')
       return
     }
 
     try {
-      setSaving(true)
+      setIsSubmitting(true)
+      setError(null)
 
-      // Construire le layout avec repositionnement automatique
-      const layout = {
-        gridCols: 4,
-        items: visibleItems.map((itemId, index) => {
-          const itemConfig = ALL_ITEMS.find(i => i.id === itemId)!
-          const cols = itemConfig.size.cols
-          const rows = itemConfig.size.rows
-          
-          // Calcul automatique de la position
-          let currentRow = 0
-          let currentCol = 0
-          
-          // Trouver la prochaine position disponible
-          for (let i = 0; i < index; i++) {
-            const prevItem = ALL_ITEMS.find(it => it.id === visibleItems[i])!
-            currentCol += prevItem.size.cols
-            
-            if (currentCol >= 4) {
-              currentRow += prevItem.size.rows
-              currentCol = prevItem.size.cols
-            }
-          }
-          
-          // Si l'item dépasse, passer à la ligne suivante
-          if (currentCol + cols > 4) {
-            currentRow += rows
-            currentCol = 0
-          }
-          
-          return {
-            id: itemId,
-            type: itemConfig.type,
-            position: { row: currentRow, col: currentCol },
-            size: { rows, cols }
-          }
-        })
-      }
-
-      const vision = await visionsApi.createVision({
-        etablissement_id: etablissementId,
+      const vision = await visionsApi.create({
         nom: nom.trim(),
-        description: description.trim() || undefined,
+        description: description.trim() || null,
         color,
-        layout,
-        is_default: false
+        etablissement_id: etablissementId,
+        template: {
+          canvas: {
+            width: 1920,
+            height: 1080,
+            format: '16:9',
+            backgroundColor: '#0f172a'
+          },
+          components: []
+        }
       })
 
-      if (vision) {
-        router.push('/visions')
-      }
+      // Rediriger vers le builder
+      router.push(`/visions/builder?visionId=${vision.id}`)
+
     } catch (err) {
-      console.error('Error creating vision:', err)
-      alert('Erreur lors de la création de la vision')
-    } finally {
-      setSaving(false)
+      console.error('Erreur création vision:', err)
+      setError(err instanceof Error ? err.message : 'Erreur lors de la création')
+      setIsSubmitting(false)
     }
   }
 
-  if (loading) {
+  if (etabLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
-        <div className="flex items-center justify-center h-64">
-          <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+          <p className="text-slate-400">Chargement...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (etabError) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="text-red-400 text-4xl mb-4">⚠️</div>
+          <p className="text-red-400 font-semibold mb-2">Erreur</p>
+          <p className="text-slate-400">{etabError}</p>
         </div>
       </div>
     )
@@ -238,217 +102,168 @@ export default function NewVisionPageWYSIWYG() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 flex items-center justify-between"
+      <div className="max-w-3xl mx-auto">
+        {/* Back button */}
+        <button
+          onClick={() => router.back()}
+          className="mb-6 px-4 py-2 bg-slate-900/50 hover:bg-slate-900/80 border border-cyan-500/20 hover:border-cyan-500/40 rounded-lg text-slate-400 hover:text-cyan-400 flex items-center gap-2 transition-all"
         >
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push('/visions')}
-              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Retour
-            </button>
+          <ArrowLeft size={18} />
+          Retour
+        </button>
 
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-purple-500 rounded-xl flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">
-                  Créer une Vision
-                </h1>
-                <p className="text-sm text-slate-400">
-                  {editMode 
-                    ? `${visibleItems.length} éléments visibles - Cliquez sur ✕ pour supprimer`
-                    : 'Mode prévisualisation'
-                  }
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setEditMode(!editMode)}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors"
-            >
-              {editMode ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-              {editMode ? 'Prévisualiser' : 'Éditer'}
-            </button>
-
-            <button
-              onClick={() => setShowSaveDialog(true)}
-              disabled={visibleItems.length === 0}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save className="w-5 h-5" />
-              Enregistrer la Vision
-            </button>
-          </div>
-        </motion.div>
-
-        {/* Dashboard Preview avec édition */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-8"
+          className="relative"
         >
-          {visibleItems.length === 0 ? (
-            <div className="bg-gradient-to-br from-slate-900/80 to-slate-800/60 rounded-xl border border-slate-700/50 p-12 text-center">
-              <div className="text-slate-400">
-                <p className="text-lg font-medium mb-2">Tous les éléments ont été supprimés</p>
-                <p className="text-sm">Rechargez la page pour recommencer</p>
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-purple-500/10 rounded-3xl blur-2xl"></div>
+          
+          <div className="relative bg-slate-900/50 backdrop-blur-sm border border-cyan-500/20 rounded-3xl p-8">
+            {/* Header */}
+            <div className="mb-8">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-2xl">
+                  <Sparkles size={32} className="text-cyan-400" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                    Nouvelle Vision
+                  </h1>
+                  <p className="text-slate-400 text-sm">
+                    Créez votre rapport personnalisé
+                  </p>
+                </div>
               </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-4 gap-6 auto-rows-min">
-              <AnimatePresence mode="popLayout">
-                {visibleItems.map((itemId) => {
-                  const itemConfig = ALL_ITEMS.find(i => i.id === itemId)!
-                  const colSpan = itemConfig.size.cols
-                  const rowSpan = itemConfig.size.rows
 
-                  return (
-                    <motion.div
-                      key={itemId}
-                      layout
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ duration: 0.3 }}
-                      className="relative group"
-                      style={{
-                        gridColumn: `span ${colSpan}`,
-                        gridRow: `span ${rowSpan}`
-                      }}
-                    >
-                      {/* Bouton de suppression */}
-                      {editMode && (
-                        <motion.button
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          onClick={() => removeItem(itemId)}
-                          className="absolute -top-3 -right-3 z-10 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110"
-                        >
-                          <X className="w-4 h-4" />
-                        </motion.button>
-                      )}
-
-                      {/* Label de l'item */}
-                      {editMode && (
-                        <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-slate-900/90 backdrop-blur-sm rounded-lg border border-slate-700">
-                          <span className="text-xs font-medium text-slate-300">
-                            {itemConfig.label}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Contenu de l'item */}
-                      <div className={editMode ? 'pointer-events-none' : ''}>
-                        <VisionItemRenderer
-                          item={{
-                            id: itemId,
-                            type: itemConfig.type as 'kpi' | 'chart' | 'table',
-                            position: { row: 0, col: 0 },
-                            size: itemConfig.size
-                          }}
-                          data={MOCK_DASHBOARD_DATA}
-                          etablissementId={etablissementId || ''}
-                          periode="2024-12-01"
-                          className="h-full"
-                        />
-                      </div>
-                    </motion.div>
-                  )
-                })}
-              </AnimatePresence>
-            </div>
-          )}
-        </motion.div>
-      </div>
-
-      {/* Dialog d'enregistrement */}
-      {showSaveDialog && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl max-w-md w-full p-6"
-          >
-            <h2 className="text-xl font-bold text-white mb-4">
-              Enregistrer la Vision
-            </h2>
-
-            <div className="space-y-4">
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Nom */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Nom *
+                <label className="block text-sm font-semibold text-cyan-400 mb-2 uppercase tracking-wider">
+                  Nom de la vision *
                 </label>
                 <input
                   type="text"
                   value={nom}
                   onChange={(e) => setNom(e.target.value)}
-                  placeholder="Ex: Ma Vue Personnalisée"
-                  className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-                  autoFocus
+                  placeholder="Ex: Rapport RH Mensuel"
+                  className="w-full px-4 py-3 bg-slate-950/50 border border-cyan-500/20 focus:border-cyan-500/50 rounded-xl text-cyan-400 placeholder-slate-500 focus:outline-none transition-colors"
+                  maxLength={100}
+                  required
                 />
+                <div className="mt-1 text-xs text-slate-500 text-right">
+                  {nom.length}/100 caractères
+                </div>
               </div>
 
+              {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-semibold text-cyan-400 mb-2 uppercase tracking-wider">
                   Description (optionnel)
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Décrivez votre vision..."
-                  rows={2}
-                  className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none"
+                  placeholder="Décrivez l'objectif de cette vision..."
+                  rows={4}
+                  className="w-full px-4 py-3 bg-slate-950/50 border border-cyan-500/20 focus:border-cyan-500/50 rounded-xl text-cyan-400 placeholder-slate-500 focus:outline-none transition-colors resize-none"
+                  maxLength={500}
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Couleur
-                </label>
-                <div className="flex gap-2">
-                  {['#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#3b82f6'].map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setColor(c)}
-                      className={`w-10 h-10 rounded-lg transition-all ${
-                        color === c ? 'ring-2 ring-white scale-110' : 'hover:scale-105'
-                      }`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
+                <div className="mt-1 text-xs text-slate-500 text-right">
+                  {description.length}/500 caractères
                 </div>
               </div>
-            </div>
 
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowSaveDialog(false)}
-                className="flex-1 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || !nom.trim()}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? 'Enregistrement...' : 'Enregistrer'}
-              </button>
+              {/* Color */}
+              <div>
+                <label className="block text-sm font-semibold text-cyan-400 mb-3 uppercase tracking-wider">
+                  Couleur de la vision
+                </label>
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
+                  {PRESET_COLORS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setColor(preset.value)}
+                      className={`
+                        relative w-full aspect-square rounded-xl transition-all
+                        ${color === preset.value
+                          ? 'ring-4 ring-cyan-500 ring-offset-4 ring-offset-slate-950 scale-110'
+                          : 'hover:scale-105'
+                        }
+                      `}
+                      style={{ backgroundColor: preset.value }}
+                      title={preset.label}
+                    >
+                      {color === preset.value && (
+                        <div className="absolute inset-0 flex items-center justify-center text-white font-bold">
+                          ✓
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom color */}
+                <div className="mt-4 flex items-center gap-3">
+                  <label className="text-sm text-slate-400">Couleur personnalisée:</label>
+                  <input
+                    type="color"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="w-12 h-12 rounded-lg border-2 border-cyan-500/20 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-slate-950/50 border border-cyan-500/20 rounded-lg text-cyan-400 text-sm focus:outline-none focus:border-cyan-500/50"
+                  />
+                </div>
+              </div>
+
+              {/* Error message */}
+              {error && (
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  className="flex-1 px-6 py-3 bg-slate-800/50 hover:bg-slate-800/80 border border-slate-700 rounded-xl text-slate-400 hover:text-slate-300 font-medium transition-all"
+                >
+                  Annuler
+                </button>
+                
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !nom.trim() || nom.trim().length < 3}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-slate-700 disabled:to-slate-700 rounded-xl text-white font-semibold flex items-center justify-center gap-2 transition-all disabled:cursor-not-allowed shadow-lg shadow-cyan-500/25"
+                >
+                  <Save size={20} />
+                  {isSubmitting ? 'Création...' : 'Créer & Éditer'}
+                </button>
+              </div>
+            </form>
+
+            {/* Info box */}
+            <div className="mt-6 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
+              <p className="text-cyan-400 text-sm flex items-start gap-2">
+                <Sparkles size={16} className="mt-0.5 flex-shrink-0" />
+                <span>
+                  Après la création, vous serez redirigé vers le builder pour concevoir votre vision avec un système drag & drop intuitif.
+                </span>
+              </p>
             </div>
-          </motion.div>
-        </div>
-      )}
+          </div>
+        </motion.div>
+      </div>
     </div>
   )
 }

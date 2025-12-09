@@ -1,308 +1,208 @@
-// ============================================
-// lib/api/visions.ts
-// API complète pour gérer les visions - Token-based auth
-// ============================================
-
+// lib/api/visions.ts - VERSION FINALE ULTRA-RIGOUREUSE
 import { createClient } from '@/lib/supabase/client'
-import type { SavedVision } from '@/lib/types/visions'
+import type { CanvasState, CanvasComponent } from '@/lib/store/builderStore'
+
+export interface VisionTemplate {
+  canvas: CanvasState
+  components: CanvasComponent[]
+  defaultEstablishment?: string
+  defaultPeriod?: string
+}
+
+// ✅ TYPE EXACT basé sur le schema SQL Talvio v5.1
+export interface Vision {
+  id: string
+  etablissement_id: string
+  
+  nom: string
+  description: string | null
+  color: string
+  is_default: boolean
+  
+  layout: any | null                 // Legacy - lecture seule
+  template: VisionTemplate | null    // Nouveau builder
+  
+  view_count: number
+  export_count: number
+  last_viewed_at: string | null
+  last_exported_at: string | null
+  
+  created_at: string
+  updated_at: string
+}
+
+// ✅ CORRECTION CRITIQUE: CreateVisionInput ne doit PAS avoir 'layout'
+export interface CreateVisionInput {
+  nom: string
+  description?: string | null
+  color?: string
+  template: VisionTemplate          // ✅ Obligatoire
+  etablissement_id?: string
+  // ❌ PAS DE 'layout' ici (c'est legacy, lecture seule)
+}
 
 export const visionsApi = {
-  // ============================================
-  // GET - Récupérer toutes les visions d'un établissement
-  // ============================================
-  async getVisions(etablissementId: string): Promise<SavedVision[]> {
+  async getAll(etablissementId?: string): Promise<Vision[]> {
+    const supabase = createClient()
+    
+    let query = supabase
+      .from('visions')
+      .select('*')
+      .order('created_at', { ascending: false })
+    
+    if (etablissementId) {
+      query = query.eq('etablissement_id', etablissementId)
+    }
+    
+    const { data, error } = await query
+    
+    if (error) throw error
+    return data || []
+  },
+
+  async getById(id: string): Promise<Vision> {
+    const supabase = createClient()
+    
+    const { data, error } = await supabase
+      .from('visions')
+      .select('*')
+      .eq('id', id)
+      .single()
+    
+    if (error) throw error
+    return data
+  },
+
+  async create(input: CreateVisionInput): Promise<Vision> {
+    const supabase = createClient()
+    
+    let etablissementId = input.etablissement_id
+    
     if (!etablissementId) {
-      console.error('getVisions: etablissementId is required')
-      return []
+      // TODO: Récupérer depuis le contexte utilisateur
+      // Pour l'instant, lancer une erreur claire
+      throw new Error('etablissement_id est requis. Passez-le dans CreateVisionInput ou configurez votre système d\'authentification.')
     }
 
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('visions')
-        .select('*')
-        .eq('etablissement_id', etablissementId)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Error fetching visions:', error)
-        return []
-      }
-
-      return data || []
-    } catch (err) {
-      console.error('Exception in getVisions:', err)
-      return []
+    // ✅ INSERTION CORRECTE - Seulement les colonnes qui existent
+    const { data, error } = await supabase
+      .from('visions')
+      .insert({
+        nom: input.nom,
+        description: input.description || null,
+        color: input.color || '#06b6d4',
+        template: input.template as any,    // JSONB
+        etablissement_id: etablissementId,
+        is_default: false,
+        view_count: 0,
+        export_count: 0
+        // ❌ PAS de 'layout' ici (legacy)
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Supabase insert error:', error)
+      throw error
     }
+    
+    return data
   },
 
-  // ============================================
-  // GET ONE - Récupérer une vision par ID
-  // ============================================
-  async getVision(visionId: string): Promise<SavedVision | null> {
-    if (!visionId) {
-      console.error('getVision: visionId is required')
-      return null
+  async update(id: string, input: Partial<CreateVisionInput>): Promise<Vision> {
+    const supabase = createClient()
+    
+    const updateData: any = {
+      updated_at: new Date().toISOString()
     }
-
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('visions')
-        .select('*')
-        .eq('id', visionId)
-        .single()
-
-      if (error) {
-        console.error('Error fetching vision:', error)
-        return null
-      }
-
-      return data
-    } catch (err) {
-      console.error('Exception in getVision:', err)
-      return null
-    }
+    
+    if (input.nom !== undefined) updateData.nom = input.nom
+    if (input.description !== undefined) updateData.description = input.description
+    if (input.color !== undefined) updateData.color = input.color
+    if (input.template !== undefined) updateData.template = input.template
+    
+    const { data, error } = await supabase
+      .from('visions')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
   },
 
-  // ============================================
-  // GET DEFAULT - Récupérer la vision par défaut
-  // ============================================
-  async getDefaultVision(etablissementId: string): Promise<SavedVision | null> {
-    if (!etablissementId) {
-      console.error('getDefaultVision: etablissementId is required')
-      return null
-    }
-
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('visions')
-        .select('*')
-        .eq('etablissement_id', etablissementId)
-        .eq('is_default', true)
-        .limit(1)
-        .maybeSingle()
-
-      if (error) {
-        console.error('Error fetching default vision:', error)
-        return null
-      }
-
-      return data
-    } catch (err) {
-      console.error('Exception in getDefaultVision:', err)
-      return null
-    }
+  async delete(id: string): Promise<void> {
+    const supabase = createClient()
+    
+    const { error } = await supabase
+      .from('visions')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw error
   },
 
-  // ============================================
-  // CREATE - Créer une nouvelle vision
-  // ============================================
-  async createVision(vision: {
-    etablissement_id: string
-    nom: string
-    description?: string
-    color?: string
-    layout: any
-    is_default?: boolean
-  }): Promise<SavedVision | null> {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('visions')
-        .insert([vision])
-        .select()
-        .single()
-
-      if (error) {
-        console.error('Error creating vision:', error)
-        throw new Error(`Erreur lors de la création: ${error.message}`)
-      }
-
-      return data
-    } catch (err) {
-      console.error('Exception in createVision:', err)
-      throw err
-    }
-  },
-
-  // ============================================
-  // UPDATE - Mettre à jour une vision
-  // ============================================
-  async updateVision(visionId: string, updates: Partial<SavedVision>): Promise<SavedVision | null> {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('visions')
-        .update(updates)
-        .eq('id', visionId)
-        .select()
-        .single()
-
-      if (error) {
-        console.error('Error updating vision:', error)
-        throw new Error(`Erreur lors de la mise à jour: ${error.message}`)
-      }
-
-      return data
-    } catch (err) {
-      console.error('Exception in updateVision:', err)
-      throw err
-    }
-  },
-
-  // ============================================
-  // DELETE - Supprimer une vision
-  // ============================================
-  async deleteVision(visionId: string): Promise<boolean> {
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('visions')
-        .delete()
-        .eq('id', visionId)
-
-      if (error) {
-        console.error('Error deleting vision:', error)
-        throw new Error(`Erreur lors de la suppression: ${error.message}`)
-      }
-
-      return true
-    } catch (err) {
-      console.error('Exception in deleteVision:', err)
-      throw err
-    }
-  },
-
-  // ============================================
-  // DUPLICATE - Dupliquer une vision
-  // ============================================
-  async duplicateVision(visionId: string): Promise<SavedVision | null> {
-    try {
-      const supabase = createClient()
+  async incrementExportCount(id: string): Promise<void> {
+    const supabase = createClient()
+    
+    const { error: rpcError } = await supabase.rpc('increment_vision_export_count', {
+      vision_id: id
+    })
+    
+    if (rpcError) {
+      console.warn('RPC failed, using fallback')
       
-      // Récupérer la vision originale
-      const { data: original, error: fetchError } = await supabase
-        .from('visions')
-        .select('*')
-        .eq('id', visionId)
-        .single()
-
-      if (fetchError || !original) {
-        throw new Error('Vision introuvable')
-      }
-
-      // Créer la copie
-      const copy = {
-        etablissement_id: original.etablissement_id,
-        nom: `${original.nom} (copie)`,
-        description: original.description,
-        color: original.color,
-        layout: original.layout,
-        is_default: false
-      }
-
-      const { data, error } = await supabase
-        .from('visions')
-        .insert([copy])
-        .select()
-        .single()
-
-      if (error) {
-        throw new Error(`Erreur lors de la duplication: ${error.message}`)
-      }
-
-      return data
-    } catch (err) {
-      console.error('Exception in duplicateVision:', err)
-      throw err
-    }
-  },
-
-  // ============================================
-  // SET DEFAULT - Définir une vision par défaut
-  // ============================================
-  async setDefaultVision(visionId: string, etablissementId: string): Promise<boolean> {
-    try {
-      const supabase = createClient()
-
-      // Désactiver toutes les visions par défaut
-      await supabase
-        .from('visions')
-        .update({ is_default: false })
-        .eq('etablissement_id', etablissementId)
-
-      // Activer la vision sélectionnée
-      const { error } = await supabase
-        .from('visions')
-        .update({ is_default: true })
-        .eq('id', visionId)
-
-      if (error) {
-        throw new Error(`Erreur: ${error.message}`)
-      }
-
-      return true
-    } catch (err) {
-      console.error('Exception in setDefaultVision:', err)
-      throw err
-    }
-  },
-
-  // ============================================
-  // INCREMENT VIEW COUNT
-  // ============================================
-  async incrementViewCount(visionId: string): Promise<void> {
-    try {
-      const supabase = createClient()
-      
-      // Récupérer la vision actuelle
-      const { data: vision } = await supabase
-        .from('visions')
-        .select('view_count')
-        .eq('id', visionId)
-        .single()
-
-      if (vision) {
-        await supabase
-          .from('visions')
-          .update({
-            view_count: (vision.view_count || 0) + 1,
-            last_viewed_at: new Date().toISOString()
-          })
-          .eq('id', visionId)
-      }
-    } catch (err) {
-      console.error('Exception in incrementViewCount:', err)
-    }
-  },
-
-  // ============================================
-  // INCREMENT EXPORT COUNT
-  // ============================================
-  async incrementExportCount(visionId: string): Promise<void> {
-    try {
-      const supabase = createClient()
-      
-      // Récupérer la vision actuelle
       const { data: vision } = await supabase
         .from('visions')
         .select('export_count')
-        .eq('id', visionId)
+        .eq('id', id)
         .single()
-
+      
       if (vision) {
         await supabase
           .from('visions')
-          .update({
+          .update({ 
             export_count: (vision.export_count || 0) + 1,
             last_exported_at: new Date().toISOString()
           })
-          .eq('id', visionId)
+          .eq('id', id)
       }
-    } catch (err) {
-      console.error('Exception in incrementExportCount:', err)
     }
+  },
+
+  async setDefault(id: string, etablissementId: string): Promise<void> {
+    const supabase = createClient()
+    
+    await supabase
+      .from('visions')
+      .update({ is_default: false })
+      .eq('etablissement_id', etablissementId)
+      .neq('id', id)
+    
+    const { error } = await supabase
+      .from('visions')
+      .update({ is_default: true })
+      .eq('id', id)
+    
+    if (error) throw error
+  },
+
+  async getDefault(etablissementId: string): Promise<Vision | null> {
+    const supabase = createClient()
+    
+    const { data, error } = await supabase
+      .from('visions')
+      .select('*')
+      .eq('etablissement_id', etablissementId)
+      .eq('is_default', true)
+      .single()
+    
+    if (error) {
+      if (error.code === 'PGRST116') return null
+      throw error
+    }
+    
+    return data
   }
 }

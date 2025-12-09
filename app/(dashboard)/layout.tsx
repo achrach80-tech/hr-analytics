@@ -1,62 +1,42 @@
+// app/(dashboard)/layout.tsx
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { CollapsibleSidebar } from '@/components/layout/CollapsibleSidebar'
-import { motion } from 'framer-motion'
+import { usePathname } from 'next/navigation'
+import { ReactNode } from 'react'
+import { Sidebar } from '@/components/layout/Sidebar'
 
 interface DashboardLayoutProps {
-  children: React.ReactNode
+  children: ReactNode
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  const [sidebarWidth, setSidebarWidth] = useState(280)
-  const [isMobile, setIsMobile] = useState(false)
+  const pathname = usePathname()
 
-  // Écouter les changements de taille sidebar
-  useEffect(() => {
-    const checkWidth = () => {
-      setIsMobile(window.innerWidth < 1024)
-    }
-    
-    checkWidth()
-    window.addEventListener('resize', checkWidth)
-    
-    return () => window.removeEventListener('resize', checkWidth)
-  }, [])
+  // Routes qui doivent être fullscreen (sans sidebar)
+  const fullscreenRoutes = [
+    '/visions/builder',
+    '/visions/new'
+  ]
 
-  // Observer la largeur réelle de la sidebar
-  useEffect(() => {
-    const sidebar = document.querySelector('[data-sidebar]')
-    if (!sidebar) return
+  const isFullscreen = fullscreenRoutes.some(route => pathname.startsWith(route))
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setSidebarWidth(entry.contentRect.width)
-      }
-    })
-
-    observer.observe(sidebar)
-    return () => observer.disconnect()
-  }, [])
-
-  return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/20 to-slate-950">
-      {/* Sidebar */}
-      <div data-sidebar>
-        <CollapsibleSidebar />
-      </div>
-
-      {/* Main Content */}
-      <motion.main
-        animate={{
-          marginLeft: isMobile ? 0 : 0, // Sidebar est absolute sur mobile
-          width: isMobile ? '100%' : `calc(100% - ${sidebarWidth}px)`
-        }}
-        transition={{ duration: 0.3, ease: 'easeInOut' }}
-        className="flex-1"
-      >
+  if (isFullscreen) {
+    // Fullscreen mode - pas de sidebar
+    return (
+      <div className="h-screen w-screen overflow-hidden">
         {children}
-      </motion.main>
+      </div>
+    )
+  }
+
+  // Mode normal avec sidebar
+  return (
+    <div className="flex h-screen">
+      <Sidebar />
+      
+      <main className="flex-1 overflow-auto bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        {children}
+      </main>
     </div>
   )
 }
