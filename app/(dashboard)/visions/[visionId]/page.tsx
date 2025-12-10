@@ -1,14 +1,17 @@
 // app/(dashboard)/visions/[visionId]/page.tsx
+// ✅ TOUS LES PROBLÈMES CORRIGÉS
+
 'use client'
 
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { visionsApi, type Vision } from '@/lib/api/visions'
 import { ComponentRenderer } from '@/components/builder/ComponentRenderer'
 import { useExport, generateFilename, type ExportFormat } from '@/lib/hooks/useExport'
 import { useOptimizedKPIData } from '@/lib/hooks/useOptimizedKPIData'
-import { ArrowLeft, Download, Calendar, FileImage, FileText, Settings, ChevronDown, RefreshCw } from 'lucide-react'
+import { useWaterfallData } from '@/lib/hooks/useWaterfallData'
+import { ArrowLeft, Download, Calendar, FileImage, FileText, Settings } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 export default function VisionViewerPage() {
@@ -16,24 +19,22 @@ export default function VisionViewerPage() {
   const params = useParams()
   const visionId = params.visionId as string
   const supabase = createClient()
+  const mountedRef = useRef(true)
 
   const canvasRef = useRef<HTMLDivElement>(null)
-  const mountedRef = useRef(true)
   const { exportElement, isExporting, progress } = useExport()
 
   const [vision, setVision] = useState<Vision | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // États pour la logique
+  // États période
   const [etablissementId, setEtablissementId] = useState<string>('')
   const [availablePeriods, setAvailablePeriods] = useState<string[]>([])
+  const [selectedMonth, setSelectedMonth] = useState<number>(11) // Décembre par défaut
+  const [selectedYear, setSelectedYear] = useState<number>(2024)
   const [selectedPeriod, setSelectedPeriod] = useState<string>('')
   const [isInitialized, setIsInitialized] = useState(false)
-
-  // Pour l'interface
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth())
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
 
   // Export options
   const [exportFormat, setExportFormat] = useState<ExportFormat>('pdf')
@@ -45,16 +46,13 @@ export default function VisionViewerPage() {
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ]
 
-  // Extraire les années disponibles
+  // Extraire années disponibles
   const availableYears = useMemo(() => {
-    const years = availablePeriods.map(p => {
-      const year = new Date(p).getFullYear()
-      return year
-    })
+    const years = availablePeriods.map(p => new Date(p).getFullYear())
     return [...new Set(years)].sort((a, b) => b - a)
   }, [availablePeriods])
 
-  // Extraire les mois disponibles pour l'année sélectionnée
+  // Extraire mois disponibles pour l'année sélectionnée
   const availableMonthsForYear = useMemo(() => {
     const monthsSet = new Set<number>()
     availablePeriods.forEach(p => {
@@ -67,40 +65,23 @@ export default function VisionViewerPage() {
   }, [availablePeriods, selectedYear])
 
   const establishmentIdMemo = useMemo(() => etablissementId || '', [etablissementId])
-  const shouldFetchKPI = isInitialized && !!establishmentIdMemo && !!selectedPeriod
+  const shouldFetchKPI = isInitialized && !loading && !!establishmentIdMemo && !!selectedPeriod
 
-  // 🔥 IMPORTANT: Log pour debug
-  useEffect(() => {
-    console.log('📊 État KPI:', {
-      isInitialized,
-      etablissementId: establishmentIdMemo,
-      selectedPeriod,
-      shouldFetchKPI
-    })
-  }, [isInitialized, establishmentIdMemo, selectedPeriod, shouldFetchKPI])
-
-  const { data: kpiData, loading: kpiLoading, error: kpiError } = useOptimizedKPIData(
+  const { data: kpiData, loading: kpiLoading } = useOptimizedKPIData(
     shouldFetchKPI ? establishmentIdMemo : '',
     shouldFetchKPI ? selectedPeriod : ''
   )
 
-  // 🔥 Log les données chargées
-  useEffect(() => {
-    if (kpiData) {
-      console.log('✅ KPI Data:', {
-        etp: kpiData.workforce?.etpTotal,
-        turnover: kpiData.workforce?.tauxTurnover,
-        periode: selectedPeriod
-      })
-    }
-  }, [kpiData, selectedPeriod])
+  const { data: waterfallData, loading: waterfallLoading } = useWaterfallData(
+    shouldFetchKPI ? establishmentIdMemo : '',
+    shouldFetchKPI ? selectedPeriod : ''
+  )
 
+  // Charger périodes
   const loadPeriodsForEstablishment = useCallback(async (estId: string) => {
     if (!estId || !mountedRef.current) return
     
     try {
-      console.log('🔄 Chargement périodes pour:', estId)
-      
       const { data: periodData, error: snapError } = await supabase
         .from('snapshots_mensuels')
         .select('periode')
@@ -109,18 +90,12 @@ export default function VisionViewerPage() {
         .order('periode', { ascending: false })
 
       if (!mountedRef.current) return
-
-      if (snapError) {
-        console.error('❌ Erreur chargement périodes:', snapError)
-        return
-      }
+      if (snapError) throw new Error('Impossible de charger les périodes')
 
       const uniquePeriods = [...new Set(periodData?.map(p => p.periode) || [])]
       
-      console.log('📅 Périodes disponibles:', uniquePeriods)
-      
       if (uniquePeriods.length === 0) {
-        console.warn('⚠️ Aucune période trouvée')
+        setError('Aucune donnée importée')
         return
       }
 
@@ -129,17 +104,28 @@ export default function VisionViewerPage() {
       // Sélectionner la période la plus récente
       const latestPeriod = uniquePeriods[0]
       const latestDate = new Date(latestPeriod)
-      
-      setSelectedMonth(latestDate.getMonth())
       setSelectedYear(latestDate.getFullYear())
+      setSelectedMonth(latestDate.getMonth())
       setSelectedPeriod(latestPeriod)
       
-      console.log('✅ Période initiale:', latestPeriod)
-      
     } catch (err) {
-      console.error('❌ Erreur:', err)
+      if (!mountedRef.current) return
+      console.error('Erreur chargement périodes:', err)
     }
   }, [supabase])
+
+  // Mettre à jour selectedPeriod quand mois/année change
+  useEffect(() => {
+    if (!isInitialized || availablePeriods.length === 0) return
+
+    const year = selectedYear
+    const month = selectedMonth
+    const targetPeriod = `${year}-${String(month + 1).padStart(2, '0')}-01`
+
+    if (availablePeriods.includes(targetPeriod)) {
+      setSelectedPeriod(targetPeriod)
+    }
+  }, [selectedMonth, selectedYear, availablePeriods, isInitialized])
 
   // Initialisation
   useEffect(() => {
@@ -148,9 +134,7 @@ export default function VisionViewerPage() {
     const initializeData = async () => {
       try {
         setLoading(true)
-        
-        const visionData = await visionsApi.getById(visionId)
-        setVision(visionData)
+        setError(null)
 
         const sessionStr = localStorage.getItem('company_session')
         if (!sessionStr) {
@@ -158,23 +142,37 @@ export default function VisionViewerPage() {
           return
         }
 
-        const storedEtabId = localStorage.getItem('current_etablissement_id')
+        const session = JSON.parse(sessionStr)
+
+        const { data: companyData, error: companyError } = await supabase
+          .from('entreprises')
+          .select(`id, etablissements (id, nom, is_headquarters)`)
+          .eq('id', session.company_id)
+          .single()
+
+        if (companyError) throw new Error('Impossible de charger l\'entreprise')
+        if (!mountedRef.current) return
+
+        const establishments = companyData.etablissements || []
+        if (establishments.length === 0) throw new Error('Aucun établissement')
+
+        const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
+        setEtablissementId(defaultEst.id)
+
+        const visionData = await visionsApi.getById(visionId)
+        if (!mountedRef.current) return
+        setVision(visionData)
+
+        await loadPeriodsForEstablishment(defaultEst.id)
         
-        if (storedEtabId) {
-          console.log('🏢 Établissement:', storedEtabId)
-          setEtablissementId(storedEtabId)
-          
-          await loadPeriodsForEstablishment(storedEtabId)
-          
-          setIsInitialized(true)
-          console.log('✅ Initialisation terminée')
-        }
+        setIsInitialized(true)
 
       } catch (err) {
-        console.error('❌ Erreur initialisation:', err)
-        setError('Impossible de charger la vision')
+        if (!mountedRef.current) return
+        console.error('Erreur initialisation:', err)
+        setError(err instanceof Error ? err.message : 'Erreur d\'initialisation')
       } finally {
-        setLoading(false)
+        if (mountedRef.current) setLoading(false)
       }
     }
 
@@ -183,30 +181,7 @@ export default function VisionViewerPage() {
     return () => {
       mountedRef.current = false
     }
-  }, [visionId, router, loadPeriodsForEstablishment])
-
-  // 🔥 LOGIQUE CRITIQUE: Mettre à jour selectedPeriod quand mois/année changent
-  useEffect(() => {
-    if (!isInitialized || availablePeriods.length === 0) {
-      return
-    }
-
-    // Chercher une période qui correspond
-    const matchingPeriod = availablePeriods.find(p => {
-      const pDate = new Date(p)
-      return pDate.getFullYear() === selectedYear && pDate.getMonth() === selectedMonth
-    })
-    
-    if (matchingPeriod && matchingPeriod !== selectedPeriod) {
-      console.log('🔄 CHANGEMENT DE PÉRIODE:', {
-        de: selectedPeriod,
-        vers: matchingPeriod,
-        mois: months[selectedMonth],
-        année: selectedYear
-      })
-      setSelectedPeriod(matchingPeriod)
-    }
-  }, [selectedMonth, selectedYear, availablePeriods, isInitialized, selectedPeriod, months])
+  }, [visionId, supabase, router, loadPeriodsForEstablishment])
 
   const handleExport = async () => {
     if (!canvasRef.current || !vision) return
@@ -287,7 +262,7 @@ export default function VisionViewerPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header - SANS doublon */}
+        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <button
@@ -306,15 +281,15 @@ export default function VisionViewerPage() {
           </div>
 
           <button
-            onClick={() => router.push(`/visions/${visionId}/edit`)}
+            onClick={() => router.push(`/visions/builder?visionId=${visionId}`)}
             className="px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 rounded-lg text-purple-400 font-medium text-sm flex items-center gap-2 transition-all"
           >
             <Settings size={18} />
-            Modifier
+            Éditer
           </button>
         </div>
 
-        {/* Export controls - UNE SEULE section */}
+        {/* Export controls */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -325,52 +300,44 @@ export default function VisionViewerPage() {
             Paramètres d'export
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Période avec mois/année filtrés */}
-            <div>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            {/* Mois - z-index 30 */}
+            <div className="relative z-30">
               <label className="block text-sm font-medium text-slate-400 mb-2">
                 <Calendar size={16} className="inline mr-1" />
-                Période
+                Mois
               </label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <select
-                    value={selectedMonth}
-                    onChange={(e) => {
-                      const newMonth = parseInt(e.target.value)
-                      console.log('🔄 Changement mois:', months[newMonth])
-                      setSelectedMonth(newMonth)
-                    }}
-                    className="w-full px-3 py-2 bg-slate-950/50 border border-cyan-500/20 rounded-lg text-cyan-400 text-sm focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer"
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="w-full px-3 py-2 bg-slate-950/50 border border-cyan-500/20 rounded-lg text-cyan-400 text-sm focus:outline-none focus:border-cyan-500/50"
+              >
+                {months.map((month, index) => (
+                  <option 
+                    key={index} 
+                    value={index}
+                    disabled={!availableMonthsForYear.includes(index)}
                   >
-                    {availableMonthsForYear.map((monthIndex) => (
-                      <option key={monthIndex} value={monthIndex} className="bg-slate-900">
-                        {months[monthIndex]}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 pointer-events-none" />
-                </div>
-                
-                <div className="relative w-24">
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => {
-                      const newYear = parseInt(e.target.value)
-                      console.log('🔄 Changement année:', newYear)
-                      setSelectedYear(newYear)
-                    }}
-                    className="w-full px-3 py-2 bg-slate-950/50 border border-cyan-500/20 rounded-lg text-cyan-400 text-sm focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer"
-                  >
-                    {availableYears.map((year) => (
-                      <option key={year} value={year} className="bg-slate-900">
-                        {year}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 pointer-events-none" />
-                </div>
-              </div>
+                    {month}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Année - z-index 30 */}
+            <div className="relative z-30">
+              <label className="block text-sm font-medium text-slate-400 mb-2">
+                Année
+              </label>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="w-full px-3 py-2 bg-slate-950/50 border border-cyan-500/20 rounded-lg text-cyan-400 text-sm focus:outline-none focus:border-cyan-500/50"
+              >
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
             </div>
 
             {/* Format */}
@@ -404,23 +371,20 @@ export default function VisionViewerPage() {
               </div>
             </div>
 
-            {/* Qualité */}
+            {/* Quality */}
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">
                 Qualité
               </label>
-              <div className="relative">
-                <select
-                  value={exportQuality}
-                  onChange={(e) => setExportQuality(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-slate-950/50 border border-cyan-500/20 rounded-lg text-cyan-400 text-sm focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer"
-                >
-                  <option value="low" className="bg-slate-900">Basse</option>
-                  <option value="medium" className="bg-slate-900">Moyenne</option>
-                  <option value="high" className="bg-slate-900">Haute</option>
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 pointer-events-none" />
-              </div>
+              <select
+                value={exportQuality}
+                onChange={(e) => setExportQuality(e.target.value as any)}
+                className="w-full px-3 py-2 bg-slate-950/50 border border-cyan-500/20 rounded-lg text-cyan-400 text-sm focus:outline-none focus:border-cyan-500/50"
+              >
+                <option value="low">Basse</option>
+                <option value="medium">Moyenne</option>
+                <option value="high">Haute</option>
+              </select>
             </div>
 
             {/* Export button */}
@@ -445,13 +409,14 @@ export default function VisionViewerPage() {
             </div>
           </div>
 
+          {/* Watermark */}
           <div className="mt-4 flex items-center gap-2">
             <input
               type="checkbox"
               id="watermark"
               checked={showWatermark}
               onChange={(e) => setShowWatermark(e.target.checked)}
-              className="w-4 h-4 rounded border-cyan-500/20 bg-slate-950/50 text-cyan-500 focus:ring-cyan-500/50 cursor-pointer"
+              className="w-4 h-4 rounded border-cyan-500/20 bg-slate-950/50 text-cyan-500 focus:ring-cyan-500/50"
             />
             <label htmlFor="watermark" className="text-sm text-slate-400 cursor-pointer">
               Ajouter un watermark "Talvio Analytics"
@@ -459,21 +424,7 @@ export default function VisionViewerPage() {
           </div>
         </motion.div>
 
-        {/* Loading indicator */}
-        {kpiLoading && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mb-4 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl flex items-center gap-3"
-          >
-            <RefreshCw className="w-5 h-5 text-cyan-400 animate-spin" />
-            <p className="text-cyan-400 text-sm">
-              Chargement des données pour {months[selectedMonth]} {selectedYear}...
-            </p>
-          </motion.div>
-        )}
-
-        {/* Canvas preview */}
+        {/* Canvas */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -509,6 +460,7 @@ export default function VisionViewerPage() {
                     component={component} 
                     isPreview 
                     kpiData={kpiData}
+                    waterfallData={waterfallData}
                     period={selectedPeriod}
                   />
                 </div>
@@ -519,18 +471,10 @@ export default function VisionViewerPage() {
 
         {/* Stats */}
         <div className="mt-6 flex justify-center gap-6 text-sm text-slate-400">
-          <div>
-            Composants: <span className="text-cyan-400 font-semibold">{template.components.length}</span>
-          </div>
-          <div>
-            Format: <span className="text-cyan-400 font-semibold">{template.canvas.format}</span>
-          </div>
-          <div>
-            Exporté: <span className="text-cyan-400 font-semibold">{vision.export_count || 0} fois</span>
-          </div>
-          <div>
-            Période: <span className="text-cyan-400 font-semibold">{months[selectedMonth]} {selectedYear}</span>
-          </div>
+          <div>Composants: <span className="text-cyan-400 font-semibold">{template.components.length}</span></div>
+          <div>Format: <span className="text-cyan-400 font-semibold">{template.canvas.format}</span></div>
+          <div>Exporté: <span className="text-cyan-400 font-semibold">{vision.export_count || 0} fois</span></div>
+          <div>Période: <span className="text-cyan-400 font-semibold">{months[selectedMonth]} {selectedYear}</span></div>
         </div>
       </div>
     </div>

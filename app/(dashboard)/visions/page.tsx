@@ -1,41 +1,98 @@
 // app/(dashboard)/visions/page.tsx
+// ✅ Même logique que Dashboard - Utilise company_session
+
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { visionsApi, type Vision } from '@/lib/api/visions'
-import { useCurrentEtablissement } from '@/lib/hooks/useCurrentEtablissement'
 import { Plus, Eye, Edit, Trash2, Download, LayoutGrid } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 export default function VisionsPage() {
   const router = useRouter()
-  const { etablissementId, loading: etabLoading } = useCurrentEtablissement()
+  const supabase = createClient()
+  const mountedRef = useRef(true)
   
+  const [etablissementId, setEtablissementId] = useState<string | null>(null)
   const [visions, setVisions] = useState<Vision[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Initialisation - même logique que Dashboard
   useEffect(() => {
-    async function loadVisions() {
-      if (!etablissementId) return
-      
+    mountedRef.current = true
+
+    const initializeData = async () => {
       try {
         setLoading(true)
-        const data = await visionsApi.getAll(etablissementId)
+        setError(null)
+
+        // 1. Vérifier la session (comme Dashboard)
+        const sessionStr = localStorage.getItem('company_session')
+        if (!sessionStr) {
+          router.push('/login')
+          return
+        }
+
+        const session = JSON.parse(sessionStr)
+
+        // 2. Charger l'entreprise et établissements (comme Dashboard)
+        const { data: companyData, error: companyError } = await supabase
+          .from('entreprises')
+          .select(`
+            id,
+            nom,
+            etablissements (
+              id,
+              nom,
+              is_headquarters
+            )
+          `)
+          .eq('id', session.company_id)
+          .single()
+
+        if (companyError) {
+          throw new Error('Impossible de charger les informations de l\'entreprise')
+        }
+
+        if (!mountedRef.current) return
+
+        const establishments = companyData.etablissements || []
+        
+        if (establishments.length === 0) {
+          throw new Error('Aucun établissement configuré pour votre entreprise')
+        }
+
+        // 3. Sélectionner l'établissement par défaut (comme Dashboard)
+        const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
+        setEtablissementId(defaultEst.id)
+
+        // 4. Charger les visions
+        const data = await visionsApi.getAll(defaultEst.id)
+        
+        if (!mountedRef.current) return
+        
         setVisions(data)
+        
       } catch (err) {
-        console.error('Erreur chargement visions:', err)
-        setError('Impossible de charger les visions')
+        if (!mountedRef.current) return
+        console.error('Erreur initialisation visions:', err)
+        setError(err instanceof Error ? err.message : 'Erreur de chargement')
       } finally {
-        setLoading(false)
+        if (mountedRef.current) {
+          setLoading(false)
+        }
       }
     }
 
-    if (!etabLoading && etablissementId) {
-      loadVisions()
+    initializeData()
+
+    return () => {
+      mountedRef.current = false
     }
-  }, [etablissementId, etabLoading])
+  }, [supabase, router])
 
   const handleDelete = async (visionId: string, visionName: string) => {
     if (!confirm(`Supprimer la vision "${visionName}" ?`)) return
@@ -49,7 +106,7 @@ export default function VisionsPage() {
     }
   }
 
-  if (etabLoading || loading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -66,14 +123,20 @@ export default function VisionsPage() {
         <div className="text-center">
           <div className="text-red-400 text-4xl mb-4">⚠️</div>
           <p className="text-red-400 font-semibold mb-2">Erreur</p>
-          <p className="text-slate-400">{error}</p>
+          <p className="text-slate-400 mb-6">{error}</p>
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="px-6 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-xl text-white font-semibold transition-all"
+          >
+            Retour au Dashboard
+          </button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
+    <div className="min-h-screen p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">

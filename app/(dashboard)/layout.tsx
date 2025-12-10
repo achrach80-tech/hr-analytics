@@ -1,9 +1,12 @@
 // app/(dashboard)/layout.tsx
+// ✅ Layout avec sidebar qui décale le contenu (pas d'overlay)
+// ✅ Fix hydratation avec useEffect
+
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { ReactNode } from 'react'
-import { Sidebar } from '@/components/layout/Sidebar'
+import { ReactNode, useState, useEffect } from 'react'
+import { CollapsibleSidebar } from '@/components/layout/CollapsibleSidebar'
 
 interface DashboardLayoutProps {
   children: ReactNode
@@ -11,6 +14,13 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
+  const [sidebarWidth, setSidebarWidth] = useState(280)
+  const [isMounted, setIsMounted] = useState(false)
+
+  // Fix hydratation : attendre que le composant soit monté côté client
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   // Routes qui doivent être fullscreen (sans sidebar)
   const fullscreenRoutes = [
@@ -21,7 +31,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const isFullscreen = fullscreenRoutes.some(route => pathname.startsWith(route))
 
   if (isFullscreen) {
-    // Fullscreen mode - pas de sidebar
     return (
       <div className="h-screen w-screen overflow-hidden">
         {children}
@@ -29,12 +38,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     )
   }
 
-  // Mode normal avec sidebar
+  // Mode normal avec sidebar qui décale le contenu
   return (
-    <div className="flex h-screen">
-      <Sidebar />
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <CollapsibleSidebar onWidthChange={setSidebarWidth} />
       
-      <main className="flex-1 overflow-auto bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <main 
+        className="flex-1 overflow-auto transition-all duration-300"
+        style={{ marginLeft: isMounted ? `${sidebarWidth}px` : '280px' }}
+      >
         {children}
       </main>
     </div>
