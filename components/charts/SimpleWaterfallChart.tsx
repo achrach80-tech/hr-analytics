@@ -19,7 +19,7 @@ interface WaterfallChartProps {
   className?: string
 }
 
-export function WaterfallChart({ data, title, type, className = '' }: WaterfallChartProps) {
+export function SimpleWaterfallChart({ data, title, type, className = '' }: WaterfallChartProps) {
   const chartData = [
     { name: 'Début', value: data.effectifDebut, fill: '#64748b' },
     { name: data.entrees.label, value: data.entrees.value, fill: '#10b981' },
