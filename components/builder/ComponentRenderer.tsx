@@ -543,7 +543,7 @@ function RepartitionGenrePreview({ height, kpiData }: { height: number; kpiData?
 
 function DistributionContratsPreview({ height, kpiData }: { height: number; kpiData?: any }) {
   const titleSize = Math.max(14, Math.min(24, height * 0.06))
-  let contracts = [
+  const contracts = [
     { label: 'CDI', value: 68.6, color: '#10b981' },
     { label: 'CDD', value: 18.8, color: '#f59e0b' },
     { label: 'ALT', value: 7.8, color: '#3b82f6' },

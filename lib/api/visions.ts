@@ -76,7 +76,7 @@ export const visionsApi = {
   async create(input: CreateVisionInput): Promise<Vision> {
     const supabase = createClient()
     
-    let etablissementId = input.etablissement_id
+    const etablissementId = input.etablissement_id
     
     if (!etablissementId) {
       // TODO: Récupérer depuis le contexte utilisateur
