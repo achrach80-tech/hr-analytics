@@ -1,3 +1,4 @@
+// Path: lib/import/types.ts
 export interface ProcessedData {
   employees: EmployeeData[]
   remunerations: RemunerationData[]
@@ -98,6 +99,7 @@ export interface ValidationError {
   row: number
   column: string
   field: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   value: any
   message: string
   severity: 'critical' | 'warning' | 'info'

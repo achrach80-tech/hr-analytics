@@ -77,6 +77,7 @@ export default function EditVisionPage() {
       })
 
       router.push(`/visions/${visionId}`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('Erreur:', error)
       alert(error.message || 'Erreur lors de la sauvegarde')

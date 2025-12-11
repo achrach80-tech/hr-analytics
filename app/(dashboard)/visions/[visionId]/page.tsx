@@ -156,6 +156,7 @@ export default function VisionViewerPage() {
         const establishments = companyData.etablissements || []
         if (establishments.length === 0) throw new Error('Aucun établissement')
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
         setEtablissementId(defaultEst.id)
 

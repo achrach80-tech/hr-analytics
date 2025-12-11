@@ -1,4 +1,5 @@
-// components/visions/VisionItemRenderer.tsx
+// Path: components/visions/VisionViewerOptimized.tsx
+// components/visions/VisionViewerOptimized.tsx
 // Version corrigée - ZÉRO erreur TypeScript
 
 import { memo } from 'react'
@@ -42,6 +43,7 @@ interface VisionItem {
 
 interface DashboardData {
   // Type flexible pour éviter les erreurs
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any
 }
 
@@ -116,7 +118,6 @@ export const VisionItemRenderer = memo(function VisionItemRenderer({
             format={format}
             icon={icon}
             gradient={gradient}
-            alert={item.config.alert}
             subtitle={item.config.subtitle}
             size={size}
             evolutionM1={item.config.evolutionM1}

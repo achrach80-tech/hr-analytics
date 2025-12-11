@@ -13,7 +13,7 @@ export default function CompanyLoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
@@ -27,19 +27,19 @@ export default function CompanyLoginPage() {
         .single()
 
       if (companyError || !company) {
-        throw new Error('Code d\'accès invalide')
+        throw new Error('Code d&apos;accès invalide')
       }
 
       // Check subscription status
       if (company.subscription_status !== 'active') {
-        throw new Error('Votre abonnement n\'est pas actif')
+        throw new Error('Votre abonnement n&apos;est pas actif')
       }
 
       // Check trial expiration
       if (company.trial_ends_at) {
         const trialEnd = new Date(company.trial_ends_at)
         if (trialEnd < new Date()) {
-          throw new Error('Votre période d\'essai a expiré')
+          throw new Error('Votre période d&apos;essai a expiré')
         }
       }
 
@@ -101,8 +101,9 @@ export default function CompanyLoginPage() {
         router.push('/dashboard')
       }
 
-    } catch (err: any) {
-      setError(err.message || 'Erreur de connexion')
+    } catch (err: unknown) {
+      const error = err as Error
+      setError(error.message || 'Erreur de connexion')
       
       // Log failed attempt
       await supabase
@@ -138,7 +139,7 @@ export default function CompanyLoginPage() {
             Accès Entreprise
           </h1>
           <p className="text-slate-400">
-            Connectez-vous avec votre code d'accès sécurisé
+            Connectez-vous avec votre code d&apos;accès sécurisé
           </p>
         </div>
 
@@ -148,13 +149,13 @@ export default function CompanyLoginPage() {
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2">
                 <Key size={16} />
-                Code d'accès
+                Code d&apos;accès
               </label>
               <input
                 type="password"
                 value={accessToken}
                 onChange={(e) => setAccessToken(e.target.value)}
-                placeholder="Entrez votre code d'accès"
+                placeholder="Entrez votre code d&apos;accès"
                 className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
                 required
                 disabled={isLoading}
@@ -162,7 +163,7 @@ export default function CompanyLoginPage() {
                 minLength={32}
               />
               <p className="mt-2 text-xs text-slate-500">
-                Le code d'accès vous a été fourni par email lors de l'activation
+                Le code d&apos;accès vous a été fourni par email lors de l&apos;activation
               </p>
             </div>
 

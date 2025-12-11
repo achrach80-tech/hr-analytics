@@ -24,7 +24,7 @@ export default function DemoRequestPage() {
   
   const supabase = createClient()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsSubmitting(true)
     setError(null)
@@ -41,8 +41,9 @@ export default function DemoRequestPage() {
       if (insertError) throw insertError
 
       setIsSuccess(true)
-    } catch (err: any) {
-      setError(err.message || 'Une erreur est survenue')
+    } catch (err: unknown) {
+      const error = err as Error
+      setError(error.message || 'Une erreur est survenue')
     } finally {
       setIsSubmitting(false)
     }
@@ -59,15 +60,15 @@ export default function DemoRequestPage() {
             Demande envoyée !
           </h2>
           <p className="text-slate-300 mb-8">
-  Notre équipe vous contactera dans les 24h pour planifier votre démonstration personnalisée.
-</p>
-<Link
-  href="/"
-  className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 rounded-xl text-white font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
->
-  Retour à l'accueil
-  <ArrowRight size={20} />
-</Link>
+            Notre équipe vous contactera dans les 24h pour planifier votre démonstration personnalisée.
+          </p>
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 rounded-xl text-white font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+          >
+            Retour à l&apos;accueil
+            <ArrowRight size={20} />
+          </Link>
         </div>
       </div>
     )
@@ -82,7 +83,7 @@ export default function DemoRequestPage() {
             Demandez votre <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">démonstration</span>
           </h1>
           <p className="text-xl text-slate-300">
-            Découvrez comment optimiser vos RH avec notre solution d'analytics
+            Découvrez comment optimiser vos RH avec notre solution d&apos;analytics
           </p>
         </div>
 
@@ -94,7 +95,7 @@ export default function DemoRequestPage() {
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2">
                   <Building2 size={16} />
-                  Nom de l'entreprise *
+                  Nom de l&apos;entreprise *
                 </label>
                 <input
                   type="text"
@@ -153,7 +154,7 @@ export default function DemoRequestPage() {
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2">
                   <Users size={16} />
-                  Nombre d'employés *
+                  Nombre d&apos;employés *
                 </label>
                 <select
                   required
@@ -174,7 +175,7 @@ export default function DemoRequestPage() {
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2">
                   <Building2 size={16} />
-                  Secteur d'activité
+                  Secteur d&apos;activité
                 </label>
                 <input
                   type="text"
@@ -232,8 +233,8 @@ export default function DemoRequestPage() {
         <div className="mt-12 grid md:grid-cols-3 gap-6">
           {[
             { title: 'Setup en 48h', desc: 'Mise en place rapide et accompagnement' },
-            { title: '30 jours d\'essai', desc: 'Testez gratuitement toutes les fonctionnalités' },
-            { title: 'Support dédié', desc: 'Équipe d\'experts à votre service' }
+            { title: '30 jours d&apos;essai', desc: 'Testez gratuitement toutes les fonctionnalités' },
+            { title: 'Support dédié', desc: 'Équipe d&apos;experts à votre service' }
           ].map((benefit, idx) => (
             <div key={idx} className="text-center p-6 bg-slate-900/30 border border-slate-800 rounded-xl">
               <h3 className="text-white font-semibold mb-2">{benefit.title}</h3>

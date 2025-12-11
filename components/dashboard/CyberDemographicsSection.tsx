@@ -21,11 +21,52 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
   previousYearData,
   loading = false 
 }) => {
+  // ✅ CORRECTION: Hooks AVANT les returns conditionnels
+  const pyramidAgeData = useMemo(() => {
+    if (!data) return null
+    
+    const ratioHommes = data.pctHommes / 100
+    const ratioFemmes = data.pctFemmes / 100
+    
+    return {
+      ageMoins25H: (data.pctAgeMoins25 || 0) * ratioHommes,
+      ageMoins25F: (data.pctAgeMoins25 || 0) * ratioFemmes,
+      age2535H: (data.pctAge2535 || 0) * ratioHommes,
+      age2535F: (data.pctAge2535 || 0) * ratioFemmes,
+      age3545H: (data.pctAge3545 || 0) * ratioHommes,
+      age3545F: (data.pctAge3545 || 0) * ratioFemmes,
+      age4555H: (data.pctAge4555 || 0) * ratioHommes,
+      age4555F: (data.pctAge4555 || 0) * ratioFemmes,
+      agePlus55H: (data.pctAgePlus55 || 0) * ratioHommes,
+      agePlus55F: (data.pctAgePlus55 || 0) * ratioFemmes
+    }
+  }, [data])
+
+  const pyramidSeniorityData = useMemo(() => {
+    if (!data) return null
+    
+    const ratioHommes = data.pctHommes / 100
+    const ratioFemmes = data.pctFemmes / 100
+    
+    return {
+      anciennete01H: (data.pctAnciennete01 || 0) * ratioHommes,
+      anciennete01F: (data.pctAnciennete01 || 0) * ratioFemmes,
+      anciennete13H: (data.pctAnciennete13 || 0) * ratioHommes,
+      anciennete13F: (data.pctAnciennete13 || 0) * ratioFemmes,
+      anciennete35H: (data.pctAnciennete35 || 0) * ratioHommes,
+      anciennete35F: (data.pctAnciennete35 || 0) * ratioFemmes,
+      anciennete510H: (data.pctAnciennete510 || 0) * ratioHommes,
+      anciennete510F: (data.pctAnciennete510 || 0) * ratioFemmes,
+      anciennetePlus10H: (data.pctAnciennetePlus10 || 0) * ratioHommes,
+      anciennetePlus10F: (data.pctAnciennetePlus10 || 0) * ratioFemmes
+    }
+  }, [data])
+
   if (loading) {
     return <DemographicsSkeleton />
   }
 
-  if (!data) {
+  if (!data || !pyramidAgeData || !pyramidSeniorityData) {
     return (
       <div className="p-6 bg-slate-800/50 rounded-2xl border border-slate-700/50">
         <p className="text-slate-400">Aucune donnée démographiques disponible</p>
@@ -46,42 +87,6 @@ export const CyberDemographicsSection: React.FC<CyberDemographicsSectionProps> =
   const evolutionN1Anciennete = previousYearData && previousYearData.ancienneteMoyenne > 0
     ? ((data.ancienneteMoyenne - previousYearData.ancienneteMoyenne) / previousYearData.ancienneteMoyenne) * 100
     : undefined
-
-  const pyramidAgeData = useMemo(() => {
-    const ratioHommes = data.pctHommes / 100
-    const ratioFemmes = data.pctFemmes / 100
-    
-    return {
-      ageMoins25H: (data.pctAgeMoins25 || 0) * ratioHommes,
-      ageMoins25F: (data.pctAgeMoins25 || 0) * ratioFemmes,
-      age2535H: (data.pctAge2535 || 0) * ratioHommes,
-      age2535F: (data.pctAge2535 || 0) * ratioFemmes,
-      age3545H: (data.pctAge3545 || 0) * ratioHommes,
-      age3545F: (data.pctAge3545 || 0) * ratioFemmes,
-      age4555H: (data.pctAge4555 || 0) * ratioHommes,
-      age4555F: (data.pctAge4555 || 0) * ratioFemmes,
-      agePlus55H: (data.pctAgePlus55 || 0) * ratioHommes,
-      agePlus55F: (data.pctAgePlus55 || 0) * ratioFemmes
-    }
-  }, [data])
-
-  const pyramidSeniorityData = useMemo(() => {
-    const ratioHommes = data.pctHommes / 100
-    const ratioFemmes = data.pctFemmes / 100
-    
-    return {
-      anciennete01H: (data.pctAnciennete01 || 0) * ratioHommes,
-      anciennete01F: (data.pctAnciennete01 || 0) * ratioFemmes,
-      anciennete13H: (data.pctAnciennete13 || 0) * ratioHommes,
-      anciennete13F: (data.pctAnciennete13 || 0) * ratioFemmes,
-      anciennete35H: (data.pctAnciennete35 || 0) * ratioHommes,
-      anciennete35F: (data.pctAnciennete35 || 0) * ratioFemmes,
-      anciennete510H: (data.pctAnciennete510 || 0) * ratioHommes,
-      anciennete510F: (data.pctAnciennete510 || 0) * ratioFemmes,
-      anciennetePlus10H: (data.pctAnciennetePlus10 || 0) * ratioHommes,
-      anciennetePlus10F: (data.pctAnciennetePlus10 || 0) * ratioFemmes
-    }
-  }, [data])
 
   return (
     <motion.section

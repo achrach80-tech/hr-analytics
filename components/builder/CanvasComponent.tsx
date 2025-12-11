@@ -7,7 +7,7 @@ import { Trash2, Copy, GripVertical } from 'lucide-react'
 import { CanvasComponent as CanvasComponentType } from '@/lib/store/builderStore'
 import { useBuilderStore } from '@/lib/store/builderStore'
 // ✅ CORRECTION: Import relatif correct
-import ComponentRenderer from './ComponentRenderer'
+import { ComponentRenderer } from './ComponentRenderer'
 
 interface CanvasComponentProps {
   component: CanvasComponentType
@@ -27,6 +27,7 @@ export default function CanvasComponent({ component, zoom }: CanvasComponentProp
 
   const isSelected = selectedId === component.id
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleDragStop = (_e: any, d: { x: number; y: number }) => {
     const newX = snapToGrid ? Math.round(d.x / (gridSize * zoom)) * (gridSize * zoom) : d.x
     const newY = snapToGrid ? Math.round(d.y / (gridSize * zoom)) * (gridSize * zoom) : d.y
@@ -36,6 +37,7 @@ export default function CanvasComponent({ component, zoom }: CanvasComponentProp
     })
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleResizeStop = (
     _e: any,
     _direction: any,

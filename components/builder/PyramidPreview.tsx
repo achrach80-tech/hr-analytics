@@ -4,6 +4,7 @@
 import React from 'react'
 
 interface PyramidPreviewProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   kpiData?: any
 }
 

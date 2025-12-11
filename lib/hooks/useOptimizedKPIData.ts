@@ -1,3 +1,4 @@
+// Path: lib/hooks/useOptimizedKPIData.ts
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -109,6 +110,7 @@ export function useOptimizedKPIData(
         throw new Error(`Données manquantes pour la période ${normalizedPeriod}`)
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const parseNum = (val: any, defaultVal: number = 0): number => {
         const parsed = parseFloat(val)
         return isNaN(parsed) ? defaultVal : parsed

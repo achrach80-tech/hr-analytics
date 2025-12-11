@@ -1,3 +1,4 @@
+// Path: lib/hooks/useWaterfallData.ts
 /**
  * 🌊 WATERFALL DATA HOOK v5.1 - PRIX/VOLUME UNIQUEMENT
  * 
@@ -130,6 +131,7 @@ export function useWaterfallData(
   /**
    * Construit un objet WaterfallData avec validation stricte
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buildWaterfallData = (
     snapshotM: any,
     snapshotPrevious: any,

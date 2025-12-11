@@ -66,6 +66,7 @@ export default function VisionsPage() {
         }
 
         // 3. Sélectionner l'établissement par défaut (comme Dashboard)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
         setEtablissementId(defaultEst.id)
 

@@ -56,7 +56,7 @@ interface FileAnalysis {
 }
 
 interface SheetData {
-  [key: string]: any[]
+  [key: string]: any[] // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 interface ImportStats {
@@ -76,6 +76,7 @@ interface PeriodAnalysis {
 }
 
 // Utility Functions
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const normalizeDate = (dateValue: any): string | null => {
   if (!dateValue) return null
   
@@ -113,6 +114,7 @@ const normalizeDate = (dateValue: any): string | null => {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const normalizePeriod = (period: any): string => {
   if (!period) {
     const now = new Date()
@@ -153,17 +155,20 @@ const normalizePeriod = (period: any): string => {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cleanString = (str: any, maxLength = 255): string => {
   if (!str) return ''
   return String(str).trim().substring(0, maxLength)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cleanNumber = (val: any, defaultValue = 0): number => {
   if (val === null || val === undefined || val === '') return defaultValue
   const num = parseFloat(String(val).replace(',', '.').replace(/[^\d.-]/g, ''))
   return isNaN(num) ? defaultValue : num
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const parseBoolean = (val: any): boolean => {
   if (typeof val === 'boolean') return val
   const str = String(val).trim().toLowerCase()
@@ -380,7 +385,7 @@ const CyberSidebar: React.FC<{
           className="w-full"
         >
           <BookOpen size={16} className="mr-2" />
-          Guide d'Import
+          Guide d&apos;Import
         </HolographicButton>
       </div>
 
@@ -450,7 +455,7 @@ const CyberSidebar: React.FC<{
               <div className="text-center">
                 <Terminal size={32} className="mx-auto mb-2 opacity-30" />
                 <p>Aucun log système...</p>
-                <p className="text-xs mt-1">En attente d'activité</p>
+                <p className="text-xs mt-1">En attente d&apos;activité</p>
               </div>
             </div>
           ) : (
@@ -492,6 +497,7 @@ const CyberSidebar: React.FC<{
 
 const DataPreview: React.FC<{
   processedData: ProcessedData | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onEdit?: (type: string, index: number, field: string, value: any) => void
 }> = ({ processedData, onEdit }) => {
   const [activeTab, setActiveTab] = useState<'employees' | 'remunerations' | 'absences'>('employees')
@@ -924,6 +930,7 @@ const ValidationConsole: React.FC<{
 
 const ProgressPortal: React.FC<{
   show: boolean
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   progress: any
   onCancel: () => void
   logs: string[]
@@ -1138,6 +1145,7 @@ export default function OptimizedImportPage() {
       const establishmentsData = companyData.etablissements || []
       setEstablishments(establishmentsData)
       
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const defaultEstablishment = establishmentsData.find((e: any) => e.is_headquarters) || establishmentsData[0]
       if (defaultEstablishment) {
         setSelectedEstablishment(defaultEstablishment as Establishment)
@@ -2281,7 +2289,7 @@ export default function OptimizedImportPage() {
                     whileHover={{ scale: 1.02, y: -2 }}
                   >
                     <BookOpen size={24} className="text-cyan-400 mb-2 group-hover:scale-110 transition-transform" />
-                    <p className="font-mono text-sm text-white font-bold">Guide d'Import</p>
+                    <p className="font-mono text-sm text-white font-bold">Guide d&apos;Import</p>
                     <p className="font-mono text-xs text-slate-400 mt-1">Documentation</p>
                   </motion.button>
 

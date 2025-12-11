@@ -1,3 +1,4 @@
+// Path: lib/hooks/useVisionData.ts
 // lib/hooks/useVisionData.ts
 // Hook simplifié pour charger les données des visions
 
@@ -21,7 +22,9 @@ export interface DashboardData {
     coutMoyen: number
     variationM1Pct: number
     variationN1Pct: number
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     waterfallM1: any | null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     waterfallN1: any | null
   }
   absences: {

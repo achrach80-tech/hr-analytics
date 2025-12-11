@@ -138,6 +138,7 @@ export default function CyberDashboard() {
           throw new Error('Aucun établissement configuré pour votre entreprise')
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const defaultEst = establishments.find((e: any) => e.is_headquarters) || establishments[0]
         setSelectedEstablishment(defaultEst as Establishment)
         

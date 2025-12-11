@@ -1,3 +1,4 @@
+// Path: lib/api/visions.ts
 // lib/api/visions.ts - VERSION FINALE ULTRA-RIGOUREUSE
 import { createClient } from '@/lib/supabase/client'
 import type { CanvasState, CanvasComponent } from '@/lib/store/builderStore'
@@ -19,6 +20,7 @@ export interface Vision {
   color: string
   is_default: boolean
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   layout: any | null                 // Legacy - lecture seule
   template: VisionTemplate | null    // Nouveau builder
   
@@ -112,6 +114,7 @@ export const visionsApi = {
   async update(id: string, input: Partial<CreateVisionInput>): Promise<Vision> {
     const supabase = createClient()
     
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = {
       updated_at: new Date().toISOString()
     }

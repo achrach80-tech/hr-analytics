@@ -11,6 +11,7 @@ import type { DualWaterfallData, WaterfallData } from '@/lib/types/dashboard'
 interface ComponentRendererProps {
   component: CanvasComponent
   isPreview?: boolean
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   kpiData?: any
   waterfallData?: DualWaterfallData | null
   period?: string
@@ -59,6 +60,7 @@ export function ComponentRenderer({ component, isPreview = false, kpiData, water
   return null
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function KPICardPreview({ definition, kpiData }: { definition: any; kpiData?: any }) {
   const { preview } = definition
   let realValue = preview.value
@@ -127,6 +129,7 @@ function KPICardPreview({ definition, kpiData }: { definition: any; kpiData?: an
   )
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ChartPreview({ definition, componentName, componentSize, kpiData, waterfallData }: { 
   definition: any
   componentName: string
@@ -352,6 +355,7 @@ function WaterfallPreview({ label, height, data }: { label: string; height: numb
   )
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function EvolutionETPPreview({ height, kpiData }: { height: number; kpiData?: any }) {
   const titleSize = Math.max(14, Math.min(24, height * 0.06))
   const months = ['01/24', '02/24', '03/24', '04/24', '05/24', '06/24', '07/24', '08/24', '09/24', '10/24', '11/24', '12/24']

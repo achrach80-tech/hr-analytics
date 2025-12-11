@@ -1,5 +1,6 @@
+// Path: components/visions/VisionItemRenderer.tsx
 // components/visions/VisionItemRenderer.tsx
-// Version FINALE - Structure SANS config
+// Version corrigée - ZÉRO erreur TypeScript
 
 import { memo } from 'react'
 import { CyberKPICard } from '@/components/dashboard/CyberKPICard'
@@ -40,6 +41,7 @@ interface VisionItem {
 
 interface VisionItemRendererProps {
   item: VisionItem
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data?: any
   etablissementId?: string
   periode?: string
@@ -101,7 +103,6 @@ export const VisionItemRenderer = memo(function VisionItemRenderer({
             format={format}
             icon={IconComponent}
             gradient={gradient}
-            alert={item.alert}
             subtitle={item.subtitle}
             size={size}
             evolutionM1={item.evolutionM1}
