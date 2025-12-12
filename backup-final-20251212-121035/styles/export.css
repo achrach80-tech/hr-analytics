@@ -1,0 +1,59 @@
+/* styles/export.css */
+
+/* Force les sections à rester ensemble lors de l'export */
+.export-section {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+  margin-bottom: 4rem;
+  position: relative;
+}
+
+/* Préservation des couleurs lors de l'export */
+* {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
+}
+
+/* Préservation des backgrounds */
+*::before,
+*::after {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
+}
+
+/* Force l'affichage des backgrounds en print */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  
+  .export-section {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+
+/* Assure que les gradients sont visibles */
+.bg-gradient-to-r,
+.bg-gradient-to-br,
+.bg-gradient-to-tr,
+.bg-gradient-to-bl,
+.bg-gradient-to-tl {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+/* Force l'affichage des ombres */
+.shadow,
+.shadow-sm,
+.shadow-md,
+.shadow-lg,
+.shadow-xl,
+.shadow-2xl {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}

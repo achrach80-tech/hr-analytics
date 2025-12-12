@@ -1,7 +1,7 @@
 // app/(dashboard)/visions/builder/page.tsx
 'use client'
 
-import React, { useEffect, useState, Suspense } from 'react'  // ✅ Ajout de Suspense
+import React, { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { visionsApi } from '@/lib/api/visions'
 import { useBuilderStore } from '@/lib/store/builderStore'
@@ -11,8 +11,7 @@ import PropertiesPanel from '@/components/builder/PropertiesPanel'
 import { Toolbar } from '@/components/builder/Toolbar'
 import { ArrowLeft, AlertCircle } from 'lucide-react'
 
-// ✅ Composant principal (renommé, reste identique)
-function BuilderPageContent() {
+export default function BuilderPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const visionId = searchParams.get('visionId')
@@ -239,20 +238,4 @@ function KeyboardShortcuts({ onSave }: { onSave: () => void }) {
   }, [undo, redo, deleteComponent, selectedId, onSave])
 
   return null
-}
-
-// ✅ Export par défaut avec Suspense (NOUVEAU)
-export default function BuilderPage() {
-  return (
-    <Suspense fallback={
-      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-          <p className="text-slate-400">Chargement du builder...</p>
-        </div>
-      </div>
-    }>
-      <BuilderPageContent />
-    </Suspense>
-  )
 }
