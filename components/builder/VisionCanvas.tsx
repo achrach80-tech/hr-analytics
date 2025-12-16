@@ -1,11 +1,14 @@
 // components/builder/VisionCanvas.tsx
+// ✅ CORRIGÉ: Ajoute données mockup pour waterfall dans le builder
+
 'use client'
 
-import React, { useRef } from 'react'
+import React, { useRef, useMemo } from 'react'
 import { Rnd } from 'react-rnd'
 import { useBuilderStore } from '@/lib/store/builderStore'
 import { ComponentRenderer } from './ComponentRenderer'
 import { Trash2, Copy } from 'lucide-react'
+import type { DualWaterfallData } from '@/lib/types/dashboard'
 
 export function VisionCanvas() {
   const {
@@ -23,6 +26,64 @@ export function VisionCanvas() {
   } = useBuilderStore()
 
   const canvasRef = useRef<HTMLDivElement>(null)
+
+  // ✅ Données mockup pour le builder (même format que les vraies données)
+  const mockWaterfallData: DualWaterfallData = useMemo(() => ({
+    hasMonthBefore: true,
+    hasYearBefore: true,
+    vsMonthBefore: {
+      periodePrecedente: '2024-11-01',
+      periodeCourante: '2024-12-01',
+      masseSalarialeM1: 193000,
+      masseSalarialeM: 353000,
+      coutMoyenM1: 3860,
+      coutMoyenM: 7060,
+      etpM1: 50.0,
+      etpM: 50.0,
+      effetPrix: 160000,
+      effetVolume: 0,
+      variation: 160000,
+      variationPct: 82.9,
+      primesExceptionnellesM: 0,
+      primesExceptionnellesM1: 0,
+      coherenceOk: true,
+      ecartCoherence: 0,
+      ecartCoherencePct: 0,
+      recalculated: false
+    },
+    vsYearBefore: {
+      periodePrecedente: '2023-12-01',
+      periodeCourante: '2024-12-01',
+      masseSalarialeM1: 332000,
+      masseSalarialeM: 353000,
+      coutMoyenM1: 6775,
+      coutMoyenM: 7060,
+      etpM1: 49.0,
+      etpM: 50.0,
+      effetPrix: 14000,
+      effetVolume: 7000,
+      variation: 21000,
+      variationPct: 6.3,
+      primesExceptionnellesM: 0,
+      primesExceptionnellesM1: 0,
+      coherenceOk: true,
+      ecartCoherence: 0,
+      ecartCoherencePct: 0,
+      recalculated: false
+    }
+  }), [])
+
+  const mockKpiData = useMemo(() => ({
+    workforce: {
+      etpTotal: 50.0,
+      etpTotalEvolution: -1.8,
+      headcountActif: 51,
+      headcountActifEvolution: 2.5,
+      ageMoyen: 31.9,
+      tauxTurnover: 0.0,
+      pctCDI: 68.6
+    }
+  }), [])
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
@@ -80,8 +141,8 @@ export function VisionCanvas() {
                 })
               }}
               onResizeStop={(e, direction, ref, delta, position) => {
-                const newWidth = Math.max(100, parseInt(ref.style.width) / zoom)
-                const newHeight = Math.max(80, parseInt(ref.style.height) / zoom)
+                const newWidth = snapPosition(parseInt(ref.style.width) / zoom)
+                const newHeight = snapPosition(parseInt(ref.style.height) / zoom)
                 const newX = snapPosition(position.x / zoom)
                 const newY = snapPosition(position.y / zoom)
 
@@ -90,12 +151,11 @@ export function VisionCanvas() {
                   position: { x: newX, y: newY }
                 })
               }}
-              bounds="parent"
               enableResizing={isSelected}
               disableDragging={!isSelected}
-              className={`group ${isSelected ? 'z-50' : 'z-10'}`}
+              bounds="parent"
               style={{
-                border: isSelected ? '2px solid #06b6d4' : '2px solid transparent',
+                border: isSelected ? '2px solid rgba(6, 182, 212, 0.5)' : '2px solid transparent',
                 borderRadius: '8px',
                 transition: 'border-color 0.2s ease'
               }}
@@ -147,8 +207,14 @@ export function VisionCanvas() {
               }}
             >
               <div className="w-full h-full relative">
-                {/* Component content */}
-                <ComponentRenderer component={component} isPreview />
+                {/* Component content - ✅ AVEC DONNÉES MOCKUP */}
+                <ComponentRenderer 
+                  component={component} 
+                  isPreview 
+                  waterfallData={mockWaterfallData}
+                  kpiData={mockKpiData}
+                  period="2024-12-01"
+                />
 
                 {/* Quick actions (visible on hover) */}
                 {isSelected && (
@@ -177,28 +243,10 @@ export function VisionCanvas() {
                     </button>
                   </div>
                 )}
-
-                {/* Selection indicator */}
-                {isSelected && (
-                  <div className="absolute -top-6 left-0 bg-cyan-500 text-slate-900 text-xs font-semibold px-2 py-0.5 rounded">
-                    {component.componentName}
-                  </div>
-                )}
               </div>
             </Rnd>
           )
         })}
-
-        {/* Empty state */}
-        {components.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center text-slate-500">
-              <div className="text-4xl mb-4">📊</div>
-              <div className="text-xl font-semibold mb-2">Canvas vide</div>
-              <div className="text-sm">Glissez-déposez des composants depuis la bibliothèque</div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
