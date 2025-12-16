@@ -45,14 +45,22 @@ export function ComponentRenderer({ component, isPreview = false, kpiData, water
   if (component.type === 'text' || component.type === 'title') {
     return (
       <div 
-        className="w-full h-full flex items-center justify-center p-4 bg-slate-900/50 border border-cyan-500/20 rounded-lg"
+        className="w-full h-full flex items-center p-4 bg-slate-900/50 border border-cyan-500/20 rounded-lg"
         style={{
           fontSize: component.style?.fontSize || (component.type === 'title' ? 32 : 16),
           fontWeight: component.style?.fontWeight || (component.type === 'title' ? 'bold' : 'normal'),
-          color: component.style?.color || '#06b6d4'
+          textAlign: (component.style?.textAlign as 'left' | 'center' | 'right' | 'justify') || 'left'
         }}
       >
-        {component.content || (component.type === 'title' ? 'Titre du rapport' : 'Zone de texte...')}
+        <div 
+          dangerouslySetInnerHTML={{ 
+            __html: component.content || (component.type === 'title' ? 'Titre du rapport' : 'Zone de texte...') 
+          }}
+          style={{
+            width: '100%',
+            color: component.style?.color || '#06b6d4'
+          }}
+        />
       </div>
     )
   }

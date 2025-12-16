@@ -1,13 +1,30 @@
 // components/builder/PropertiesPanel.tsx
+// ✅ CORRIGÉ: Ajoute sélecteur de couleur pour texte
+
 'use client'
 
 import { useState } from 'react'
 import { useBuilderStore } from '@/lib/store/builderStore'
 import { getComponentById } from '@/lib/config/builderComponents'
-import { X, Edit3, Type } from 'lucide-react'
+import { X, Edit3, Type, Palette } from 'lucide-react'
+
+// Couleurs prédéfinies pour le texte
+const TEXT_COLORS = [
+  { name: 'Cyan', value: '#06b6d4' },
+  { name: 'Blanc', value: '#ffffff' },
+  { name: 'Gris clair', value: '#cbd5e1' },
+  { name: 'Gris', value: '#94a3b8' },
+  { name: 'Violet', value: '#8b5cf6' },
+  { name: 'Vert', value: '#10b981' },
+  { name: 'Orange', value: '#f59e0b' },
+  { name: 'Rouge', value: '#ef4444' },
+]
 
 export default function PropertiesPanel() {
   const [showTextEditor, setShowTextEditor] = useState(false)
+  const [tempWidth, setTempWidth] = useState<string>('')
+  const [tempHeight, setTempHeight] = useState<string>('')
+  const [tempFontSize, setTempFontSize] = useState<string>('')
   
   const selectedId = useBuilderStore((state) => state.selectedId)
   const components = useBuilderStore((state) => state.components)
@@ -82,24 +99,31 @@ export default function PropertiesPanel() {
           
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">X</label>
+              <label className="block text-xs text-slate-400 mb-1.5">X</label>
               <input
                 type="number"
-                value={Math.round(selectedComponent.position.x)}
-                onChange={(e) => updateComponent(selectedComponent.id, {
-                  position: { ...selectedComponent.position, x: parseInt(e.target.value) || 0 }
-                })}
+                value={selectedComponent.position.x}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0
+                  updateComponent(selectedComponent.id, {
+                    position: { ...selectedComponent.position, x: Math.max(0, val) }
+                  })
+                }}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:border-cyan-500 focus:outline-none"
               />
             </div>
+            
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Y</label>
+              <label className="block text-xs text-slate-400 mb-1.5">Y</label>
               <input
                 type="number"
-                value={Math.round(selectedComponent.position.y)}
-                onChange={(e) => updateComponent(selectedComponent.id, {
-                  position: { ...selectedComponent.position, y: parseInt(e.target.value) || 0 }
-                })}
+                value={selectedComponent.position.y}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0
+                  updateComponent(selectedComponent.id, {
+                    position: { ...selectedComponent.position, y: Math.max(0, val) }
+                  })
+                }}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:border-cyan-500 focus:outline-none"
               />
             </div>
@@ -107,37 +131,194 @@ export default function PropertiesPanel() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Largeur</label>
+              <label className="block text-xs text-slate-400 mb-1.5">Largeur</label>
               <input
                 type="number"
-                min="50"
-                value={Math.round(selectedComponent.size.width)}
+                value={tempWidth || selectedComponent.size.width}
                 onChange={(e) => {
+                  setTempWidth(e.target.value)
+                }}
+                onBlur={(e) => {
                   const val = parseInt(e.target.value) || 50
                   updateComponent(selectedComponent.id, {
                     size: { ...selectedComponent.size, width: Math.max(50, val) }
                   })
+                  setTempWidth('')
                 }}
+                onFocus={() => setTempWidth('')}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:border-cyan-500 focus:outline-none"
               />
             </div>
+            
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Hauteur</label>
+              <label className="block text-xs text-slate-400 mb-1.5">Hauteur</label>
               <input
                 type="number"
-                min="50"
-                value={Math.round(selectedComponent.size.height)}
+                value={tempHeight || selectedComponent.size.height}
                 onChange={(e) => {
+                  setTempHeight(e.target.value)
+                }}
+                onBlur={(e) => {
                   const val = parseInt(e.target.value) || 50
                   updateComponent(selectedComponent.id, {
                     size: { ...selectedComponent.size, height: Math.max(50, val) }
                   })
+                  setTempHeight('')
                 }}
+                onFocus={() => setTempHeight('')}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:border-cyan-500 focus:outline-none"
               />
             </div>
           </div>
         </div>
+
+        {/* ✅ NOUVEAU: Taille du texte */}
+        {isTextComponent && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold text-slate-300 uppercase tracking-wide">Taille du texte</h4>
+              <Type className="w-4 h-4 text-slate-500" />
+            </div>
+            
+            {/* Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">Taille: {selectedComponent.style?.fontSize || (selectedComponent.type === 'title' ? 32 : 16)}px</span>
+                <div className="flex gap-2">
+                  {[12, 16, 24, 32, 48, 64].map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => {
+                        updateComponent(selectedComponent.id, {
+                          style: {
+                            ...selectedComponent.style,
+                            fontSize: size
+                          }
+                        })
+                      }}
+                      className={`
+                        px-2 py-1 text-xs rounded transition-all
+                        ${(selectedComponent.style?.fontSize || (selectedComponent.type === 'title' ? 32 : 16)) === size
+                          ? 'bg-cyan-500 text-white'
+                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                        }
+                      `}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <input
+                type="range"
+                min="8"
+                max="96"
+                step="1"
+                value={selectedComponent.style?.fontSize || (selectedComponent.type === 'title' ? 32 : 16)}
+                onChange={(e) => {
+                  updateComponent(selectedComponent.id, {
+                    style: {
+                      ...selectedComponent.style,
+                      fontSize: parseInt(e.target.value)
+                    }
+                  })
+                }}
+                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+              />
+              
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>8px</span>
+                <span>96px</span>
+              </div>
+            </div>
+
+            {/* Input manuel */}
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">Taille personnalisée</label>
+              <input
+                type="number"
+                value={tempFontSize || (selectedComponent.style?.fontSize || (selectedComponent.type === 'title' ? 32 : 16))}
+                onChange={(e) => {
+                  setTempFontSize(e.target.value)
+                }}
+                onBlur={(e) => {
+                  const val = parseInt(e.target.value) || 16
+                  updateComponent(selectedComponent.id, {
+                    style: {
+                      ...selectedComponent.style,
+                      fontSize: Math.max(8, Math.min(200, val))
+                    }
+                  })
+                  setTempFontSize('')
+                }}
+                onFocus={() => setTempFontSize('')}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:border-cyan-500 focus:outline-none"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ✅ Sélecteur de couleur pour le texte */}
+        {isTextComponent && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold text-slate-300 uppercase tracking-wide">Couleur du texte</h4>
+              <Palette className="w-4 h-4 text-slate-500" />
+            </div>
+            
+            <div className="grid grid-cols-4 gap-2">
+              {TEXT_COLORS.map((color) => {
+                const isSelected = (selectedComponent.style?.color || '#06b6d4') === color.value
+                
+                return (
+                  <button
+                    key={color.value}
+                    onClick={() => {
+                      updateComponent(selectedComponent.id, {
+                        style: {
+                          ...selectedComponent.style,
+                          color: color.value
+                        }
+                      })
+                    }}
+                    className={`
+                      relative h-10 rounded-lg transition-all
+                      ${isSelected 
+                        ? 'ring-2 ring-cyan-500 ring-offset-2 ring-offset-slate-900 scale-110' 
+                        : 'hover:scale-105 hover:ring-1 hover:ring-slate-600'
+                      }
+                    `}
+                    style={{ backgroundColor: color.value }}
+                    title={color.name}
+                  >
+                    {isSelected && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" style={{ color: color.value === '#ffffff' ? '#000000' : '#ffffff' }}>
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            
+            {/* Affichage couleur actuelle */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700">
+              <div 
+                className="w-6 h-6 rounded border border-slate-600"
+                style={{ backgroundColor: selectedComponent.style?.color || '#06b6d4' }}
+              />
+              <span className="text-sm text-slate-400">
+                {TEXT_COLORS.find(c => c.value === (selectedComponent.style?.color || '#06b6d4'))?.name || 'Personnalisée'}
+              </span>
+              <span className="text-xs text-slate-500 ml-auto font-mono">
+                {selectedComponent.style?.color || '#06b6d4'}
+              </span>
+            </div>
+          </div>
+        )}
 
         {isTextComponent && (
           <div className="space-y-3">
@@ -168,7 +349,10 @@ export default function PropertiesPanel() {
             ) : (
               <div>
                 {selectedComponent.content && (
-                  <div className="mb-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-sm text-slate-300 max-h-32 overflow-y-auto">
+                  <div 
+                    className="mb-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-sm max-h-32 overflow-y-auto"
+                    style={{ color: selectedComponent.style?.color || '#cbd5e1' }}
+                  >
                     {stripHtml(selectedComponent.content) || 'Aucun contenu'}
                   </div>
                 )}
@@ -200,15 +384,9 @@ export default function PropertiesPanel() {
               {definition.dataKey && (
                 <div className="flex justify-between py-2 border-b border-slate-800">
                   <span className="text-slate-400">Source</span>
-                  <span className="text-cyan-400 font-mono text-xs">{definition.dataKey}</span>
+                  <span className="text-white font-mono text-xs">{definition.dataKey}</span>
                 </div>
               )}
-              <div className="flex justify-between py-2">
-                <span className="text-slate-400">ID</span>
-                <span className="text-slate-500 font-mono text-xs truncate max-w-[150px]">
-                  {selectedComponent.id.split('-').pop()}
-                </span>
-              </div>
             </div>
           </div>
         )}

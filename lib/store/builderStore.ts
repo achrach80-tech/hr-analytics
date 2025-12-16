@@ -1,4 +1,6 @@
 // lib/store/builderStore.ts
+// ✅ CORRIGÉ: Ajout de textAlign au type style
+
 import { create } from 'zustand'
 
 export type ComponentType = 
@@ -25,9 +27,10 @@ export interface CanvasComponent {
     fontWeight?: string
     color?: string
     backgroundColor?: string
+    textAlign?: 'left' | 'center' | 'right' | 'justify'  // ✅ AJOUTÉ
   }
   content?: string
-  config?: Record<string, any>
+  config?: Record<string, unknown>
 }
 
 export interface CanvasState {
