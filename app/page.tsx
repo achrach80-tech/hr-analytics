@@ -3,17 +3,16 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
-  ArrowRight, Brain, Shield, BarChart3, Users, TrendingUp, 
-  Sparkles, Building2, Euro, Check, Play, ChevronRight,
-  Activity, PieChart, Calendar, Clock, Award, Zap,
-  LineChart, Target, Gauge, Database, Lock, Globe
+  ArrowRight, Brain, Shield, TrendingUp, 
+  Sparkles, Building2, Euro, Check, Play,
+  Activity, Clock, Target, Gauge, Database, Lock, Globe, 
+  Zap, Users, BarChart3, Calendar, FileSpreadsheet
 } from 'lucide-react'
 
 export default function LandingPage() {
   const router = useRouter()
   const [activeMetric, setActiveMetric] = useState(0)
   const [scrollY, setScrollY] = useState(0)
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false)
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY)
@@ -21,7 +20,6 @@ export default function LandingPage() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  // Animated metrics for the dashboard preview
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveMetric((prev) => (prev + 1) % 4)
@@ -30,40 +28,86 @@ export default function LandingPage() {
   }, [])
 
   const animatedMetrics = [
-    { label: 'Turnover Rate', value: '8.2%', trend: -2.3, color: '#10b981' },
-    { label: 'Absenteeism', value: '4.7%', trend: -1.2, color: '#06b6d4' },
-    { label: 'Headcount', value: '1,247', trend: 3.5, color: '#8b5cf6' },
-    { label: 'Masse Salariale', value: '€4.2M', trend: 2.1, color: '#f59e0b' }
+    { label: 'Taux de Turnover', value: '8.2%', trend: -2.3, color: '#10b981' },
+    { label: 'Absentéisme', value: '4.7%', trend: -1.2, color: '#06b6d4' },
+    { label: 'Effectifs', value: '1,247', trend: 3.5, color: '#8b5cf6' },
+    { label: 'Masse Salariale', value: '4.2M €', trend: 2.1, color: '#f59e0b' }
   ]
 
-  const clients = [
-    { name: 'Taille', employees: '10 à 3000 employés' },
-    { name: 'DRH', employees: 'sans équipe technique' },
-    { name: 'Startups', employees: 'en forte croissance' },
-    { name: 'Organisations', employees: ' multi-sites' }
+  const targetClients = [
+    { icon: Building2, title: '50-1500 salariés', desc: 'PME & ETI' },
+    { icon: Users, title: 'DRH autonomes', desc: 'Sans équipe tech' },
+    { icon: TrendingUp, title: 'Croissance rapide', desc: 'Besoins évolutifs' },
+    { icon: Globe, title: 'Multi-sites', desc: 'Plusieurs établissements' }
   ]
 
   const benefits = [
     {
-      icon: Clock,
-      title: "Visualisation instantanée",
-      description: "Visualisez tous vos KPIs RH en temps réel sur un seul dashboard"
+      icon: Zap,
+      title: "2 minutes pour vos KPIs",
+      description: "Uploadez votre Excel RH, obtenez instantanément turnover, masse salariale et effectifs. Sans formation."
     },
     {
       icon: Target,
-      title: "Tous vos indicateurs centralisés",
-      description: "Suivez vos métriques RH essentielles sur un seul tableau de bord temps réel"
+      title: "Tous vos indicateurs en un coup d'œil",
+      description: "Pyramides, évolutions, analyses financières : tout votre reporting RH sur un seul tableau de bord."
     },
     {
-      icon: Euro,
-      title: "Compatible avec votre process",
-      description: "Talvio s'adapte à vos données existantes. Pas besoin de changer vos habitudes."
+      icon: FileSpreadsheet,
+      title: "Vos fichiers Excel suffisent",
+      description: "Pas besoin de changer vos process. Talvio s'adapte à vos exports de paie et effectifs actuels."
     },
     {
       icon: Shield,
-      title: "100% RGPD Compliant",
-      description: "Hébergement sécurisé en Europe avec chiffrement AES-256. Vos données RH protégées."
+      title: "Sécurité niveau banque",
+      description: "Données hébergées en France, conformes RGPD, chiffrées AES-256. Vos données RH restent privées."
     }
+  ]
+
+  const features = [
+    {
+      category: "Indicateurs RH",
+      icon: Gauge,
+      color: "purple",
+      items: [
+        "Effectifs et mouvements (entrées/sorties)",
+        "Turnover & taux de rotation",
+        "Absentéisme et jours d'absence",
+        "Pyramides des âges et anciennetés",
+        "Répartition par genre et contrats"
+      ]
+    },
+    {
+      category: "Analyses Financières",
+      icon: Euro,
+      color: "cyan",
+      items: [
+        "Masse salariale totale et évolutions",
+        "Effets Prix / Volume / Mix",
+        "Coût moyen par ETP",
+        "Comparaisons vs mois/année précédente",
+        "Projections et tendances"
+      ]
+    },
+    {
+      category: "Vision Builder",
+      icon: Sparkles,
+      color: "green",
+      items: [
+        "Créez vos propres rapports personnalisés",
+        "Drag & drop de composants",
+        "Export PDF et PNG haute qualité",
+        "Rapports mensuels automatisés",
+        "Templates réutilisables"
+      ]
+    }
+  ]
+
+  const stats = [
+    { value: "2 min", label: "Temps d'import", icon: Clock },
+    { value: "15+", label: "KPIs disponibles", icon: BarChart3 },
+    { value: "24 mois", label: "Historique analysé", icon: Calendar },
+    { value: "100%", label: "Conforme RGPD", icon: Shield }
   ]
 
   return (
@@ -115,15 +159,16 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* Hero Section with Animated Dashboard */}
+      {/* Hero Section */}
       <section className="relative pt-20 pb-32 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             {/* Left: Text Content */}
             <div>
+              {/* Badge - Version pré-clients */}
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/10 to-cyan-500/10 border border-purple-500/20 rounded-full mb-8">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-sm text-gray-300">La confiance de 20+ entreprises</span>
+                <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+                <span className="text-sm text-gray-300">Nouveau • Conçu pour les PME et ETI françaises</span>
               </div>
               
               <h1 className="text-6xl font-bold leading-tight mb-6">
@@ -137,7 +182,9 @@ export default function LandingPage() {
               </h1>
               
               <p className="text-xl text-gray-400 mb-8 leading-relaxed">
-                Uploadez votre Excel RH, obtenez vos KPIs en 2 minutes. Effectifs, turnover, masse salariale : visualisez tout instantanément, sans formation technique.
+                Uploadez votre Excel RH, obtenez vos KPIs en 2 minutes. 
+                <span className="text-white font-semibold"> Effectifs, turnover, masse salariale</span> : 
+                visualisez tout instantanément, sans formation technique.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 mb-8">
@@ -149,42 +196,39 @@ export default function LandingPage() {
                   <ArrowRight className="group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button
-                  onClick={() => setIsVideoPlaying(true)}
+                  onClick={() => window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank')}
                   className="px-8 py-4 bg-white/5 backdrop-blur border border-white/10 rounded-2xl font-semibold text-lg hover:bg-white/10 transition-all flex items-center justify-center gap-3"
                 >
                   <Play size={20} />
-                  Regarder (2 min)
+                  Voir la démo (2 min)
                 </button>
               </div>
 
               {/* Trust Signals */}
-              <div className="flex items-center gap-8">
+              <div className="flex flex-wrap items-center gap-6">
                 <div className="flex items-center gap-2">
                   <Shield className="text-green-500" size={20} />
                   <span className="text-sm text-gray-400">Conforme RGPD</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Lock className="text-green-500" size={20} />
-                  <span className="text-sm text-gray-400">Certifié ISO 27001</span>
+                  <Database className="text-green-500" size={20} />
+                  <span className="text-sm text-gray-400">Hébergé en France</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Globe className="text-green-500" size={20} />
-                  <span className="text-sm text-gray-400">Gestion multi-établissements</span>
+                  <Lock className="text-green-500" size={20} />
+                  <span className="text-sm text-gray-400">Chiffrement AES-256</span>
                 </div>
               </div>
             </div>
 
             {/* Right: Animated Dashboard Preview */}
             <div className="relative">
-              {/* Glow Effect */}
               <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 blur-3xl" />
               
-              {/* Dashboard Card */}
               <div className="relative bg-gradient-to-br from-gray-900/90 to-black/90 backdrop-blur-xl rounded-3xl border border-white/10 p-8 shadow-2xl">
-                {/* Header */}
                 <div className="flex items-center justify-between mb-8">
                   <div>
-                    <h3 className="text-lg font-semibold text-white mb-1">Dashboard Analytics</h3>
+                    <h3 className="text-lg font-semibold text-white mb-1">Dashboard RH</h3>
                     <p className="text-sm text-gray-400">Temps réel • Janvier 2025</p>
                   </div>
                   <div className="flex gap-2">
@@ -194,7 +238,6 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                {/* Animated Metrics Grid */}
                 <div className="grid grid-cols-2 gap-4 mb-8">
                   {animatedMetrics.map((metric, index) => (
                     <div
@@ -217,7 +260,6 @@ export default function LandingPage() {
                   ))}
                 </div>
 
-                {/* Live Chart Animation */}
                 <div className="bg-white/5 rounded-xl p-4 border border-white/10">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm text-gray-400">Évolution Effectifs</span>
@@ -238,24 +280,29 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Floating Badge */}
-              <div className="absolute -top-4 -right-4 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full text-sm font-semibold shadow-lg animate-bounce">
-                Live Demo →
+              <div className="absolute -top-4 -right-4 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full text-sm font-semibold shadow-lg flex items-center gap-2 animate-bounce">
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                Temps réel
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Client Logos */}
+      {/* Target Clients - Remplace "20+ entreprises" */}
       <section className="py-16 border-y border-white/10 bg-white/[0.02]">
         <div className="max-w-7xl mx-auto px-6">
-          <p className="text-center text-gray-500 mb-8">Données en Europe 🔐 Idéal pour les PME francophones</p>
+          <p className="text-center text-gray-400 mb-12 text-lg">
+            <span className="text-purple-400 font-semibold">Conçu pour les PME et ETI françaises</span> qui veulent piloter leurs RH sans consultant
+          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {clients.map((client) => (
-              <div key={client.name} className="flex flex-col items-center justify-center">
-                <div className="text-2xl font-bold text-gray-600 mb-1">{client.name}</div>
-                <div className="text-xs text-gray-500">{client.employees}</div>
+            {targetClients.map((client) => (
+              <div key={client.title} className="flex flex-col items-center text-center group">
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-500/20 to-cyan-500/20 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <client.icon className="text-purple-400" size={28} />
+                </div>
+                <div className="text-lg font-bold text-white mb-1">{client.title}</div>
+                <div className="text-sm text-gray-400">{client.desc}</div>
               </div>
             ))}
           </div>
@@ -267,10 +314,10 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-5xl font-bold mb-6 bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-              Pourquoi les PME choisissent Talvio
+              Pourquoi choisir Talvio ?
             </h2>
             <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-              Pas de formation nécessaire, pas de consultant coûteux. Juste vos données Excel et des insights RH clairs.
+              Pas de formation, pas de consultant. Juste vos fichiers Excel et des insights RH clairs en 2 minutes.
             </p>
           </div>
 
@@ -291,110 +338,80 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Features Showcase */}
-      <section className="py-32 px-6 bg-gradient-to-b from-purple-900/10 to-transparent">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-5xl font-bold mb-6 bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
-              Un Dashboard qui pense comme vous
-            </h2>
-          </div>
-
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Feature Cards */}
-            <div className="bg-gradient-to-br from-purple-500/10 to-transparent backdrop-blur rounded-2xl border border-purple-500/20 p-8">
-              <Gauge className="text-purple-400 mb-4" size={32} />
-              <h3 className="text-2xl font-semibold mb-4">KPIs Essentiels</h3>
-              <ul className="space-y-3">
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  Effectifs et mouvements
-                </li>
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  Turnover & Absentéisme
-                </li>
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  Masse salariale
-                </li>
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  Pyramide des âges
-                </li>
-              </ul>
-            </div>
-
-            <div className="bg-gradient-to-br from-cyan-500/10 to-transparent backdrop-blur rounded-2xl border border-cyan-500/20 p-8">
-              <Brain className="text-cyan-400 mb-4" size={32} />
-              <h3 className="text-2xl font-semibold mb-4">Analyses Avancées</h3>
-              <ul className="space-y-3">
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  Évolutions sur 12 mois
-                </li>
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  Tendances du marché
-                </li>
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  Détection d'anomalies
-                </li>
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                   Alertes personnalisables
-                </li>
-              </ul>
-            </div>
-
-            <div className="bg-gradient-to-br from-green-500/10 to-transparent backdrop-blur rounded-2xl border border-green-500/20 p-8">
-              <Database className="text-green-400 mb-4" size={32} />
-              <h3 className="text-2xl font-semibold mb-4">Import Facile</h3>
-              <ul className="space-y-3">
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  Import Excel direct
-                </li>
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  API REST disponible
-                </li>
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                   Connexion SIRH (à venir)
-                </li>
-                <li className="flex items-center gap-2 text-gray-300">
-                  <Check className="text-green-500" size={16} />
-                  Validation des données
-                </li>
-              </ul>
-            </div>
+      {/* Stats Bar */}
+      <section className="py-16 bg-gradient-to-r from-purple-900/20 to-cyan-900/20 border-y border-white/10">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {stats.map((stat) => (
+              <div key={stat.label} className="text-center">
+                <div className="flex items-center justify-center mb-3">
+                  <stat.icon className="text-purple-400" size={32} />
+                </div>
+                <div className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent mb-2">
+                  {stat.value}
+                </div>
+                <p className="text-gray-400 text-sm">{stat.label}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ROI Calculator */}
+      {/* Features Showcase */}
+      <section className="py-32 px-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-5xl font-bold mb-6 bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
+              Tout ce dont vous avez besoin
+            </h2>
+            <p className="text-xl text-gray-400 max-w-3xl mx-auto">
+              Un tableau de bord complet pour piloter vos RH au quotidien
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-8">
+            {features.map((feature) => (
+              <div 
+                key={feature.category}
+                className={`bg-gradient-to-br from-${feature.color}-500/10 to-transparent backdrop-blur rounded-2xl border border-${feature.color}-500/20 p-8`}
+              >
+                <feature.icon className={`text-${feature.color}-400 mb-4`} size={32} />
+                <h3 className="text-2xl font-semibold mb-6">{feature.category}</h3>
+                <ul className="space-y-3">
+                  {feature.items.map((item) => (
+                    <li key={item} className="flex items-start gap-3 text-gray-300">
+                      <Check className="text-green-500 flex-shrink-0 mt-0.5" size={18} />
+                      <span className="text-sm">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ROI Section */}
       <section className="py-32 px-6 bg-gradient-to-b from-transparent to-purple-900/10">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-5xl font-bold mb-6">Gagnez du temps sur vos reportings RH</h2>
+          <h2 className="text-5xl font-bold mb-6">Récupérez 5 heures par mois</h2>
           <p className="text-xl text-gray-400 mb-12">
-            Automatisez vos tableaux de bord et récupérez plusieurs heures chaque mois
+            Automatisez vos tableaux de bord RH et concentrez-vous sur l&apos;essentiel : vos équipes
           </p>
           
           <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur rounded-3xl border border-white/10 p-12">
             <div className="grid md:grid-cols-3 gap-8 mb-8">
               <div>
                 <div className="text-4xl font-bold text-purple-400 mb-2">5h</div>
-                <p className="text-gray-400">économisées/mois</p>
+                <p className="text-gray-400">économisées chaque mois</p>
               </div>
               <div>
                 <div className="text-4xl font-bold text-cyan-400 mb-2">1 clic</div>
-                <p className="text-gray-400">pour vos dashboards</p>
+                <p className="text-gray-400">pour tous vos dashboards</p>
               </div>
               <div>
-                <div className="text-4xl font-bold text-green-400 mb-2">24 mois</div>
-                <p className="text-gray-400">d'analyse historique</p>
+                <div className="text-4xl font-bold text-green-400 mb-2">15+</div>
+                <p className="text-gray-400">KPIs prêts à l&apos;emploi</p>
               </div>
             </div>
             
@@ -402,35 +419,46 @@ export default function LandingPage() {
               onClick={() => router.push('/demo')}
               className="px-8 py-4 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl font-semibold text-lg hover:shadow-xl hover:shadow-purple-500/25 transition-all hover:scale-105"
             >
-              Essayer gratuitement →
+              Commencer gratuitement →
             </button>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
+      {/* CTA Final */}
       <section className="py-32 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-5xl font-bold mb-6 bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-            Commencez en 10 minutes
+            Prêt à transformer vos données RH ?
           </h2>
           <p className="text-xl text-gray-400 mb-12">
-            Uploadez votre premier fichier Excel et découvrez vos KPIs RH en temps réel
+            Créez votre compte gratuit et importez votre premier fichier en moins de 10 minutes
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-6 justify-center">
+          <div className="flex flex-col sm:flex-row gap-6 justify-center mb-8">
             <button
               onClick={() => router.push('/demo')}
               className="group px-10 py-5 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl font-semibold text-xl hover:shadow-xl hover:shadow-purple-500/25 transition-all hover:scale-105 flex items-center justify-center gap-3"
             >
               Essayer gratuitement
-              <Calendar className="group-hover:rotate-12 transition-transform" />
+              <Sparkles className="group-hover:rotate-12 transition-transform" />
             </button>
           </div>
           
-          <p className="mt-8 text-gray-500 text-sm">
-            ✓ 14 jours d'essai gratuit • ✓ Aucune carte bancaire requise • ✓ Configuration en 10 minutes
-          </p>
+          <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-400">
+            <div className="flex items-center gap-2">
+              <Check className="text-green-500" size={16} />
+              <span>Essai gratuit 14 jours</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Check className="text-green-500" size={16} />
+              <span>Sans carte bancaire</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Check className="text-green-500" size={16} />
+              <span>Installation en 10 minutes</span>
+            </div>
+          </div>
         </div>
       </section>
 
