@@ -196,11 +196,11 @@ export default function LandingPage() {
                   <ArrowRight className="group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button
-                  onClick={() => window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank')}
+                  onClick={() => router.push('/video-demo')}
                   className="px-8 py-4 bg-white/5 backdrop-blur border border-white/10 rounded-2xl font-semibold text-lg hover:bg-white/10 transition-all flex items-center justify-center gap-3"
                 >
                   <Play size={20} />
-                  Voir la démo (2 min)
+                  Voir la démo (3 min)
                 </button>
               </div>
 
